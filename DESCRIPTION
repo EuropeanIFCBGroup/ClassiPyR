@@ -32,7 +32,6 @@ Suggests:
     pkgdown
 Config/testthat/edition: 3
 VignetteBuilder: knitr
-URL: https://EuropeanIFCBGroup.github.io/ClassiPyR/,
-    https://github.com/EuropeanIFCBGroup/ClassiPyR
+URL: https://EuropeanIFCBGroup.github.io/ClassiPyR/, https://github.com/EuropeanIFCBGroup/ClassiPyR, https://europeanifcbgroup.github.io/ClassiPyR/
 BugReports: https://github.com/EuropeanIFCBGroup/ClassiPyR/issues
 RoxygenNote: 7.3.3
