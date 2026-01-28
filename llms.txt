@@ -91,7 +91,7 @@ are responsible for their data and annotations. Always maintain backups
 of your original data.
 
 This package was partly developed with the assistance of [Claude
-Code](https://claude.ai/claude-code), an AI programming assistant by
+Code](https://code.claude.com/), an AI programming assistant by
 Anthropic.
 
 # Package index
