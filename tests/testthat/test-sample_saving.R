@@ -232,6 +232,7 @@ test_that("save_sample_annotations creates MAT file with real data", {
   skip_if_not_installed("iRfcb")
   skip_if_not_installed("dplyr")
   skip_if_not(reticulate::py_available(), "Python not available")
+  skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
 
   sample_name <- "D20220522T000439_IFCB134"
 
