@@ -20,8 +20,8 @@ Complete documentation for all `ClassiPyR` features.
 
 ## Interface Overview
 
-<a href="../reference/figures/interface-overview.png">
-<img src="../reference/figures/interface-overview.png" alt="ClassiPyR interface showing the title bar, sidebar, and main image gallery area." style="max-width:100%;">
+<a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/interface-overview.png">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/interface-overview.png" alt="ClassiPyR interface showing the title bar, sidebar, and main image gallery area." style="max-width:100%;">
 </a>
 <p><em>ClassiPyR interface showing the title bar, sidebar, and main image gallery area. Click to enlarge.</em></p>
 
@@ -91,8 +91,8 @@ Each image card displays:
 - Yellow: Relabeled in this session
 - Blue: Currently selected
 
-<a href="../reference/figures/image-card-states.png">
-<img src="../reference/figures/image-card-states.png" alt="Image card border colors: gray (unchanged), yellow (relabeled), blue (selected)." style="max-width:80%;">
+<a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/image-card-states.png">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/image-card-states.png" alt="Image card border colors: gray (unchanged), yellow (relabeled), blue (selected)." style="max-width:80%;">
 </a>
 <p><em>Image card border colors: gray (unchanged), yellow (relabeled), blue (selected). Click to enlarge.</em></p>
 
@@ -105,8 +105,8 @@ Each image card displays:
 | Select All | Select all images in current filter |
 | Deselect | Clear all selections |
 
-<a href="../reference/figures/drag-select.png">
-<img src="../reference/figures/drag-select.png" alt="Drag-select: draw a rectangle to select multiple images at once." style="max-width:100%;">
+<a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/drag-select.png">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/drag-select.png" alt="Drag-select: draw a rectangle to select multiple images at once." style="max-width:100%;">
 </a>
 <p><em>Drag-select: draw a rectangle to select multiple images at once. Click to enlarge.</em></p>
 
@@ -132,8 +132,8 @@ The measure tool allows you to measure distances in images.
 4. Click elsewhere on the image to clear the measurement
 5. Click the Measure button again to deactivate measure mode
 
-<a href="../reference/figures/measure-tool.png">
-<img src="../reference/figures/measure-tool.png" alt="Measure tool showing distance in micrometers and pixels." style="max-width:60%;">
+<a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/measure-tool.png">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/measure-tool.png" alt="Measure tool showing distance in micrometers and pixels." style="max-width:60%;">
 </a>
 <p><em>Measure tool showing distance in micrometers and pixels. Click to enlarge.</em></p>
 

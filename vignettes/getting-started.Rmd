@@ -58,8 +58,8 @@ run_app(venv_path = "/path/to/your/venv")
 
 Click the **gear icon** next to your username in the sidebar.
 
-<a href="../reference/figures/settings-dialog.png">
-<img src="../reference/figures/settings-dialog.png" alt="Settings dialog showing folder configuration options." style="max-width:80%;">
+<a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/settings-dialog.png">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/settings-dialog.png" alt="Settings dialog showing folder configuration options." style="max-width:80%;">
 </a>
 <p><em>Settings dialog showing folder configuration options. Click to enlarge.</em></p>
 
@@ -125,8 +125,8 @@ Choose a sample from the dropdown:
 - ✎✓ = Has both (can switch between modes)
 - \* = Unannotated (new sample)
 
-<a href="../reference/figures/sample-browser.png">
-<img src="../reference/figures/sample-browser.png" alt="Sample browser with year/month filters and status indicators." style="max-width:60%;">
+<a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/sample-browser.png">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/sample-browser.png" alt="Sample browser with year/month filters and status indicators." style="max-width:60%;">
 </a>
 <p><em>Sample browser with year/month filters and status indicators. Click to enlarge.</em></p>
 
@@ -140,8 +140,8 @@ Click **Load**.
 
 Once loaded, you'll see the Image Gallery:
 
-<a href="../reference/figures/gallery-view.png">
-<img src="../reference/figures/gallery-view.png" alt="Image gallery showing classified plankton images grouped by class." style="max-width:100%;">
+<a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/gallery-view.png">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/gallery-view.png" alt="Image gallery showing classified plankton images grouped by class." style="max-width:100%;">
 </a>
 <p><em>Image gallery showing classified plankton images grouped by class. Click to enlarge.</em></p>
 
@@ -181,8 +181,8 @@ Once loaded, you'll see the Image Gallery:
 2. Type or search for a class in "Relabel to"
 3. Click **Relabel**
 
-<a href="../reference/figures/relabel-workflow.png">
-<img src="../reference/figures/relabel-workflow.png" alt="Relabeling workflow: selected images (blue borders) ready to be assigned a new class." style="max-width:100%;">
+<a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/relabel-workflow.png">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/relabel-workflow.png" alt="Relabeling workflow: selected images (blue borders) ready to be assigned a new class." style="max-width:100%;">
 </a>
 <p><em>Relabeling workflow: selected images (blue borders) ready to be assigned a new class. Click to enlarge.</em></p>
 

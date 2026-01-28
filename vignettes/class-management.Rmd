@@ -45,8 +45,8 @@ When you save an annotation as a .mat file for ifcb-analysis, the file stores:
 
 You can create a new class list directly in the app without uploading a file:
 
-<a href="../reference/figures/class-editor.png">
-<img src="../reference/figures/class-editor.png" alt="Class list editor for adding, removing, and reordering classes." style="max-width:80%;">
+<a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-editor.png">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-editor.png" alt="Class list editor for adding, removing, and reordering classes." style="max-width:80%;">
 </a>
 <p><em>Class list editor for adding, removing, and reordering classes. Click to enlarge.</em></p>
 
