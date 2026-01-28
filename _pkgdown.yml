@@ -1,0 +1,71 @@
+url: https://EuropeanIFCBGroup.github.io/ClassiPyR/
+
+template:
+  bootstrap: 5
+  bootswatch: flatly
+  light-switch: true
+  bslib:
+    primary: "#1A3A5C"
+    link-color: "#3D8EC9"
+
+home:
+  title: ClassiPyR
+  description: A Shiny application for manual image classification and validation of IFCB plankton images
+
+navbar:
+  structure:
+    left: [intro, articles, reference, news]
+    right: [search, github, lightswitch]
+  components:
+    articles:
+      text: Articles
+      menu:
+        - text: Getting Started
+          href: articles/getting-started.html
+        - text: User Guide
+          href: articles/user-guide.html
+        - text: Class List Management
+          href: articles/class-management.html
+        - text: "---"
+        - text: FAQ & Troubleshooting
+          href: articles/faq.html
+
+reference:
+  - title: Running the App
+    desc: Functions for launching ClassiPyR
+    contents:
+      - run_app
+      - init_python_env
+      - get_config_dir
+      - get_settings_path
+
+  - title: Sample Loading
+    desc: Functions for loading classifications and samples
+    contents:
+      - starts_with("load_")
+      - create_new_classifications
+      - filter_to_extracted
+
+  - title: Sample Saving
+    desc: Functions for saving annotations and exporting images
+    contents:
+      - starts_with("save_")
+      - copy_images_to_class_folders
+
+  - title: Utilities
+    desc: Helper functions for IFCB data processing
+    contents:
+      - get_sample_paths
+      - read_roi_dimensions
+      - is_valid_sample_name
+      - sanitize_string
+      - create_empty_changes_log
+
+authors:
+  Anders Torstensson:
+    href: https://github.com/anderstorstensson
+
+footer:
+  structure:
+    left: developed_by
+    right: built_with

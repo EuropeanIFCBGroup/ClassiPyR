@@ -1,0 +1,38 @@
+Package: ClassiPyR
+Title: ClassiPyR - A Shiny App for Manual Image Classification and Validation of IFCB Data
+Version: 0.1.0
+Authors@R: c(
+    person("Anders", "Torstensson", email = "anders.torstensson@smhi.se", role = c("aut", "cre"),
+           comment = c("Swedish Meteorological and Hydrological Institute", ORCID = "0000-0002-8283-656X")),
+    person("Claude Code", role = "ctb",
+           comment = "AI programming assistant (Anthropic Claude)")
+    )
+Description: A Shiny application for manual classification and validation of
+    Imaging FlowCytobot (IFCB) plankton images. Supports loading classifications
+    from CSV files or MATLAB classifier output, drag-select for batch operations,
+    and exports classifications in MATLAB-compatible format for use with the
+    'ifcb-analysis' toolbox.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Imports:
+    shiny,
+    shinyjs,
+    bslib,
+    iRfcb,
+    dplyr,
+    DT,
+    jsonlite,
+    reticulate
+Suggests:
+    testthat (>= 3.0.0),
+    covr,
+    knitr,
+    rmarkdown,
+    pkgdown
+Config/testthat/edition: 3
+VignetteBuilder: knitr
+URL: https://EuropeanIFCBGroup.github.io/ClassiPyR/,
+    https://github.com/EuropeanIFCBGroup/ClassiPyR
+BugReports: https://github.com/EuropeanIFCBGroup/ClassiPyR/issues
+RoxygenNote: 7.3.3

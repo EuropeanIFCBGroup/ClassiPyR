@@ -1,0 +1,20 @@
+citHeader("To cite ClassiPyR in publications use:")
+
+bibentry(
+  bibtype  = "Manual",
+  title    = "ClassiPyR: A Shiny Application for Manual Image Classification and Validation of IFCB Data",
+  author   = c(
+    person("Anders", "Torstensson", role = c("aut", "cre"),
+           email = "anders.torstensson@smhi.se",
+           comment = c(ORCID = "0000-0002-8283-656X"))
+  ),
+  year     = "2026",
+  note     = "R package version 0.1.0",
+  url      = "https://github.com/EuropeanIFCBGroup/ClassiPyR",
+  textVersion = paste(
+    "Torstensson, A. (2026).",
+    "ClassiPyR: A Shiny Application for Manual Image Classification and Validation of IFCB Data.",
+    "R package version 0.1.0.",
+    "https://github.com/EuropeanIFCBGroup/ClassiPyR"
+  )
+)

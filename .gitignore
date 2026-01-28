@@ -65,3 +65,5 @@ _site/
 
 # Test artifacts
 tests/testthat/_snaps/
+/doc/
+/Meta/
