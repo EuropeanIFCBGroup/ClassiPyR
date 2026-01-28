@@ -50,6 +50,8 @@ __pycache__/
 # Exception: include test data files
 !tests/testthat/test_data/**/*.mat
 !tests/testthat/test_data/**/*.adc
+!tests/testthat/test_data/**/*.hdr
+!tests/testthat/test_data/**/*.roi
 
 # Class list files (user-specific, root level only)
 /class2use.mat
