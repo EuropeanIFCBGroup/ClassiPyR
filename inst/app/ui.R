@@ -297,6 +297,16 @@ ui <- page_sidebar(
         color: white !important;
       }
 
+      /* Clickable title styling */
+      #reset_to_home {
+        text-decoration: none !important;
+        transition: opacity 0.2s ease;
+      }
+      #reset_to_home:hover {
+        opacity: 0.8;
+        text-decoration: none !important;
+      }
+
       /* Style for warning items - applied via JavaScript */
       .selectize-dropdown-content .option.unmatched-class,
       .selectize-input .item.unmatched-class {
