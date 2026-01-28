@@ -66,4 +66,4 @@ MIT License - see [LICENSE](LICENSE) file.
 
 This software is provided for research and educational purposes. Users are responsible for their data and annotations. Always maintain backups of your original data.
 
-This package was partly developed with the assistance of [Claude Code](https://claude.ai/claude-code), an AI programming assistant by Anthropic.
+This package was partly developed with the assistance of [Claude Code](https://code.claude.com/), an AI programming assistant by Anthropic.
