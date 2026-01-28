@@ -4,7 +4,7 @@
 \alias{run_app}
 \title{Run the ClassiPyR Shiny Application}
 \usage{
-run_app(venv_path = NULL, reset_settings = FALSE, ...)
+run_app(venv_path = NULL, reset_settings = FALSE, launch.browser = TRUE, ...)
 }
 \arguments{
 \item{venv_path}{Optional path to a Python virtual environment. If NULL (default),
@@ -14,6 +14,10 @@ for the Python virtual environment used by iRfcb.}
 
 \item{reset_settings}{If TRUE, deletes saved settings before starting the app.
 Useful for troubleshooting or starting fresh. Default is FALSE.}
+
+\item{launch.browser}{If TRUE (default), opens the app in the system's default
+web browser. If FALSE, opens in RStudio viewer (if available). Set to a function
+to customize browser launching behavior.}
 
 \item{...}{Additional arguments passed to \code{\link[shiny]{runApp}}}
 }
@@ -27,7 +31,7 @@ Python (via reticulate) for reading and writing MATLAB .mat files.
 }
 \examples{
 \dontrun{
-# Run with default settings
+# Run with default settings (opens in browser)
 run_app()
 
 # Run with a specific Python virtual environment
@@ -35,6 +39,9 @@ run_app(venv_path = "/path/to/my/venv")
 
 # Run on a specific port
 run_app(port = 3838)
+
+# Open in RStudio viewer instead of browser
+run_app(launch.browser = FALSE)
 
 # Reset all settings and start fresh
 run_app(reset_settings = TRUE)
