@@ -498,8 +498,7 @@ server <- function(input, output, session) {
     sorted_classes <- sort(rv$class2use)
     updateSelectizeInput(session, "new_class_quick",
                          choices = sorted_classes,
-                         selected = character(0),
-                         server = TRUE)
+                         selected = character(0))
 
     showNotification(paste("Added class:", new_class), type = "message")
   })
@@ -550,8 +549,7 @@ server <- function(input, output, session) {
     sorted_classes <- sort(rv$class2use)
     updateSelectizeInput(session, "new_class_quick",
                          choices = sorted_classes,
-                         selected = character(0),
-                         server = TRUE)
+                         selected = character(0))
 
     showNotification(paste("Applied", length(new_classes), "classes"), type = "message")
   })
@@ -577,6 +575,11 @@ server <- function(input, output, session) {
   )
 
   observeEvent(input$save_settings, {
+    # Check if folder paths actually changed (to avoid spurious resets)
+    roi_changed <- !identical(config$roi_folder, input$cfg_roi_folder)
+    csv_changed <- !identical(config$csv_folder, input$cfg_csv_folder)
+    paths_changed <- roi_changed || csv_changed
+
     config$csv_folder <- input$cfg_csv_folder
     config$roi_folder <- input$cfg_roi_folder
     config$output_folder <- input$cfg_output_folder
@@ -602,8 +605,10 @@ server <- function(input, output, session) {
     removeModal()
     showNotification("Settings saved. Restart app for Python environment changes to take effect.", type = "message")
 
-    # Trigger sample rescan
-    all_samples(character())
+    # Only trigger sample rescan if folder paths actually changed
+    if (paths_changed) {
+      all_samples(character())
+    }
   })
 
   # ============================================================================
@@ -665,7 +670,12 @@ server <- function(input, output, session) {
       ", mode_class, mode_class))),
       div(
         style = "display: flex; align-items: baseline; gap: 20px;",
-        span(paste("ClassiPyR", app_version), style = "color: white; font-size: 18px;"),
+        actionLink(
+          "reset_to_home",
+          label = span(paste("ClassiPyR", app_version), style = "color: white; font-size: 18px;"),
+          style = "text-decoration: none;",
+          title = "Click to unload sample and return to initial state"
+        ),
         div(style = "display: inline;", uiOutput("mode_indicator_inline", inline = TRUE))
       )
     )
@@ -847,8 +857,7 @@ server <- function(input, output, session) {
         sorted_classes <- sort(rv$class2use)
         updateSelectizeInput(session, "new_class_quick",
                              choices = sorted_classes,
-                             selected = character(0),
-                             server = TRUE)
+                             selected = character(0))
 
         showNotification(
           paste("Auto-loaded", length(rv$class2use), "classes from", basename(path_to_try)),
@@ -893,10 +902,13 @@ server <- function(input, output, session) {
       sorted_classes <- sort(rv$class2use)
       updateSelectizeInput(session, "new_class_quick",
                            choices = sorted_classes,
-                           selected = character(0),
-                           server = TRUE)
+                           selected = character(0))
 
       showNotification(paste("Loaded", length(rv$class2use), "classes"), type = "message")
+
+      # Force filter update to work around Shiny reactivity quirk
+      update_month_choices()
+      update_sample_list()
     }, error = function(e) {
       showNotification(paste("Error loading class list:", e$message), type = "error")
     })
@@ -981,15 +993,16 @@ server <- function(input, output, session) {
     }
   })
 
-  # Update month choices when year changes
-  observe({
-    req(length(all_samples()) > 0)
-
+  # Helper function to update month choices based on year selection
+  update_month_choices <- function() {
     samples <- all_samples()
+    if (length(samples) == 0) return()
 
-    if (!is.null(input$year_select) && input$year_select != "all") {
+    year_val <- input$year_select
+
+    if (!is.null(year_val) && year_val != "all") {
       # Filter to selected year
-      year_pattern <- paste0("^D", input$year_select)
+      year_pattern <- paste0("^D", year_val)
       year_samples <- samples[grepl(year_pattern, samples)]
 
       # Extract months (characters 6-7 of sample name: DYYYYMMDD...)
@@ -1012,37 +1025,40 @@ server <- function(input, output, session) {
                         choices = c("All" = "all"),
                         selected = "all")
     }
-  })
+  }
 
-  # Filter samples by year, month, and status
-  observe({
-    req(length(all_samples()) > 0)
-
+  # Helper function to update sample list based on filters
+  update_sample_list <- function() {
     samples <- all_samples()
+    if (length(samples) == 0) return()
+
+    year_val <- input$year_select
+    month_val <- input$month_select
+    status_val <- input$sample_status_filter
     classified <- classified_samples()
     annotated <- annotated_samples()
 
     # Filter by year
-    if (!is.null(input$year_select) && input$year_select != "all") {
-      year_pattern <- paste0("^D", input$year_select)
+    if (!is.null(year_val) && year_val != "all") {
+      year_pattern <- paste0("^D", year_val)
       samples <- samples[grepl(year_pattern, samples)]
     }
 
     # Filter by month
-    if (!is.null(input$month_select) && input$month_select != "all") {
-      month_pattern <- paste0("^D\\d{4}", input$month_select)
+    if (!is.null(month_val) && month_val != "all") {
+      month_pattern <- paste0("^D\\d{4}", month_val)
       samples <- samples[grepl(month_pattern, samples)]
     }
 
     # Filter by classification status
-    if (!is.null(input$sample_status_filter)) {
-      if (input$sample_status_filter == "classified") {
+    if (!is.null(status_val)) {
+      if (status_val == "classified") {
         # Show only auto-classified (not manually annotated)
         samples <- samples[samples %in% classified & !samples %in% annotated]
-      } else if (input$sample_status_filter == "unclassified") {
+      } else if (status_val == "unclassified") {
         # Show only unannotated (neither classified nor manually annotated)
         samples <- samples[!samples %in% classified & !samples %in% annotated]
-      } else if (input$sample_status_filter == "annotated") {
+      } else if (status_val == "annotated") {
         # Show only manually annotated
         samples <- samples[samples %in% annotated]
       }
@@ -1076,7 +1092,28 @@ server <- function(input, output, session) {
     # Update sample dropdown
     updateSelectizeInput(session, "sample_select", choices = choices,
                          options = list(placeholder = "Select sample..."))
-  })
+  }
+
+  # Simple observeEvent handlers that call the helper functions
+  # These are more robust than using list() or reactive() in observeEvent
+  observeEvent(input$year_select, {
+    update_month_choices()
+    update_sample_list()
+  }, ignoreInit = TRUE, ignoreNULL = TRUE)
+
+  observeEvent(input$month_select, {
+    update_sample_list()
+  }, ignoreInit = TRUE, ignoreNULL = TRUE)
+
+  observeEvent(input$sample_status_filter, {
+    update_sample_list()
+  }, ignoreInit = TRUE, ignoreNULL = TRUE)
+
+  # Also trigger on sample list changes (when paths change)
+  observeEvent(all_samples(), {
+    update_month_choices()
+    update_sample_list()
+  }, ignoreInit = FALSE, ignoreNULL = TRUE)
 
   # Helper function to get filtered sample list
   get_filtered_samples <- function() {
@@ -1417,6 +1454,29 @@ server <- function(input, output, session) {
     })
     save_to_cache()
     load_sample_data(input$sample_select)
+  })
+
+  # Reset to home (click on title)
+  observeEvent(input$reset_to_home, {
+    # Save current work if there's a sample loaded
+    if (!is.null(rv$current_sample)) {
+      save_to_cache()
+    }
+
+    # Reset all sample-related state
+    rv$current_sample <- NULL
+    rv$classifications <- NULL
+    rv$original_classifications <- NULL
+    rv$changes_log <- create_empty_changes_log()
+    rv$selected_images <- character(0)
+    rv$is_annotation_mode <- FALSE
+    rv$has_both_modes <- FALSE
+
+    # Clear sample selection
+    updateSelectizeInput(session, "sample_select", selected = "")
+
+    # Clear any displayed content via JavaScript
+    shinyjs::runjs("$('.image-card').remove();")
   })
 
   # Previous sample button
