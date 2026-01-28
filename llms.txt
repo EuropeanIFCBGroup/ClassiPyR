@@ -1,0 +1,166 @@
+# ClassiPyR
+
+[![Lifecycle:
+experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
+[![License:
+MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![R-CMD-check](https://github.com/EuropeanIFCBGroup/ClassiPyR/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/EuropeanIFCBGroup/ClassiPyR/actions/workflows/R-CMD-check.yaml)
+[![codecov](https://codecov.io/gh/EuropeanIFCBGroup/ClassiPyR/branch/main/graph/badge.svg)](https://codecov.io/gh/EuropeanIFCBGroup/ClassiPyR)
+
+A Shiny application for manual (human) image classification and
+validation of Imaging FlowCytobot (IFCB) plankton images. Built for
+researchers who need to validate automated classifications or create
+training datasets for machine learning classifiers.
+
+**Full documentation:**
+[europeanifcbgroup.github.io/ClassiPyR](https://europeanifcbgroup.github.io/ClassiPyR/)
+
+## Features
+
+- **Dual Mode**: Validate existing classifications or annotate from
+  scratch
+- **Multiple Formats**: Load from CSV or MATLAB classifier output
+- **Efficient Workflow**: Drag-select, batch relabeling, class filtering
+- **MATLAB Compatible**: Export for
+  [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox
+- **CNN Training Ready**: Organized PNG output by class
+- **Measure Tool**: Built-in ruler for image measurements
+
+## Installation
+
+``` r
+install.packages("remotes")
+remotes::install_github("EuropeanIFCBGroup/ClassiPyR")
+```
+
+`ClassiPyR` depends on
+[iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb) for IFCB data
+handling, which is installed automatically.
+
+### Python Setup
+
+Python is required for reading and writing MATLAB .mat files. If you
+only work with CSV files, this step is optional.
+
+``` r
+library(iRfcb)
+ifcb_py_install(envname = "./venv")  # Creates venv in current working directory
+```
+
+## Quick Start
+
+``` r
+library(ClassiPyR)
+run_app()
+```
+
+See the [Getting
+Started](https://europeanifcbgroup.github.io/ClassiPyR/articles/getting-started.html)
+guide for detailed setup instructions.
+
+## Documentation
+
+- [Getting
+  Started](https://europeanifcbgroup.github.io/ClassiPyR/articles/getting-started.html) -
+  First-time setup
+- [User
+  Guide](https://europeanifcbgroup.github.io/ClassiPyR/articles/user-guide.html) -
+  Complete feature reference
+- [Class List
+  Management](https://europeanifcbgroup.github.io/ClassiPyR/articles/class-management.html) -
+  Managing classes for ifcb-analysis
+- [FAQ &
+  Troubleshooting](https://europeanifcbgroup.github.io/ClassiPyR/articles/faq.html) -
+  Common issues
+
+## Citation
+
+``` r
+citation("ClassiPyR")
+```
+
+## License
+
+MIT License - see
+[LICENSE](https://europeanifcbgroup.github.io/ClassiPyR/LICENSE) file.
+
+## Disclaimer
+
+This software is provided for research and educational purposes. Users
+are responsible for their data and annotations. Always maintain backups
+of your original data.
+
+This package was partly developed with the assistance of [Claude
+Code](https://claude.ai/claude-code), an AI programming assistant by
+Anthropic.
+
+# Package index
+
+## Running the App
+
+Functions for launching ClassiPyR
+
+- [`run_app()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/run_app.md)
+  : Run the ClassiPyR Shiny Application
+- [`init_python_env()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/init_python_env.md)
+  : Initialize Python environment for iRfcb
+- [`get_config_dir()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_config_dir.md)
+  : Get ClassiPyR configuration directory
+- [`get_settings_path()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_settings_path.md)
+  : Get path to settings file
+
+## Sample Loading
+
+Functions for loading classifications and samples
+
+- [`load_class_list()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_class_list.md)
+  : Load class list from MAT or TXT file
+- [`load_from_classifier_mat()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_from_classifier_mat.md)
+  : Load classifications from MATLAB classifier output file
+- [`load_from_csv()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_from_csv.md)
+  : Load classifications from CSV file (validation mode)
+- [`load_from_mat()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_from_mat.md)
+  : Load classifications from existing MAT annotation file
+- [`create_new_classifications()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/create_new_classifications.md)
+  : Create new classifications for annotation mode
+- [`filter_to_extracted()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/filter_to_extracted.md)
+  : Filter classifications to only include extracted images
+
+## Sample Saving
+
+Functions for saving annotations and exporting images
+
+- [`save_sample_annotations()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/save_sample_annotations.md)
+  : Save sample annotations to MAT and statistics files
+- [`save_validation_statistics()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/save_validation_statistics.md)
+  : Save validation statistics to CSV files
+- [`copy_images_to_class_folders()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/copy_images_to_class_folders.md)
+  : Copy images to class-organized folders
+
+## Utilities
+
+Helper functions for IFCB data processing
+
+- [`get_sample_paths()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_sample_paths.md)
+  : Get sample paths from sample name
+- [`read_roi_dimensions()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/read_roi_dimensions.md)
+  : Read ROI dimensions from ADC file
+- [`is_valid_sample_name()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/is_valid_sample_name.md)
+  : Validate IFCB sample name format
+- [`sanitize_string()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/sanitize_string.md)
+  : Sanitize string for safe use in HTML/file paths
+- [`create_empty_changes_log()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/create_empty_changes_log.md)
+  : Create empty changes log data frame
+
+# Articles
+
+### All vignettes
+
+- [Class List
+  Management](https://europeanifcbgroup.github.io/ClassiPyR/articles/class-management.md):
+- [FAQ &
+  Troubleshooting](https://europeanifcbgroup.github.io/ClassiPyR/articles/faq.md):
+- [Getting
+  Started](https://europeanifcbgroup.github.io/ClassiPyR/articles/getting-started.md):
+- [User
+  Guide](https://europeanifcbgroup.github.io/ClassiPyR/articles/user-guide.md):
