@@ -1,0 +1,67 @@
+# Data directories - DO NOT commit data
+data/
+output/
+manual/
+
+# R session files
+.Rhistory
+.Rdata
+.RData
+.Ruserdata
+.Rproj.user/
+
+# Package build files
+*.tar.gz
+*.Rcheck/
+
+# IDE files
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+temp_*/
+
+# Shiny logs
+shiny_logs/
+
+# Python virtual environments
+.virtualenvs/
+venv/
+__pycache__/
+*.pyc
+
+# Environment variables
+.env
+.Renviron.local
+
+# Large binary files
+*.mat
+*.roi
+*.adc
+*.hdr
+
+# Class list files (user-specific)
+class2use.mat
+class2use.txt
+class2use_saved.*
+
+# App settings (user-specific, auto-generated)
+.classipyr_settings.json
+
+# pkgdown site (built by CI)
+docs/
+
+# Jekyll build output (legacy)
+_site/
+.jekyll-cache/
+.jekyll-metadata
+
+# Test artifacts
+tests/testthat/_snaps/
