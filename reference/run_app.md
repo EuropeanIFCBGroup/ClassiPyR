@@ -8,7 +8,7 @@ and writing MATLAB .mat files.
 ## Usage
 
 ``` r
-run_app(venv_path = NULL, reset_settings = FALSE, ...)
+run_app(venv_path = NULL, reset_settings = FALSE, launch.browser = TRUE, ...)
 ```
 
 ## Arguments
@@ -25,6 +25,12 @@ run_app(venv_path = NULL, reset_settings = FALSE, ...)
   If TRUE, deletes saved settings before starting the app. Useful for
   troubleshooting or starting fresh. Default is FALSE.
 
+- launch.browser:
+
+  If TRUE (default), opens the app in the system's default web browser.
+  If FALSE, opens in RStudio viewer (if available). Set to a function to
+  customize browser launching behavior.
+
 - ...:
 
   Additional arguments passed to
@@ -38,7 +44,7 @@ This function does not return; it runs the Shiny app
 
 ``` r
 if (FALSE) { # \dontrun{
-# Run with default settings
+# Run with default settings (opens in browser)
 run_app()
 
 # Run with a specific Python virtual environment
@@ -46,6 +52,9 @@ run_app(venv_path = "/path/to/my/venv")
 
 # Run on a specific port
 run_app(port = 3838)
+
+# Open in RStudio viewer instead of browser
+run_app(launch.browser = FALSE)
 
 # Reset all settings and start fresh
 run_app(reset_settings = TRUE)
