@@ -47,10 +47,14 @@ __pycache__/
 *.adc
 *.hdr
 
-# Class list files (user-specific)
-class2use.mat
-class2use.txt
-class2use_saved.*
+# Exception: include test data files
+!tests/testthat/test_data/**/*.mat
+!tests/testthat/test_data/**/*.adc
+
+# Class list files (user-specific, root level only)
+/class2use.mat
+/class2use.txt
+/class2use_saved.*
 
 # App settings (user-specific, auto-generated)
 .classipyr_settings.json
