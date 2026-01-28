@@ -8,7 +8,7 @@ Complete documentation for all `ClassiPyR` features.
 
 [![ClassiPyR interface showing the title bar, sidebar, and main image
 gallery
-area.](../reference/figures/interface-overview.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/interface-overview.png)
+area.](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/interface-overview.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/interface-overview.png)
 
 *ClassiPyR interface showing the title bar, sidebar, and main image
 gallery area. Click to enlarge.*
@@ -84,7 +84,7 @@ Each image card displays:
 - Blue: Currently selected
 
 [![Image card border colors: gray (unchanged), yellow (relabeled), blue
-(selected).](../reference/figures/image-card-states.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/image-card-states.png)
+(selected).](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/image-card-states.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/image-card-states.png)
 
 *Image card border colors: gray (unchanged), yellow (relabeled), blue
 (selected). Click to enlarge.*
@@ -99,7 +99,7 @@ Each image card displays:
 | Deselect   | Clear all selections                |
 
 [![Drag-select: draw a rectangle to select multiple images at
-once.](../reference/figures/drag-select.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/drag-select.png)
+once.](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/drag-select.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/drag-select.png)
 
 *Drag-select: draw a rectangle to select multiple images at once. Click
 to enlarge.*
@@ -129,7 +129,7 @@ The measure tool allows you to measure distances in images.
 5.  Click the Measure button again to deactivate measure mode
 
 [![Measure tool showing distance in micrometers and
-pixels.](../reference/figures/measure-tool.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/measure-tool.png)
+pixels.](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/measure-tool.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/measure-tool.png)
 
 *Measure tool showing distance in micrometers and pixels. Click to
 enlarge.*

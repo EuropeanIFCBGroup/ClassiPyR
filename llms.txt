@@ -5,7 +5,7 @@ experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](h
 [![License:
 MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![R-CMD-check](https://github.com/EuropeanIFCBGroup/ClassiPyR/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/EuropeanIFCBGroup/ClassiPyR/actions/workflows/R-CMD-check.yaml)
-[![codecov](https://codecov.io/gh/EuropeanIFCBGroup/ClassiPyR/branch/main/graph/badge.svg)](https://codecov.io/gh/EuropeanIFCBGroup/ClassiPyR)
+[![codecov](https://codecov.io/gh/EuropeanIFCBGroup/ClassiPyR/branch/main/graph/badge.svg)](https://app.codecov.io/gh/EuropeanIFCBGroup/ClassiPyR)
 
 A Shiny application for manual (human) image classification and
 validation of Imaging FlowCytobot (IFCB) plankton images. Built for

@@ -48,7 +48,7 @@ run_app(venv_path = "/path/to/your/venv")
 Click the **gear icon** next to your username in the sidebar.
 
 [![Settings dialog showing folder configuration
-options.](../reference/figures/settings-dialog.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/settings-dialog.png)
+options.](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/settings-dialog.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/settings-dialog.png)
 
 *Settings dialog showing folder configuration options. Click to
 enlarge.*
@@ -123,7 +123,7 @@ Choose a sample from the dropdown:
 - \* = Unannotated (new sample)
 
 [![Sample browser with year/month filters and status
-indicators.](../reference/figures/sample-browser.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/sample-browser.png)
+indicators.](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/sample-browser.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/sample-browser.png)
 
 *Sample browser with year/month filters and status indicators. Click to
 enlarge.*
@@ -140,7 +140,7 @@ Click **Load**.
 Once loaded, you’ll see the Image Gallery:
 
 [![Image gallery showing classified plankton images grouped by
-class.](../reference/figures/gallery-view.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/gallery-view.png)
+class.](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/gallery-view.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/gallery-view.png)
 
 *Image gallery showing classified plankton images grouped by class.
 Click to enlarge.*
@@ -183,7 +183,7 @@ Click to enlarge.*
 
 [![Relabeling workflow: selected images (blue borders) ready to be
 assigned a new
-class.](../reference/figures/relabel-workflow.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/relabel-workflow.png)
+class.](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/relabel-workflow.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/relabel-workflow.png)
 
 *Relabeling workflow: selected images (blue borders) ready to be
 assigned a new class. Click to enlarge.*

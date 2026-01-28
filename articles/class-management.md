@@ -37,7 +37,7 @@ You can create a new class list directly in the app without uploading a
 file:
 
 [![Class list editor for adding, removing, and reordering
-classes.](../reference/figures/class-editor.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-editor.png)
+classes.](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-editor.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-editor.png)
 
 *Class list editor for adding, removing, and reordering classes. Click
 to enlarge.*
