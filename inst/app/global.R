@@ -4,15 +4,17 @@
 # Helper functions are loaded from the ClassiPyR package.
 
 # Load required libraries (ClassiPyR imports these)
-library(ClassiPyR)
-library(shiny)
-library(shinyjs)
-library(bslib)
-library(iRfcb)
-library(dplyr)
-library(DT)
-library(jsonlite)
-library(reticulate)
+suppressPackageStartupMessages({
+  library(ClassiPyR)
+  library(shiny)
+  library(shinyjs)
+  library(bslib)
+  library(iRfcb)
+  library(dplyr)
+  library(DT)
+  library(jsonlite)
+  library(reticulate)
+})
 
 # Get version from package
 app_version <- as.character(utils::packageVersion("ClassiPyR"))
