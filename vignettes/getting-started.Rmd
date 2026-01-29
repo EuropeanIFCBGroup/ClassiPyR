@@ -27,13 +27,9 @@ Make sure you have:
 
 ### Python Requirements
 
-Python is required if you work with MATLAB .mat files:
+Python is required for saving annotations as MATLAB .mat files for use with [ifcb-analysis](https://github.com/hsosik/ifcb-analysis). Reading existing .mat files (annotations, classifier output, class lists) does not require Python.
 
-- **Loading existing annotations** (.mat files from previous sessions)
-- **Loading MATLAB classifier output** (.mat files)
-- **Saving annotations** as .mat files for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis)
-
-If you only work with CSV classification files, Python is not required.
+If you only need to read .mat files or work with CSV classification files, Python is not required.
 
 ### CSV Classification Format
 

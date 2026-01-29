@@ -42,13 +42,11 @@ A: No. The app only reads your original files. All output is written to separate
 
 **Q: I see "Python not available" warning**
 
-A: This warning affects reading and writing .mat files. Python is required for:
+A: This warning affects saving .mat files. Python is required for:
 
-- Loading existing manual annotations (.mat files)
-- Loading MATLAB classifier output (.mat files)
-- Saving annotations as .mat files
+- Saving annotations as .mat files for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis)
 
-If you only work with CSV files, you can ignore this warning.
+Reading .mat files (annotations, classifier output, class lists) does not require Python. If you do not need to save .mat files, you can ignore this warning.
 
 To enable .mat support:
 
@@ -145,7 +143,7 @@ For MAT files:
 
 - Must match pattern `*_class*.mat`
 - Must contain `roinum` and `TBclass` variables
-- Requires Python to be available
+- Must contain `roinum` and `TBclass` variables
 
 ---
 
@@ -204,7 +202,7 @@ A: The ROI might be empty (no actual image data). These are filtered out automat
 A: Check that:
 
 1. Output folder is writable
-2. Python is available (required for .mat files)
+2. Python is available (required for saving .mat files)
 3. Click "Save Annotations" before closing
 
 ---
@@ -232,7 +230,7 @@ A:
 
 **Q: Can I import a class list from MATLAB?**
 
-A: Yes, load your existing `class2use.mat` file via Settings. Note: this requires Python.
+A: Yes, load your existing `class2use.mat` file via Settings.
 
 **Q: My class names look different after loading**
 
@@ -355,7 +353,7 @@ A: This sample has both manual annotations AND auto-classifications available. W
 |-------|----------|
 | "ROI file not found" | Check ROI Data Folder path and file structure |
 | "ADC file not found" | ADC file must be alongside ROI file |
-| "Python not available" | Affects .mat files. Run `iRfcb::ifcb_py_install()` |
+| "Python not available" | Affects saving .mat files. Run `iRfcb::ifcb_py_install()` |
 | "Error loading class list" | Check file format (.mat or .txt) |
 | "No samples found" | Check ROI Data Folder configuration |
 | App fails to start | Try `run_app(reset_settings = TRUE)` to clear saved settings |

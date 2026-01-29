@@ -196,13 +196,9 @@ Files matching `*_class*.mat` pattern containing:
 
 **Threshold option**: Enable in Settings to include unclassified predictions below confidence threshold.
 
-> **Note**: Reading MATLAB classifier output requires Python (via iRfcb).
-
 ### Existing Annotations
 
 Previously saved annotations (in output folder) are automatically detected and can be resumed.
-
-> **Note**: Reading existing .mat annotations requires Python (via iRfcb).
 
 ---
 

@@ -34,7 +34,7 @@ remotes::install_github("EuropeanIFCBGroup/ClassiPyR")
 
 ### Python Setup
 
-Python is required for reading and writing MATLAB .mat files. If you only work with CSV files, this step is optional.
+Python is required for saving annotations as MATLAB .mat files. If you only need to read existing .mat files or work with CSV files, this step is optional.
 
 ```r
 library(iRfcb)

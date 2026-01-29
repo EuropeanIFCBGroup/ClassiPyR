@@ -4,7 +4,7 @@
 #'
 #' Launches the ClassiPyR Shiny app for manual image classification and validation of IFCB data.
 #' This app relies on the iRfcb package for reading IFCB data files and requires
-#' Python (via reticulate) for reading and writing MATLAB .mat files.
+#' Python (via reticulate) for saving MATLAB .mat files.
 #'
 #' @param venv_path Optional path to a Python virtual environment. When specified,
 #'   this path takes priority over any saved venv path in settings, both for Python

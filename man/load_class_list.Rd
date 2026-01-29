@@ -19,7 +19,7 @@ for safe use in file paths and HTML.
 }
 \examples{
 \dontrun{
-# Load from MATLAB file (requires Python)
+# Load from MATLAB file
 classes <- load_class_list("/path/to/class2use.mat")
 
 # Load from text file
