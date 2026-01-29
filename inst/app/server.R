@@ -1089,9 +1089,10 @@ server <- function(input, output, session) {
       choices <- character(0)
     }
 
-    # Update sample dropdown
+    # Update sample dropdown with server-side processing for large datasets
     updateSelectizeInput(session, "sample_select", choices = choices,
-                         options = list(placeholder = "Select sample..."))
+                         options = list(placeholder = "Select sample..."),
+                         server = TRUE)
   }
 
   # Simple observeEvent handlers that call the helper functions

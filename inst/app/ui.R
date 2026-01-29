@@ -423,8 +423,7 @@ ui <- page_sidebar(
     div(class = "sample-dropdown",
         selectizeInput("sample_select", "Sample", choices = NULL, width = "100%",
                        options = list(
-                         placeholder = "Select sample...",
-                         maxOptions = 500
+                         placeholder = "Select sample..."
                        ))),
 
     # Legend for sample status symbols (compact, single line)
