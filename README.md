@@ -46,6 +46,9 @@ ifcb_py_install()
 ```r
 library(ClassiPyR)
 run_app()
+
+# Or specify a Python virtual environment (takes priority over saved settings)
+run_app(venv_path = "/path/to/your/venv")
 ```
 
 See the [Getting Started](https://europeanifcbgroup.github.io/ClassiPyR/articles/getting-started.html) guide for detailed setup instructions.

@@ -67,11 +67,21 @@ A: By default, `ifcb_py_install()` creates a `venv` folder in your current worki
 ifcb_py_install("/path/to/your/venv")
 ```
 
-You can also configure the venv path in Settings or when launching the app:
+You can also specify the venv path when launching the app:
 
 ```{r, eval = FALSE}
 run_app(venv_path = "/path/to/your/venv")
 ```
+
+**Q: How is the Python virtual environment path resolved?**
+
+A: The app uses the following priority order:
+
+1. **`venv_path` argument** passed to `run_app()` (highest priority)
+2. **Saved settings** from a previous session (stored in `settings.json`)
+3. **Default** `./venv` in the working directory
+
+When you specify `run_app(venv_path = "/path/to/venv")`, that path is used for Python initialization and pre-filled in the Settings dialog, overriding any previously saved path.
 
 **Q: Package installation fails**
 
@@ -126,8 +136,9 @@ roi_folder/
 
 A: For CSV files:
 
-- Must have columns containing "file" and "class" in their names
-- Recommended column names: `file_name` and `class_name`
+- Must have columns named `file_name` and `class_name` (exact names required)
+- Optionally include a `score` column (confidence value between 0 and 1)
+- The CSV file must be named after the sample (e.g., `D20230101T120000_IFCB134.csv`)
 - File should be in the Classification Folder (searched recursively)
 
 For MAT files:
@@ -142,7 +153,9 @@ For MAT files:
 
 **Q: What should my classification CSV look like?**
 
-A: At minimum, your CSV needs:
+A: The CSV must have columns named `file_name` and `class_name`. The file must be named after the sample (e.g., `D20230101T120000_IFCB134.csv`).
+
+Minimal example:
 
 ```
 file_name,class_name
@@ -150,16 +163,25 @@ D20230101T120000_IFCB134_00001.png,Diatom
 D20230101T120000_IFCB134_00002.png,Ciliate
 ```
 
-Optional columns include `score` for confidence values (0-1).
+With optional `score` column (confidence values between 0 and 1):
+
+```
+file_name,class_name,score
+D20230101T120000_IFCB134_00001.png,Diatom,0.95
+D20230101T120000_IFCB134_00002.png,Ciliate,0.87
+D20230101T120000_IFCB134_00003.png,Dinoflagellate,0.72
+```
 
 **Q: My CNN classifier outputs different column names**
 
-A: The app uses flexible column matching and looks for columns containing "file" and "class". These variants work:
+A: The column names must be exactly `file_name` and `class_name`. If your classifier uses different names, rename the columns before loading. For example in R:
 
-- `filename`, `image_file`, `file_path` → matched as file column
-- `class`, `predicted_class`, `classification` → matched as class column
-
-If your format is different, rename the columns to `file_name` and `class_name`.
+```{r, eval = FALSE}
+df <- read.csv("my_classifications.csv")
+names(df)[names(df) == "predicted_class"] <- "class_name"
+names(df)[names(df) == "filename"] <- "file_name"
+write.csv(df, "D20230101T120000_IFCB134.csv", row.names = FALSE)
+```
 
 ---
 
@@ -287,6 +309,27 @@ A: Yes! Settings are stored in a configuration file:
 
 Folder paths, class list location, and Python venv path are automatically restored when you restart the app.
 
+**Q: How do I reset all settings to defaults?**
+
+A: Use the `reset_settings` argument when launching the app:
+
+```{r, eval = FALSE}
+run_app(reset_settings = TRUE)
+```
+
+This deletes the saved `settings.json` file and starts the app with default values. This is useful if:
+
+- The app fails to start due to invalid saved paths
+- Folder paths point to locations that no longer exist
+- You want a clean slate after changing your data layout
+
+You can also combine it with other arguments:
+
+```{r, eval = FALSE}
+# Reset settings and specify a new Python environment
+run_app(reset_settings = TRUE, venv_path = "/path/to/your/venv")
+```
+
 **Q: What's the yellow warning on some classes?**
 
 A: Classes marked with a warning are in your classification data but not in your class list. This can happen when:
@@ -315,6 +358,7 @@ A: This sample has both manual annotations AND auto-classifications available. W
 | "Python not available" | Affects .mat files. Run `iRfcb::ifcb_py_install()` |
 | "Error loading class list" | Check file format (.mat or .txt) |
 | "No samples found" | Check ROI Data Folder configuration |
+| App fails to start | Try `run_app(reset_settings = TRUE)` to clear saved settings |
 
 ---
 
