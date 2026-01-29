@@ -12,16 +12,16 @@
 ## Citation
 
 Source:
-[`inst/CITATION`](https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.1.0-beta.1/inst/CITATION)
+[`inst/CITATION`](https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/inst/CITATION)
 
 Torstensson, A. (2026). ClassiPyR: A Shiny Application for Manual Image
 Classification and Validation of IFCB Data. R package version
-0.0.0.9000. https://github.com/EuropeanIFCBGroup/ClassiPyR
+0.0.0.9000. https://doi.org/10.5281/zenodo.18414999
 
     @Manual{,
       title = {ClassiPyR: A Shiny Application for Manual Image Classification and Validation of IFCB Data},
       author = {Anders Torstensson},
       year = {2026},
       note = {R package version 0.0.0.9000},
-      url = {https://github.com/EuropeanIFCBGroup/ClassiPyR},
+      url = {https://doi.org/10.5281/zenodo.18414999},
     }
