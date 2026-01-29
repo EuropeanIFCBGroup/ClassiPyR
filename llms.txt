@@ -16,6 +16,18 @@ training datasets for machine learning classifiers.
 **Full documentation:**
 [europeanifcbgroup.github.io/ClassiPyR](https://europeanifcbgroup.github.io/ClassiPyR/)
 
+## Background
+
+`ClassiPyR` was created to provide a lightweight, standalone annotation
+and validation tool that is fully compatible with the
+[ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox and
+custom classifiers (e.g. a CNN). The primary design goals were
+user-friendliness and portability—enabling researchers to work with IFCB
+data without complex setup requirements or dependencies on specific
+computing environments (other than Python and R). To achieve these goals
+efficiently, [Claude Code](https://code.claude.com/) was used for
+development.
+
 ## Features
 
 - **Dual Mode**: Validate existing classifications or annotate from
@@ -45,7 +57,7 @@ only work with CSV files, this step is optional.
 
 ``` r
 library(iRfcb)
-ifcb_py_install()  # Creates venv in current working directory
+ifcb_py_install()
 ```
 
 ## Quick Start

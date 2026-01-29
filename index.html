@@ -80,6 +80,11 @@
 <p>A Shiny application for manual (human) image classification and validation of Imaging FlowCytobot (IFCB) plankton images. Built for researchers who need to validate automated classifications or create training datasets for machine learning classifiers.</p>
 <p><strong>Full documentation:</strong> <a href="https://europeanifcbgroup.github.io/ClassiPyR/">europeanifcbgroup.github.io/ClassiPyR</a></p>
 <div class="section level2">
+<h2 id="background">Background<a class="anchor" aria-label="anchor" href="#background"></a>
+</h2>
+<p><code>ClassiPyR</code> was created to provide a lightweight, standalone annotation and validation tool that is fully compatible with the <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a> toolbox and custom classifiers (e.g. a CNN). The primary design goals were user-friendliness and portability—enabling researchers to work with IFCB data without complex setup requirements or dependencies on specific computing environments (other than Python and R). To achieve these goals efficiently, <a href="https://code.claude.com/" class="external-link">Claude Code</a> was used for development.</p>
+</div>
+<div class="section level2">
 <h2 id="features">Features<a class="anchor" aria-label="anchor" href="#features"></a>
 </h2>
 <ul>
@@ -110,7 +115,7 @@
 <p>Python is required for reading and writing MATLAB .mat files. If you only work with CSV files, this step is optional.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://europeanifcbgroup.github.io/iRfcb/" class="external-link">iRfcb</a></span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">ifcb_py_install</a></span><span class="op">(</span><span class="op">)</span>  <span class="co"># Creates venv in current working directory</span></span></code></pre></div>
+<span><span class="fu"><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">ifcb_py_install</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 </div>
 </div>
 <div class="section level2">
