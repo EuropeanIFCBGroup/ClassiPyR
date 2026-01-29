@@ -1,8 +1,6 @@
 # Changelog
 
-## ClassiPyR 0.1.0
-
-Initial release of ClassiPyR.
+## ClassiPyR (development version)
 
 ### Features
 
