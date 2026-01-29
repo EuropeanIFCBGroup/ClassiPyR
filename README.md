@@ -4,6 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![R-CMD-check](https://github.com/EuropeanIFCBGroup/ClassiPyR/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/EuropeanIFCBGroup/ClassiPyR/actions/workflows/R-CMD-check.yaml)
 [![codecov](https://codecov.io/gh/EuropeanIFCBGroup/ClassiPyR/branch/main/graph/badge.svg)](https://app.codecov.io/gh/EuropeanIFCBGroup/ClassiPyR)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18414999.svg)](https://doi.org/10.5281/zenodo.18414999)
 
 A Shiny application for manual (human) image classification and validation of Imaging FlowCytobot (IFCB) plankton images. Built for researchers who need to validate automated classifications or create training datasets for machine learning classifiers.
 
@@ -33,7 +34,7 @@ Python is required for reading and writing MATLAB .mat files. If you only work w
 
 ```r
 library(iRfcb)
-ifcb_py_install(envname = "./venv")  # Creates venv in current working directory
+ifcb_py_install()  # Creates venv in current working directory
 ```
 
 ## Quick Start
