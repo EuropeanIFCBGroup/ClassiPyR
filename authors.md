@@ -12,7 +12,7 @@
 ## Citation
 
 Source:
-[`inst/CITATION`](https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/inst/CITATION)
+[`inst/CITATION`](https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.1.0-beta.1/inst/CITATION)
 
 Torstensson, A. (2026). ClassiPyR: A Shiny Application for Manual Image
 Classification and Validation of IFCB Data. R package version
