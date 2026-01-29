@@ -154,16 +154,26 @@ The default scale is 3.4 pixels per micrometer (standard for IFCB). To adjust:
 
 ### CSV Files
 
-Standard classification CSV output. Required columns:
+Standard classification CSV output. The CSV file must be named after the sample it describes (e.g., `D20230101T120000_IFCB134.csv`).
 
-- `file_name`: Image filename (e.g., `D20230101T120000_IFCB134_00001.png`)
+Required columns (exact names):
+
+- `file_name`: Image filename including `.png` extension (e.g., `D20230101T120000_IFCB134_00001.png`)
 - `class_name`: Predicted class name
 
 Optional columns:
 
 - `score`: Classification confidence (0-1)
 
-**Example CSV:**
+**Minimal example:**
+
+```
+file_name,class_name
+D20230101T120000_IFCB134_00001.png,Diatom
+D20230101T120000_IFCB134_00002.png,Ciliate
+```
+
+**Example with confidence scores:**
 
 ```
 file_name,class_name,score
@@ -172,9 +182,7 @@ D20230101T120000_IFCB134_00002.png,Ciliate,0.87
 D20230101T120000_IFCB134_00003.png,Dinoflagellate,0.72
 ```
 
-**Flexible column matching**: The app searches for columns containing "file" and "class" in their names, so variants like `filename`, `image_file`, `predicted_class`, or `class` will also work.
-
-**Different CNN pipelines**: If your classifier produces different column names, rename them to `file_name` and `class_name`, or contact us to add support for your format.
+**Different CNN pipelines**: If your classifier produces different column names, rename them to `file_name` and `class_name` before placing the CSV in the Classification Folder.
 
 Files are searched recursively in the Classification Folder.
 
@@ -244,15 +252,13 @@ Images organized into class folders for training CNN models or other classifiers
 
 ### Python Configuration
 
-| Setting | Description |
-|---------|-------------|
-| Python Virtual Environment Path | Path to venv with scipy installed |
-
-The venv path can also be specified when launching the app:
+The Python virtual environment path is configured when launching the app:
 
 ```{r, eval = FALSE}
 run_app(venv_path = "/path/to/your/venv")
 ```
+
+The path is remembered for future sessions. **Priority order**: `run_app(venv_path=)` argument > saved settings > default (`./venv`).
 
 ### Classifier Options
 

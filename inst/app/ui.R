@@ -247,24 +247,6 @@ gallery_js <- function() {
   "
 }
 
-# Custom CSS for warning styling in dropdowns
-warning_css <- "
-/* Style selectize options containing warning symbol (⚠) */
-.selectize-dropdown-content .option:has-text('⚠'),
-.selectize-dropdown .option[data-value*='⚠'] {
-  color: #856404 !important;
-  background-color: #fff3cd !important;
-}
-/* Fallback: style any option starting with warning symbol using attribute selector */
-.selectize-dropdown-content .option {
-  /* Default styling */
-}
-/* Target the selected item in the dropdown that contains warning */
-.selectize-input .item {
-  /* Check content dynamically via JS */
-}
-"
-
 # UI object
 ui <- page_sidebar(
   title = uiOutput("dynamic_title"),

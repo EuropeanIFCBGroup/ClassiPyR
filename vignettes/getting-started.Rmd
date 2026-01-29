@@ -23,7 +23,7 @@ Make sure you have:
 1. The package installed (see [Installation](https://europeanifcbgroup.github.io/ClassiPyR/))
 2. Your IFCB data files (ROI, ADC, HDR)
 3. Optionally: a class list file (.mat or .txt) - you can also create one from scratch in the app
-4. Optionally: existing classifications (CSV or classifier MAT files)
+4. Optionally: existing classifications (CSV or classifier MAT files, see below)
 
 ### Python Requirements
 
@@ -34,6 +34,20 @@ Python is required if you work with MATLAB .mat files:
 - **Saving annotations** as .mat files for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis)
 
 If you only work with CSV classification files, Python is not required.
+
+### CSV Classification Format
+
+If you have existing classifications in CSV format, each file must be named after its sample (e.g., `D20230101T120000_IFCB134.csv`) and contain at least these columns:
+
+```
+file_name,class_name
+D20230101T120000_IFCB134_00001.png,Diatom
+D20230101T120000_IFCB134_00002.png,Ciliate
+```
+
+An optional `score` column (confidence values between 0 and 1) can also be included. See the [User Guide](user-guide.html) for more details.
+
+### Python Setup
 
 To set up Python:
 
@@ -52,7 +66,7 @@ Launch the app:
 library(ClassiPyR)
 run_app()
 
-# Or specify a custom Python virtual environment path
+# Or specify a custom Python virtual environment path (takes priority over saved settings)
 run_app(venv_path = "/path/to/your/venv")
 ```
 
@@ -74,7 +88,7 @@ Configure your folders:
 
 Click **Save Settings**.
 
-> **Note**: You can also configure the Python virtual environment path in Settings if you didn't specify it when launching the app.
+> **Note**: The Python virtual environment path is configured via `run_app(venv_path = ...)` and remembered for future sessions. See the [FAQ](faq.html) for details on how the path is resolved.
 
 ---
 

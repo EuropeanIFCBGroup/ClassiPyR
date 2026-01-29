@@ -79,7 +79,7 @@ server <- function(input, output, session) {
       use_threshold = TRUE,
       pixels_per_micron = 3.4,  # IFCB default resolution
       class2use_path = NULL,  # Path to class2use file for auto-loading
-      python_venv_path = NULL  # NULL = use iRfcb default (~/.virtualenvs/iRfcb)
+      python_venv_path = NULL  # NULL = use ./venv in working directory
     )
 
     if (file.exists(settings_file)) {
@@ -117,6 +117,13 @@ server <- function(input, output, session) {
 
   # Initialize config from saved settings
   saved_settings <- load_settings()
+
+  # run_app(venv_path=) takes precedence over saved settings
+  run_app_venv <- getOption("ClassiPyR.venv_path", default = NULL)
+  if (!is.null(run_app_venv) && nzchar(run_app_venv)) {
+    saved_settings$python_venv_path <- run_app_venv
+  }
+
   config <- reactiveValues(
     csv_folder = saved_settings$csv_folder,
     roi_folder = saved_settings$roi_folder,
@@ -244,24 +251,6 @@ server <- function(input, output, session) {
 
       hr(),
 
-      # Python environment setting
-      h5("Python Environment"),
-      div(
-        style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 10px;",
-        div(style = "flex: 1;",
-            textInput("cfg_python_venv_path", "Virtual Environment Path",
-                      value = ifelse(is.null(config$python_venv_path) || config$python_venv_path == "",
-                                     "", config$python_venv_path),
-                      width = "100%",
-                      placeholder = "Leave empty for default (./venv)")),
-        actionButton("browse_venv_folder", "Browse", class = "btn-outline-secondary",
-                     style = "margin-bottom: 15px;")
-      ),
-      tags$small(class = "text-muted",
-                 "Required for .mat file export. Leave empty to use ./venv in working directory. Changes require app restart."),
-
-      hr(),
-
       # Class list editor button
       div(
         style = "display: flex; align-items: center; gap: 10px;",
@@ -324,18 +313,6 @@ server <- function(input, output, session) {
     }
   })
 
-  observeEvent(input$browse_venv_folder, {
-    default_path <- if (is.null(config$python_venv_path) || config$python_venv_path == "") {
-      startup_wd
-    } else {
-      config$python_venv_path
-    }
-    folder <- choose_folder(default = default_path,
-                            caption = "Select Python Virtual Environment Folder")
-    if (!is.na(folder) && nzchar(folder)) {
-      updateTextInput(session, "cfg_python_venv_path", value = folder)
-    }
-  })
 
   # Class count display
 
@@ -599,11 +576,9 @@ server <- function(input, output, session) {
     config$png_output_folder <- input$cfg_png_output_folder
     config$use_threshold <- input$cfg_use_threshold
     config$pixels_per_micron <- input$cfg_pixels_per_micron
-    # Store empty string as NULL for venv path
-    venv_path <- input$cfg_python_venv_path
-    config$python_venv_path <- if (is.null(venv_path) || venv_path == "") NULL else venv_path
 
     # Persist settings to file for next session
+    # python_venv_path is kept from config (set via run_app() or previous save)
     persist_settings(list(
       csv_folder = input$cfg_csv_folder,
       roi_folder = input$cfg_roi_folder,
@@ -611,7 +586,7 @@ server <- function(input, output, session) {
       png_output_folder = input$cfg_png_output_folder,
       use_threshold = input$cfg_use_threshold,
       pixels_per_micron = input$cfg_pixels_per_micron,
-      class2use_path = rv$class2use_path,  # Persist the class list path for auto-loading
+      class2use_path = rv$class2use_path,
       python_venv_path = config$python_venv_path
     ))
 

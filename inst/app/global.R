@@ -17,9 +17,9 @@ library(reticulate)
 # Get version from package
 app_version <- as.character(utils::packageVersion("ClassiPyR"))
 
-# Constants for session cache
-# Cache stores classification metadata (~1.5 MB per sample with 5000 ROIs)
-# 20 samples ≈ 30 MB memory usage - reasonable for most workflows
+# Session cache limit (used in server.R to evict oldest samples)
+# Each cached sample stores classification metadata (~1.5 MB with 5000 ROIs)
+# 20 samples ≈ 30 MB memory usage
 MAX_CACHED_SAMPLES <- 20
 
 # Get Python venv path from: 1) run_app() argument, 2) saved settings, 3) NULL (use default)

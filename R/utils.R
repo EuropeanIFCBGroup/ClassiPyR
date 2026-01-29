@@ -52,9 +52,6 @@ get_settings_path <- function() {
 }
 
 # Constants
-# Cache stores classification metadata (~1.5 MB per sample with 5000 ROIs)
-# 20 samples ≈ 30 MB memory usage - reasonable for most workflows
-MAX_CACHED_SAMPLES <- 20
 VALID_SAMPLE_NAME_PATTERN <- "^D\\d{8}T\\d{6}_IFCB\\d+$"
 
 # Characters unsafe for class names (used in folder names and HTML display):
@@ -292,8 +289,18 @@ create_empty_changes_log <- function() {
 #' use or create a virtual environment. Required for reading and writing
 #' MATLAB .mat files.
 #'
+#' The resolution order is:
+#' 1. If Python is already configured via reticulate, use it directly
+#'    (installs scipy if missing).
+#' 2. If \code{venv_path} is provided and the virtual environment exists,
+#'    activate it.
+#' 3. If \code{venv_path} is provided but does not exist, create it via
+#'    \code{\link[iRfcb]{ifcb_py_install}}.
+#' 4. If \code{venv_path} is NULL, default to \code{./venv} in the current
+#'    working directory for steps 2--3.
+#'
 #' @param venv_path Optional path to virtual environment. If NULL (default),
-#'   uses a 'venv' folder in the current working directory.
+#'   uses a \code{venv} folder in the current working directory.
 #' @return TRUE if Python is available, FALSE otherwise
 #' @export
 #' @examples
