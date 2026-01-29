@@ -278,34 +278,47 @@ server <- function(input, output, session) {
     ))
   })
 
+  # Cross-platform folder chooser: uses native Windows dialog (proper focus)
+  # or tcltk on other platforms
+  choose_folder <- function(default = "", caption = "Select Folder") {
+    if (.Platform$OS.type == "windows") {
+      # Use native Windows dialog which handles focus correctly
+      folder <- utils::choose.dir(default = default, caption = caption)
+    } else {
+      # Use tcltk on Linux/macOS
+      folder <- tcltk::tk_choose.dir(default = default, caption = caption)
+    }
+    folder
+  }
+
   # Browse button handlers using system folder picker
   observeEvent(input$browse_csv_folder, {
-    folder <- tcltk::tk_choose.dir(default = config$csv_folder,
-                                   caption = "Select Classification Folder")
+    folder <- choose_folder(default = config$csv_folder,
+                            caption = "Select Classification Folder")
     if (!is.na(folder) && nzchar(folder)) {
       updateTextInput(session, "cfg_csv_folder", value = folder)
     }
   })
 
   observeEvent(input$browse_roi_folder, {
-    folder <- tcltk::tk_choose.dir(default = config$roi_folder,
-                                   caption = "Select ROI Data Folder")
+    folder <- choose_folder(default = config$roi_folder,
+                            caption = "Select ROI Data Folder")
     if (!is.na(folder) && nzchar(folder)) {
       updateTextInput(session, "cfg_roi_folder", value = folder)
     }
   })
 
   observeEvent(input$browse_output_folder, {
-    folder <- tcltk::tk_choose.dir(default = config$output_folder,
-                                   caption = "Select Output Folder")
+    folder <- choose_folder(default = config$output_folder,
+                            caption = "Select Output Folder")
     if (!is.na(folder) && nzchar(folder)) {
       updateTextInput(session, "cfg_output_folder", value = folder)
     }
   })
 
   observeEvent(input$browse_png_folder, {
-    folder <- tcltk::tk_choose.dir(default = config$png_output_folder,
-                                   caption = "Select PNG Output Folder")
+    folder <- choose_folder(default = config$png_output_folder,
+                            caption = "Select PNG Output Folder")
     if (!is.na(folder) && nzchar(folder)) {
       updateTextInput(session, "cfg_png_output_folder", value = folder)
     }
@@ -317,8 +330,8 @@ server <- function(input, output, session) {
     } else {
       config$python_venv_path
     }
-    folder <- tcltk::tk_choose.dir(default = default_path,
-                                   caption = "Select Python Virtual Environment Folder")
+    folder <- choose_folder(default = default_path,
+                            caption = "Select Python Virtual Environment Folder")
     if (!is.na(folder) && nzchar(folder)) {
       updateTextInput(session, "cfg_python_venv_path", value = folder)
     }
