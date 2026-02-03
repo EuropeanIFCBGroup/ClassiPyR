@@ -590,7 +590,8 @@ test_that("rescan_file_index works with non-standard folder structure", {
   roi_path <- result$roi_path_map[["D20220601T100000_IFCB1"]]
   expect_true(grepl("all_roi_files", roi_path))
   # The path should go directly from roi_folder to the file, no YYYY/DYYYYMMDD layer
-  expect_equal(dirname(roi_path), roi_folder)
+  expect_equal(normalizePath(dirname(roi_path), winslash = "/"), 
+               normalizePath(roi_folder, winslash = "/"))
 
   unlink(temp_root, recursive = TRUE)
 })
