@@ -28,7 +28,8 @@ Complete documentation for all `ClassiPyR` features.
 ### Title Bar
 
 - **App name and version**
-- **Mode indicator**: Shows current sample and mode (Validation/Annotation)
+- **Mode indicator**: Shows current state and mode
+  - No sample loaded: Initial state before selecting a sample
   - Validation mode: Shows accuracy percentage
   - Annotation mode: Shows progress (X/Y classified)
 
@@ -262,17 +263,17 @@ MATLAB-compatible format with:
 
 ### Statistics Files
 
-`output/validation_statistics/[sample_name]_validation_stats.csv`
+`output_folder/validation_statistics/[sample_name]_validation_stats.csv`
 
 - Summary: total, correct, incorrect, accuracy
 
-`output/validation_statistics/[sample_name]_validation_detailed.csv`
+`output_folder/validation_statistics/[sample_name]_validation_detailed.csv`
 
 - Per-image: original class, validated class, correct flag
 
 ### Organized PNGs
 
-`png_output/[class_name]/[image_files]`
+`png_output_folder/[class_name]/[image_files]`
 
 Images organized into class folders for training CNN models or other classifiers.
 
@@ -363,9 +364,9 @@ The app maintains two types of caches:
 
 `ClassiPyR` stores your settings in a configuration file that follows R standards:
 
-- **Linux**: `~/.local/share/ClassiPyR/settings.json`
-- **macOS**: `~/Library/Application Support/ClassiPyR/settings.json`
-- **Windows**: `%LOCALAPPDATA%/ClassiPyR/settings.json`
+- **Linux**: `~/.config/R/ClassiPyR/settings.json`
+- **macOS**: `~/Library/Preferences/org.R-project.R/R/ClassiPyR/settings.json`
+- **Windows**: `%APPDATA%/R/config/R/ClassiPyR/settings.json`
 
 Settings are loaded automatically when you start the app, so your folder paths, class list location, and Python venv path are remembered between sessions. Settings can be reset by specifying `run_app(reset_settings = TRUE)`.
 
@@ -373,11 +374,11 @@ Settings are loaded automatically when you start the app, so your folder paths, 
 
 ## Dependencies
 
-`ClassiPyR` relies on **[iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb)** for all IFCB data operations:
+`ClassiPyR` relies on **[`iRfcb`](https://github.com/EuropeanIFCBGroup/iRfcb)** for all IFCB data operations:
 
 - Extracting images from ROI files
 - Reading ADC metadata (dimensions, timestamps)
 - Reading and writing MATLAB .mat files
 - Class list handling
 
-iRfcb is installed automatically as a dependency when you install `ClassiPyR`.
+`iRfcb` is installed automatically as a dependency when you install `ClassiPyR`.

@@ -63,7 +63,7 @@ library(ClassiPyR)
 run_app()
 
 # Or specify a custom Python virtual environment path (takes priority over saved settings)
-run_app(venv_path = "/path/to/your/venv")
+run_app(venv_path = "./venv")
 ```
 
 Click the **gear icon** next to your username in the sidebar.

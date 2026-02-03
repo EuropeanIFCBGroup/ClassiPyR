@@ -59,7 +59,7 @@ Then restart the app.
 
 **Q: Where is the Python virtual environment created?**
 
-A: By default, `ifcb_py_install()` creates a `venv` folder in your current working directory. You can specify a different location:
+A: By default, `ifcb_py_install()` creates a `venv` folder in your home directory. You can specify a different location:
 
 ```{r, eval = FALSE}
 ifcb_py_install("/path/to/your/venv")
@@ -95,7 +95,7 @@ remotes::install_github("EuropeanIFCBGroup/ClassiPyR")
 A: Try reinstalling the package:
 
 ```{r, eval = FALSE}
-remotes::install_github("EuropeanIFCBGroup/ClassiPyR", force = TRUE)
+install.packages("iRfcb")
 ```
 
 **Q: iRfcb won't install**
@@ -103,7 +103,7 @@ remotes::install_github("EuropeanIFCBGroup/ClassiPyR", force = TRUE)
 A: [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb) is the core dependency for `ClassiPyR` and is installed automatically. If you encounter issues:
 
 ```{r, eval = FALSE}
-remotes::install_github("EuropeanIFCBGroup/iRfcb")
+install.packages("iRfcb")
 ```
 
 ---
@@ -115,21 +115,17 @@ remotes::install_github("EuropeanIFCBGroup/iRfcb")
 A: Check that:
 
 1. ROI Data Folder points to your data
-2. Data is organized as: `folder/YYYY/DYYYYMMDD/files`
-3. ROI files exist and are readable
-4. Click the **Sync** button (circular arrow icon) to rescan folders if you recently added new data
+2. ROI files exist and are readable
+3. Click the **Sync** button (circular arrow icon) to rescan folders if you recently added new data
 
 **Q: "ROI file not found" error**
 
-A: The app expects this structure:
+A: The app scans the ROI Data Folder recursively, so any subfolder layout works (including flat). Check that:
 
-```
-roi_folder/
-  2023/
-    D20230101/
-      D20230101T120000_IFCB134.roi
-      D20230101T120000_IFCB134.adc
-```
+1. The ROI Data Folder path is correct
+2. Each `.roi` file has a matching `.adc` file in the same directory
+3. Filenames follow the IFCB naming convention (`DYYYYMMDDTHHMMSS_IFCBNNN`)
+4. Click the **Sync** button to rescan if you recently moved or added files
 
 **Q: Classifications not loading**
 
@@ -266,14 +262,14 @@ A: In the Output Folder you configured:
 
 **Q: Can I import annotations back to MATLAB?**
 
-A: Yes, the MAT files are compatible with the [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox (Sosik & Olson, 2007). Use:
+A: Yes, the MAT files are compatible with the [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox (Sosik & Olson, 2007). Use the list in `startMC`, or load the list in MATLAB using:
 
 ```matlab
 load('sample_name.mat');
 % classlist contains [roi_number, class_index]
 ```
 
-Note: Python with scipy must be installed to save .mat files.
+Note: Python with `scipy` must be installed to save .mat files.
 
 **Q: What's in the statistics CSV?**
 
@@ -302,9 +298,9 @@ A: Open Settings and find "Pixels per Micrometer". The default is 3.4 (standard 
 
 A: Yes! Settings are stored in a configuration file:
 
-- **Linux**: `~/.local/share/ClassiPyR/settings.json`
-- **macOS**: `~/Library/Application Support/ClassiPyR/settings.json`
-- **Windows**: `%LOCALAPPDATA%/ClassiPyR/settings.json`
+- **Linux**: `~/.config/R/ClassiPyR/settings.json`
+- **macOS**: `~/Library/Preferences/org.R-project.R/R/ClassiPyR/settings.json`
+- **Windows**: `%APPDATA%/R/config/R/ClassiPyR/settings.json`
 
 Folder paths, class list location, and Python venv path are automatically restored when you restart the app.
 
@@ -316,7 +312,7 @@ A: Use the `reset_settings` argument when launching the app:
 run_app(reset_settings = TRUE)
 ```
 
-This deletes the saved `settings.json` file and starts the app with default values. This is useful if:
+This deletes the saved `settings.json` file and starts the app with default values. All folder paths, the class list reference, and the Python venv path are cleared, so you will need to reconfigure them. The class list file itself (`class2use_saved.*`) is not deleted from the config directory but will not be loaded until you re-upload it. This is useful if:
 
 - The app fails to start due to invalid saved paths
 - Folder paths point to locations that no longer exist
@@ -384,9 +380,9 @@ ClassiPyR::rescan_file_index(
 
 A: In the same config directory as your settings:
 
-- **Linux**: `~/.local/share/ClassiPyR/file_index.json`
-- **macOS**: `~/Library/Application Support/ClassiPyR/file_index.json`
-- **Windows**: `%LOCALAPPDATA%/ClassiPyR/file_index.json`
+- **Linux**: `~/.config/R/ClassiPyR/file_index.json`
+- **macOS**: `~/Library/Preferences/org.R-project.R/R/ClassiPyR/file_index.json`
+- **Windows**: `%APPDATA%/R/config/R/ClassiPyR/file_index.json`
 
 ---
 
@@ -394,7 +390,7 @@ A: In the same config directory as your settings:
 
 | Error | Solution |
 |-------|----------|
-| "ROI file not found" | Check ROI Data Folder path and file structure |
+| "ROI file not found" | Check ROI Data Folder path; ensure `.roi` files use IFCB naming and click Sync |
 | "ADC file not found" | ADC file must be alongside ROI file |
 | "Python not available" | Affects saving .mat files. Run `iRfcb::ifcb_py_install()` |
 | "Error loading class list" | Check file format (.mat or .txt) |
