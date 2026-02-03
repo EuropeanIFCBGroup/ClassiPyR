@@ -5,6 +5,7 @@
 #' @importFrom iRfcb ifcb_get_mat_variable
 #' @importFrom shiny shinyApp
 #' @importFrom shinyjs useShinyjs
+#' @importFrom shinyFiles shinyDirButton
 #' @importFrom bslib bs_theme
 #' @importFrom DT renderDT
 #' @importFrom jsonlite fromJSON
@@ -49,6 +50,205 @@ get_settings_path <- function() {
     dir.create(config_dir, recursive = TRUE, showWarnings = FALSE)
   }
   file.path(config_dir, "settings.json")
+}
+
+#' Get path to file index cache
+#'
+#' Returns the path to the file index JSON cache file. The file index
+#' stores scanned folder results to avoid expensive recursive directory
+#' scans on startup.
+#'
+#' @return Path to the file index JSON file
+#' @export
+get_file_index_path <- function() {
+  file.path(get_config_dir(), "file_index.json")
+}
+
+#' Save file index to disk cache
+#'
+#' Writes the file index data to a JSON cache file for fast startup.
+#'
+#' @param data List containing scan results (sample names, path maps, etc.)
+#' @return NULL (called for side effects)
+#' @export
+save_file_index <- function(data) {
+  tryCatch({
+    path <- get_file_index_path()
+    dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+    jsonlite::write_json(data, path, auto_unbox = TRUE, pretty = TRUE)
+  }, error = function(e) {
+    message("Could not save file index: ", e$message)
+  })
+}
+
+#' Load file index from disk cache
+#'
+#' Reads the cached file index if it exists and is valid JSON.
+#'
+#' @return List with cached data, or NULL if no cache exists or it is invalid
+#' @export
+load_file_index <- function() {
+  path <- get_file_index_path()
+  if (file.exists(path)) {
+    tryCatch(
+      jsonlite::fromJSON(path, simplifyVector = FALSE),
+      error = function(e) {
+        message("Could not load file index: ", e$message)
+        NULL
+      }
+    )
+  } else {
+    NULL
+  }
+}
+
+#' Rescan folders and rebuild the file index cache
+#'
+#' Scans the configured (or specified) ROI, classification, and output folders
+#' for IFCB sample files and saves the results to the file index cache.
+#' This can be called outside the Shiny app, e.g. from a cron job, to keep
+#' the cache up to date without manually clicking the rescan button.
+#'
+#' If folder paths are not provided, they are read from saved settings.
+#'
+#' @param roi_folder Path to ROI data folder. If NULL, read from saved settings.
+#' @param csv_folder Path to classification folder (CSV/MAT). If NULL, read from saved settings.
+#' @param output_folder Path to output folder for annotations. If NULL, read from saved settings.
+#' @param verbose If TRUE, print progress messages. Default TRUE.
+#' @return Invisibly returns the file index list, or NULL if roi_folder is invalid.
+#' @export
+#' @examples
+#' \dontrun{
+#' # Rescan using saved settings
+#' rescan_file_index()
+#'
+#' # Rescan with explicit paths
+#' rescan_file_index(
+#'   roi_folder = "/data/ifcb/raw",
+#'   csv_folder = "/data/ifcb/classified",
+#'   output_folder = "/data/ifcb/manual"
+#' )
+#'
+#' # Use in a cron job:
+#' # Rscript -e 'ClassiPyR::rescan_file_index()'
+#' }
+rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
+                              output_folder = NULL, verbose = TRUE) {
+  # Read from saved settings if not provided
+  if (is.null(roi_folder) || is.null(csv_folder) || is.null(output_folder)) {
+    settings_path <- get_settings_path()
+    if (file.exists(settings_path)) {
+      saved <- tryCatch(
+        jsonlite::fromJSON(settings_path),
+        error = function(e) list()
+      )
+      if (is.null(roi_folder)) roi_folder <- saved$roi_folder
+      if (is.null(csv_folder)) csv_folder <- saved$csv_folder
+      if (is.null(output_folder)) output_folder <- saved$output_folder
+    }
+  }
+
+  # Validate ROI folder
+  roi_valid <- !is.null(roi_folder) && length(roi_folder) == 1 &&
+    !isTRUE(is.na(roi_folder)) && nzchar(roi_folder) && dir.exists(roi_folder)
+  csv_valid <- !is.null(csv_folder) && length(csv_folder) == 1 &&
+    !isTRUE(is.na(csv_folder)) && nzchar(csv_folder) && dir.exists(csv_folder)
+  output_valid <- !is.null(output_folder) && length(output_folder) == 1 &&
+    !isTRUE(is.na(output_folder)) && nzchar(output_folder) && dir.exists(output_folder)
+
+  if (!roi_valid) {
+    if (verbose) message("ROI folder not set or does not exist: ", roi_folder)
+    return(invisible(NULL))
+  }
+
+  # Scan ROI files
+  if (verbose) message("Scanning ROI files in: ", roi_folder)
+  roi_files <- list.files(roi_folder, pattern = "\\.roi$",
+                          recursive = TRUE, full.names = TRUE)
+  sample_names_raw <- tools::file_path_sans_ext(basename(roi_files))
+
+  # Build ROI path map (handle duplicates: keep first occurrence)
+  roi_map <- list()
+  for (i in seq_along(roi_files)) {
+    sn <- sample_names_raw[i]
+    if (is.null(roi_map[[sn]])) {
+      roi_map[[sn]] <- roi_files[i]
+    }
+  }
+  sample_names <- unique(sample_names_raw)
+  if (verbose) message("  Found ", length(sample_names), " samples")
+
+  if (length(sample_names) == 0) {
+    if (verbose) message("No samples found.")
+    return(invisible(NULL))
+  }
+
+  # Scan classification files
+  classified <- character()
+  mat_file_map <- list()
+  csv_map <- list()
+
+  if (csv_valid) {
+    if (verbose) message("Scanning classification files in: ", csv_folder)
+
+    csv_files <- list.files(csv_folder, pattern = "\\.csv$",
+                            recursive = TRUE, full.names = TRUE)
+    csv_sample_names <- tools::file_path_sans_ext(basename(csv_files))
+
+    for (i in seq_along(csv_files)) {
+      sn <- csv_sample_names[i]
+      if (sn %in% sample_names && is.null(csv_map[[sn]])) {
+        csv_map[[sn]] <- csv_files[i]
+      }
+    }
+
+    mat_files <- list.files(csv_folder, pattern = "_class.*\\.mat$",
+                            recursive = TRUE, full.names = TRUE)
+
+    for (mat_file in mat_files) {
+      mat_basename <- basename(mat_file)
+      sample_from_mat <- sub("_class.*\\.mat$", "", mat_basename)
+      if (sample_from_mat %in% sample_names) {
+        mat_file_map[[sample_from_mat]] <- mat_file
+      }
+    }
+
+    mat_samples <- names(mat_file_map)
+    csv_matched <- csv_sample_names[csv_sample_names %in% sample_names]
+    classified <- unique(c(csv_matched, mat_samples))
+    if (verbose) message("  Found ", length(classified), " classified samples")
+  }
+
+  # Scan output folder for manual annotations
+  annotated <- character()
+  if (output_valid) {
+    if (verbose) message("Scanning output folder: ", output_folder)
+    output_mat_files <- list.files(output_folder, pattern = "\\.mat$",
+                                   full.names = FALSE)
+    manual_mat_files <- output_mat_files[!grepl("_class", output_mat_files)]
+    annotated <- tools::file_path_sans_ext(manual_mat_files)
+    annotated <- annotated[annotated %in% sample_names]
+    if (verbose) message("  Found ", length(annotated), " annotated samples")
+  }
+
+  # Save to cache
+  index_data <- list(
+    roi_folder = roi_folder,
+    csv_folder = csv_folder,
+    output_folder = output_folder,
+    sample_names = sample_names,
+    classified_samples = classified,
+    annotated_samples = annotated,
+    roi_path_map = roi_map,
+    csv_path_map = csv_map,
+    classifier_mat_files = mat_file_map,
+    timestamp = as.character(Sys.time())
+  )
+
+  save_file_index(index_data)
+  if (verbose) message("File index saved to: ", get_file_index_path())
+
+  invisible(index_data)
 }
 
 # Constants
@@ -227,10 +427,8 @@ read_roi_dimensions <- function(adc_path) {
     if (!file.exists(adc_path)) {
       stop("ADC file not found: ", adc_path)
     }
-
-    adc_data <- utils::read.csv(adc_path, header = FALSE)
-
-    if (nrow(adc_data) == 0) {
+    
+    if (file.info(adc_path)$size == 0) {
       return(data.frame(
         roi_number = integer(),
         width = numeric(),
@@ -238,6 +436,8 @@ read_roi_dimensions <- function(adc_path) {
         area = numeric()
       ))
     }
+
+    adc_data <- utils::read.csv(adc_path, header = FALSE)
 
     n_rois <- nrow(adc_data)
 

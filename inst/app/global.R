@@ -8,6 +8,7 @@ suppressPackageStartupMessages({
   library(ClassiPyR)
   library(shiny)
   library(shinyjs)
+  library(shinyFiles)
   library(bslib)
   library(iRfcb)
   library(dplyr)

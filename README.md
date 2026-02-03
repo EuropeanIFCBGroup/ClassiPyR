@@ -22,6 +22,8 @@ A Shiny application for manual (human) image classification and validation of Im
 - **MATLAB Compatible**: Export for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox
 - **CNN Training Ready**: Organized PNG output by class
 - **Measure Tool**: Built-in ruler for image measurements
+- **Fast Startup**: File index cache avoids redundant folder scans
+- **Cross-Platform**: Web-based folder browser works on all platforms
 
 ## Installation
 

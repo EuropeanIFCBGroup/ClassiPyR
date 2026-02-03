@@ -69,15 +69,19 @@ server <- function(input, output, session) {
   # Get user's working directory (captured by run_app() before Shiny changes it)
   startup_wd <- getOption("ClassiPyR.startup_wd", default = getwd())
 
+  # Volumes for shinyFiles directory browser
+  volumes <- c("Working Dir" = startup_wd, shinyFiles::getVolumes()())
+
   # Load saved settings or use defaults
   load_settings <- function() {
     defaults <- list(
       csv_folder = startup_wd,
       roi_folder = startup_wd,
-      output_folder = file.path(startup_wd, "output"),
-      png_output_folder = file.path(startup_wd, "output", "png"),
+      output_folder = startup_wd,
+      png_output_folder = startup_wd,
       use_threshold = TRUE,
       pixels_per_micron = 3.4,  # IFCB default resolution
+      auto_sync = TRUE,  # Automatically sync folders on startup
       class2use_path = NULL,  # Path to class2use file for auto-loading
       python_venv_path = NULL  # NULL = use ./venv in working directory
     )
@@ -131,6 +135,7 @@ server <- function(input, output, session) {
     png_output_folder = saved_settings$png_output_folder,
     use_threshold = saved_settings$use_threshold,
     pixels_per_micron = saved_settings$pixels_per_micron,
+    auto_sync = saved_settings$auto_sync,
     python_venv_path = saved_settings$python_venv_path
   )
 
@@ -148,6 +153,13 @@ server <- function(input, output, session) {
   annotated_samples <- reactiveVal(character())   # Manually annotated (has .mat in output folder)
   # Store mapping of sample names to classifier MAT file paths
   classifier_mat_files <- reactiveVal(list())
+  # Path maps: sample_name -> full file path (discovered during scan)
+  roi_path_map <- reactiveVal(list())
+  csv_path_map <- reactiveVal(list())
+  # Trigger for forcing a folder rescan
+  rescan_trigger <- reactiveVal(0)
+  # Timestamp of last sync (updated after scan completes)
+  last_sync_time <- reactiveVal(NULL)
 
   # Get classes in current classifications that are NOT in class2use
   unmatched_classes <- reactive({
@@ -194,8 +206,8 @@ server <- function(input, output, session) {
         div(style = "flex: 1;",
             textInput("cfg_csv_folder", "Classification Folder (CSV/MAT)",
                       value = config$csv_folder, width = "100%")),
-        actionButton("browse_csv_folder", "Browse", class = "btn-outline-secondary",
-                     style = "margin-bottom: 15px;")
+        shinyDirButton("browse_csv_folder", "Browse", "Select Classification Folder",
+                       class = "btn-outline-secondary", style = "margin-bottom: 15px;")
       ),
 
       # ROI Folder
@@ -204,8 +216,8 @@ server <- function(input, output, session) {
         div(style = "flex: 1;",
             textInput("cfg_roi_folder", "ROI Data Folder",
                       value = config$roi_folder, width = "100%")),
-        actionButton("browse_roi_folder", "Browse", class = "btn-outline-secondary",
-                     style = "margin-bottom: 15px;")
+        shinyDirButton("browse_roi_folder", "Browse", "Select ROI Data Folder",
+                       class = "btn-outline-secondary", style = "margin-bottom: 15px;")
       ),
 
       # Output Folder
@@ -214,8 +226,8 @@ server <- function(input, output, session) {
         div(style = "flex: 1;",
             textInput("cfg_output_folder", "Output Folder (MAT & CSV)",
                       value = config$output_folder, width = "100%")),
-        actionButton("browse_output_folder", "Browse", class = "btn-outline-secondary",
-                     style = "margin-bottom: 15px;")
+        shinyDirButton("browse_output_folder", "Browse", "Select Output Folder",
+                       class = "btn-outline-secondary", style = "margin-bottom: 15px;")
       ),
 
       # PNG Output Folder
@@ -224,9 +236,17 @@ server <- function(input, output, session) {
         div(style = "flex: 1;",
             textInput("cfg_png_output_folder", "PNG Output Folder",
                       value = config$png_output_folder, width = "100%")),
-        actionButton("browse_png_folder", "Browse", class = "btn-outline-secondary",
-                     style = "margin-bottom: 15px;")
+        shinyDirButton("browse_png_folder", "Browse", "Select PNG Output Folder",
+                       class = "btn-outline-secondary", style = "margin-bottom: 15px;")
       ),
+
+      hr(),
+
+      # Sync options
+      checkboxInput("cfg_auto_sync", "Sync folders automatically on startup",
+                    value = config$auto_sync),
+      tags$small(class = "text-muted",
+                 "When disabled, the app loads from cache on startup. Use the sync button to update manually."),
 
       hr(),
 
@@ -267,49 +287,46 @@ server <- function(input, output, session) {
     ))
   })
 
-  # Cross-platform folder chooser: uses native Windows dialog (proper focus)
-  # or tcltk on other platforms
-  choose_folder <- function(default = "", caption = "Select Folder") {
-    if (.Platform$OS.type == "windows") {
-      # Use native Windows dialog which handles focus correctly
-      folder <- utils::choose.dir(default = default, caption = caption)
-    } else {
-      # Use tcltk on Linux/macOS
-      folder <- tcltk::tk_choose.dir(default = default, caption = caption)
-    }
-    folder
-  }
+  # shinyFiles directory browser setup
+  shinyDirChoose(input, "browse_csv_folder", roots = volumes, session = session)
+  shinyDirChoose(input, "browse_roi_folder", roots = volumes, session = session)
+  shinyDirChoose(input, "browse_output_folder", roots = volumes, session = session)
+  shinyDirChoose(input, "browse_png_folder", roots = volumes, session = session)
 
-  # Browse button handlers using system folder picker
+  # Browse button observers - parse selection and update text input
   observeEvent(input$browse_csv_folder, {
-    folder <- choose_folder(default = config$csv_folder,
-                            caption = "Select Classification Folder")
-    if (!is.na(folder) && nzchar(folder)) {
-      updateTextInput(session, "cfg_csv_folder", value = folder)
+    if (!is.integer(input$browse_csv_folder)) {
+      folder <- parseDirPath(volumes, input$browse_csv_folder)
+      if (length(folder) > 0) {
+        updateTextInput(session, "cfg_csv_folder", value = as.character(folder))
+      }
     }
   })
 
   observeEvent(input$browse_roi_folder, {
-    folder <- choose_folder(default = config$roi_folder,
-                            caption = "Select ROI Data Folder")
-    if (!is.na(folder) && nzchar(folder)) {
-      updateTextInput(session, "cfg_roi_folder", value = folder)
+    if (!is.integer(input$browse_roi_folder)) {
+      folder <- parseDirPath(volumes, input$browse_roi_folder)
+      if (length(folder) > 0) {
+        updateTextInput(session, "cfg_roi_folder", value = as.character(folder))
+      }
     }
   })
 
   observeEvent(input$browse_output_folder, {
-    folder <- choose_folder(default = config$output_folder,
-                            caption = "Select Output Folder")
-    if (!is.na(folder) && nzchar(folder)) {
-      updateTextInput(session, "cfg_output_folder", value = folder)
+    if (!is.integer(input$browse_output_folder)) {
+      folder <- parseDirPath(volumes, input$browse_output_folder)
+      if (length(folder) > 0) {
+        updateTextInput(session, "cfg_output_folder", value = as.character(folder))
+      }
     }
   })
 
   observeEvent(input$browse_png_folder, {
-    folder <- choose_folder(default = config$png_output_folder,
-                            caption = "Select PNG Output Folder")
-    if (!is.na(folder) && nzchar(folder)) {
-      updateTextInput(session, "cfg_png_output_folder", value = folder)
+    if (!is.integer(input$browse_png_folder)) {
+      folder <- parseDirPath(volumes, input$browse_png_folder)
+      if (length(folder) > 0) {
+        updateTextInput(session, "cfg_png_output_folder", value = as.character(folder))
+      }
     }
   })
 
@@ -576,6 +593,7 @@ server <- function(input, output, session) {
     config$png_output_folder <- input$cfg_png_output_folder
     config$use_threshold <- input$cfg_use_threshold
     config$pixels_per_micron <- input$cfg_pixels_per_micron
+    config$auto_sync <- input$cfg_auto_sync
 
     # Persist settings to file for next session
     # python_venv_path is kept from config (set via run_app() or previous save)
@@ -586,22 +604,50 @@ server <- function(input, output, session) {
       png_output_folder = input$cfg_png_output_folder,
       use_threshold = input$cfg_use_threshold,
       pixels_per_micron = input$cfg_pixels_per_micron,
+      auto_sync = input$cfg_auto_sync,
       class2use_path = rv$class2use_path,
       python_venv_path = config$python_venv_path
     ))
 
     removeModal()
-    showNotification("Settings saved. Restart app for Python environment changes to take effect.", type = "message")
+    showNotification("Settings saved.", type = "message")
 
     # Only trigger sample rescan if folder paths actually changed
     if (paths_changed) {
-      all_samples(character())
+      cache_path <- get_file_index_path()
+      if (file.exists(cache_path)) {
+        file.remove(cache_path)
+      }
+      rescan_trigger(rescan_trigger() + 1)
     }
   })
 
   # ============================================================================
   # UI Outputs - Warnings and Indicators
   # ============================================================================
+
+  output$cache_age_text <- renderUI({
+    invalidateLater(60000)
+    ts <- last_sync_time()
+    if (!is.null(ts)) {
+      cache_time <- as.POSIXct(ts)
+      age_secs <- as.numeric(difftime(Sys.time(), cache_time, units = "secs"))
+      age_text <- if (age_secs < 60) {
+        "just now"
+      } else if (age_secs < 3600) {
+        paste0(round(age_secs / 60), " min ago")
+      } else if (age_secs < 86400) {
+        paste0(round(age_secs / 3600), " hours ago")
+      } else {
+        paste0(round(age_secs / 86400), " days ago")
+      }
+      div(
+        style = "font-size: 11px; color: #999; margin-bottom: 5px;",
+        icon("clock", style = "margin-right: 3px;"),
+        paste0("Last sync: ", age_text)
+      )
+    }
+  })
 
   output$python_warning <- renderUI({
     if (!python_available) {
@@ -737,7 +783,12 @@ server <- function(input, output, session) {
     req(rv$current_sample, rv$has_both_modes)
 
     sample_name <- rv$current_sample
-    paths <- get_sample_paths(sample_name, config$roi_folder)
+    roi_path <- roi_path_map()[[sample_name]]
+    if (is.null(roi_path)) {
+      showNotification("ROI file not found for this sample", type = "error")
+      return()
+    }
+    adc_path <- sub("\\.roi$", ".adc", roi_path)
 
     # Find classification source (CSV or classifier MAT)
     csv_path <- find_csv_file(sample_name)
@@ -747,7 +798,7 @@ server <- function(input, output, session) {
       classifications <- load_from_csv(csv_path)
       showNotification("Switched to Validation mode (CSV)", type = "message")
     } else if (!is.null(classifier_mat_path)) {
-      roi_dims <- read_roi_dimensions(paths$adc_path)
+      roi_dims <- read_roi_dimensions(adc_path)
       classifications <- load_from_classifier_mat(
         classifier_mat_path, sample_name, rv$class2use, roi_dims,
         use_threshold = config$use_threshold
@@ -782,11 +833,16 @@ server <- function(input, output, session) {
     req(rv$current_sample, rv$has_both_modes)
 
     sample_name <- rv$current_sample
-    paths <- get_sample_paths(sample_name, config$roi_folder)
+    roi_path <- roi_path_map()[[sample_name]]
+    if (is.null(roi_path)) {
+      showNotification("ROI file not found for this sample", type = "error")
+      return()
+    }
+    adc_path <- sub("\\.roi$", ".adc", roi_path)
     annotation_mat_path <- file.path(config$output_folder, paste0(sample_name, ".mat"))
 
     if (file.exists(annotation_mat_path)) {
-      roi_dims <- read_roi_dimensions(paths$adc_path)
+      roi_dims <- read_roi_dimensions(adc_path)
       classifications <- load_from_mat(annotation_mat_path, sample_name, rv$class2use, roi_dims)
 
       rv$original_classifications <- classifications
@@ -906,79 +962,97 @@ server <- function(input, output, session) {
   # Sample Discovery and Selection
   # ============================================================================
 
+  # Helper: populate reactive values from file index data
+  populate_from_index <- function(index_data) {
+    sample_names <- as.character(index_data$sample_names)
+    if (length(sample_names) == 0) return(FALSE)
+
+    safe_char <- function(x) as.character(if (is.null(x)) character() else x)
+    safe_list <- function(x) as.list(if (is.null(x)) list() else x)
+
+    all_samples(sample_names)
+    classified_samples(safe_char(index_data$classified_samples))
+    annotated_samples(safe_char(index_data$annotated_samples))
+    roi_path_map(safe_list(index_data$roi_path_map))
+    csv_path_map(safe_list(index_data$csv_path_map))
+    classifier_mat_files(safe_list(index_data$classifier_mat_files))
+
+    years <- unique(substr(sample_names, 2, 5))
+    years <- sort(years)
+    first_year <- if (length(years) > 0) years[1] else "all"
+    updateSelectInput(session, "year_select",
+                      choices = c("All" = "all", setNames(years, years)),
+                      selected = first_year)
+
+    last_sync_time(index_data$timestamp)
+    TRUE
+  }
+
   # Scan for available ROI files and classification files (CSV and MAT)
+  # Uses disk cache for fast startup on subsequent launches
   observe({
+    rescan_trigger()  # Force dependency on rescan trigger
     roi_folder <- config$roi_folder
     csv_folder <- config$csv_folder
+    output_folder <- config$output_folder
 
     # Validate folder paths before using them
     roi_valid <- !is.null(roi_folder) && length(roi_folder) == 1 && !isTRUE(is.na(roi_folder)) && nzchar(roi_folder) && dir.exists(roi_folder)
-    csv_valid <- !is.null(csv_folder) && length(csv_folder) == 1 && !isTRUE(is.na(csv_folder)) && nzchar(csv_folder) && dir.exists(csv_folder)
 
-    if (roi_valid) {
-      roi_files <- list.files(roi_folder, pattern = "\\.roi$",
-                              recursive = TRUE, full.names = FALSE)
-      sample_names <- tools::file_path_sans_ext(basename(roi_files))
-      sample_names <- unique(sample_names)
+    if (!roi_valid) return()
 
-      if (length(sample_names) > 0) {
-        all_samples(sample_names)
+    # Try loading from cache first
+    cached <- load_file_index()
+    cache_valid <- !is.null(cached) &&
+      identical(cached$roi_folder, roi_folder) &&
+      identical(cached$csv_folder, csv_folder) &&
+      identical(cached$output_folder, output_folder)
 
-        classified <- character()
-        mat_file_map <- list()
-
-        if (csv_valid) {
-          # Scan for CSV files RECURSIVELY
-          csv_files <- list.files(csv_folder, pattern = "\\.csv$",
-                                  recursive = TRUE, full.names = TRUE)
-          csv_samples <- tools::file_path_sans_ext(basename(csv_files))
-
-          # Scan for classifier MAT files (pattern: samplename_class*.mat)
-          mat_files <- list.files(csv_folder, pattern = "_class.*\\.mat$",
-                                  recursive = TRUE, full.names = TRUE)
-
-          # Extract sample names from MAT files (remove _class* suffix)
-          for (mat_file in mat_files) {
-            mat_basename <- basename(mat_file)
-            # Extract sample name by removing _class*.mat suffix
-            sample_from_mat <- sub("_class.*\\.mat$", "", mat_basename)
-            if (sample_from_mat %in% sample_names) {
-              mat_file_map[[sample_from_mat]] <- mat_file
-            }
-          }
-
-          # Combine CSV samples and MAT samples
-          mat_samples <- names(mat_file_map)
-          classified <- unique(c(csv_samples[csv_samples %in% sample_names], mat_samples))
-        }
-
-        # Scan for manually annotated samples (existing .mat files in output folder)
-        # Note: exclude classifier MAT files (which have _class* suffix)
-        annotated <- character()
-        output_folder <- config$output_folder
-        output_valid <- !is.null(output_folder) && length(output_folder) == 1 && !isTRUE(is.na(output_folder)) && nzchar(output_folder) && dir.exists(output_folder)
-        if (output_valid) {
-          output_mat_files <- list.files(output_folder, pattern = "\\.mat$", full.names = FALSE)
-          # Filter out classifier files (have _class in name)
-          manual_mat_files <- output_mat_files[!grepl("_class", output_mat_files)]
-          annotated <- tools::file_path_sans_ext(manual_mat_files)
-          annotated <- annotated[annotated %in% sample_names]
-        }
-
-        classified_samples(classified)
-        annotated_samples(annotated)
-        classifier_mat_files(mat_file_map)
-
-        years <- unique(substr(sample_names, 2, 5))
-        years <- sort(years)
-
-        # Auto-select first year for better UX with large sample lists
-        first_year <- if (length(years) > 0) years[1] else "all"
-        updateSelectInput(session, "year_select",
-                          choices = c("All" = "all", setNames(years, years)),
-                          selected = first_year)
-      }
+    if (cache_valid) {
+      populate_from_index(cached)
+      return()
     }
+
+    # When auto-sync is disabled, load stale cache if available
+    auto_sync <- config$auto_sync
+    if (!isTRUE(auto_sync) && !is.null(cached)) {
+      populate_from_index(cached)
+      return()
+    }
+
+    # Full scan with progress indicator (delegates to rescan_file_index)
+    withProgress(message = "Syncing folders...", value = 0, {
+      result <- rescan_file_index(
+        roi_folder = roi_folder,
+        csv_folder = csv_folder,
+        output_folder = output_folder,
+        verbose = FALSE
+      )
+    })
+
+    if (!is.null(result)) {
+      populate_from_index(result)
+    }
+  })
+
+  # Update cache when annotations are saved (so status is correct after restart)
+  observe({
+    annotated <- annotated_samples()
+    cached <- load_file_index()
+    if (!is.null(cached) && !identical(as.character(cached$annotated_samples), annotated)) {
+      cached$annotated_samples <- annotated
+      cached$timestamp <- as.character(Sys.time())
+      save_file_index(cached)
+    }
+  })
+
+  # Rescan button: invalidate cache and trigger fresh scan
+  observeEvent(input$rescan_folders, {
+    cache_path <- get_file_index_path()
+    if (file.exists(cache_path)) {
+      file.remove(cache_path)
+    }
+    rescan_trigger(rescan_trigger() + 1)
   })
 
   # Helper function to update month choices based on year selection
@@ -1150,15 +1224,10 @@ server <- function(input, output, session) {
   # ============================================================================
 
   find_csv_file <- function(sample_name) {
-    csv_folder <- config$csv_folder
-    if (!dir.exists(csv_folder)) return(NULL)
-
-    # Search recursively for the CSV file
-    csv_files <- list.files(csv_folder, pattern = paste0("^", sample_name, "\\.csv$"),
-                            recursive = TRUE, full.names = TRUE)
-
-    if (length(csv_files) > 0) {
-      return(csv_files[1])  # Return first match
+    csv_map <- csv_path_map()
+    path <- csv_map[[sample_name]]
+    if (!is.null(path) && file.exists(path)) {
+      return(path)
     }
     return(NULL)
   }
@@ -1196,6 +1265,8 @@ server <- function(input, output, session) {
 
       # Auto-save annotations
       tryCatch({
+        roi_path_for_save <- roi_path_map()[[rv$current_sample]]
+        adc_folder_for_save <- if (!is.null(roi_path_for_save)) dirname(roi_path_for_save) else NULL
         save_sample_annotations(
           sample_name = rv$current_sample,
           classifications = rv$classifications,
@@ -1206,7 +1277,8 @@ server <- function(input, output, session) {
           png_output_folder = config$png_output_folder,
           roi_folder = config$roi_folder,
           class2use_path = rv$class2use_path,
-          annotator = input$annotator_name
+          annotator = input$annotator_name,
+          adc_folder = adc_folder_for_save
         )
       }, error = function(e) {
         showNotification(paste("Auto-save failed:", e$message), type = "error")
@@ -1224,16 +1296,17 @@ server <- function(input, output, session) {
     has_csv <- !is.null(csv_path)
     has_classifier_mat <- !is.null(classifier_mat_path)
 
-    paths <- get_sample_paths(sample_name, config$roi_folder)
-
-    if (!file.exists(paths$roi_path)) {
-      showNotification(paste("ROI file not found:", paths$roi_path), type = "error")
+    # Use discovered paths from scan (supports any folder structure)
+    roi_path <- roi_path_map()[[sample_name]]
+    if (is.null(roi_path) || !file.exists(roi_path)) {
+      showNotification(paste("ROI file not found for:", sample_name), type = "error")
       return(FALSE)
     }
+    adc_path <- sub("\\.roi$", ".adc", roi_path)
 
     # Check session cache first
     if (sample_name %in% names(rv$session_cache)) {
-      return(load_from_cache(sample_name, paths$roi_path))
+      return(load_from_cache(sample_name, roi_path))
     }
 
     tryCatch({
@@ -1248,12 +1321,12 @@ server <- function(input, output, session) {
       # Priority: Manual annotation > Classification > New annotation
       if (has_existing_annotation) {
         # ANNOTATION MODE - from existing manual annotation (priority when both exist)
-        if (!file.exists(paths$adc_path)) {
-          showNotification(paste("ADC file not found:", paths$adc_path), type = "error")
+        if (!file.exists(adc_path)) {
+          showNotification(paste("ADC file not found:", adc_path), type = "error")
           return(FALSE)
         }
 
-        roi_dims <- read_roi_dimensions(paths$adc_path)
+        roi_dims <- read_roi_dimensions(adc_path)
         classifications <- load_from_mat(annotation_mat_path, sample_name, rv$class2use, roi_dims)
         rv$is_annotation_mode <- TRUE
 
@@ -1273,12 +1346,12 @@ server <- function(input, output, session) {
 
       } else if (has_classifier_mat) {
         # VALIDATION MODE - from classifier MAT file
-        if (!file.exists(paths$adc_path)) {
-          showNotification(paste("ADC file not found:", paths$adc_path), type = "error")
+        if (!file.exists(adc_path)) {
+          showNotification(paste("ADC file not found:", adc_path), type = "error")
           return(FALSE)
         }
 
-        roi_dims <- read_roi_dimensions(paths$adc_path)
+        roi_dims <- read_roi_dimensions(adc_path)
         classifications <- load_from_classifier_mat(
           classifier_mat_path, sample_name, rv$class2use, roi_dims,
           use_threshold = config$use_threshold
@@ -1293,12 +1366,12 @@ server <- function(input, output, session) {
 
       } else {
         # NEW ANNOTATION
-        if (!file.exists(paths$adc_path)) {
-          showNotification(paste("ADC file not found:", paths$adc_path), type = "error")
+        if (!file.exists(adc_path)) {
+          showNotification(paste("ADC file not found:", adc_path), type = "error")
           return(FALSE)
         }
 
-        roi_dims <- read_roi_dimensions(paths$adc_path)
+        roi_dims <- read_roi_dimensions(adc_path)
         classifications <- create_new_classifications(sample_name, roi_dims)
         rv$is_annotation_mode <- TRUE
 
@@ -1324,7 +1397,7 @@ server <- function(input, output, session) {
                         choices = c("All" = "all", setNames(available_classes, display_names)))
 
       # Extract images
-      extract_sample_images(sample_name, paths$roi_path, classifications)
+      extract_sample_images(sample_name, roi_path, classifications)
 
       return(TRUE)
 
@@ -1863,12 +1936,17 @@ server <- function(input, output, session) {
         )
       })
 
-      paths <- get_sample_paths(rv$current_sample, config$roi_folder)
+      roi_path <- roi_path_map()[[rv$current_sample]]
+      adc_folder <- if (!is.null(roi_path)) dirname(roi_path) else NULL
+      if (is.null(adc_folder)) {
+        showNotification("Cannot find ROI data folder for this sample", type = "error")
+        return()
+      }
 
       withProgress(message = "Saving MAT file...", {
         result <- ifcb_annotate_samples(
           png_folder = temp_annotate_folder,
-          adc_folder = paths$adc_folder,
+          adc_folder = adc_folder,
           class2use_file = rv$class2use_path,
           output_folder = output_folder,
           sample_names = rv$current_sample,
@@ -2041,7 +2119,12 @@ server <- function(input, output, session) {
     req(rv$current_sample, rv$has_both_modes)
 
     sample_name <- rv$current_sample
-    paths <- get_sample_paths(sample_name, config$roi_folder)
+    roi_path <- roi_path_map()[[sample_name]]
+    if (is.null(roi_path)) {
+      showNotification("ROI file not found for this sample", type = "error")
+      return()
+    }
+    adc_path <- sub("\\.roi$", ".adc", roi_path)
 
     # Find classification source (CSV or classifier MAT)
     csv_path <- find_csv_file(sample_name)
@@ -2051,7 +2134,7 @@ server <- function(input, output, session) {
       classifications <- load_from_csv(csv_path)
       showNotification("Switched to Validation mode (CSV)", type = "message")
     } else if (!is.null(classifier_mat_path)) {
-      roi_dims <- read_roi_dimensions(paths$adc_path)
+      roi_dims <- read_roi_dimensions(adc_path)
       classifications <- load_from_classifier_mat(
         classifier_mat_path, sample_name, rv$class2use, roi_dims,
         use_threshold = config$use_threshold
