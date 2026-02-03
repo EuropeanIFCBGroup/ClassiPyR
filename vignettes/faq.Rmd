@@ -117,6 +117,7 @@ A: Check that:
 1. ROI Data Folder points to your data
 2. Data is organized as: `folder/YYYY/DYYYYMMDD/files`
 3. ROI files exist and are readable
+4. Click the **Sync** button (circular arrow icon) to rescan folders if you recently added new data
 
 **Q: "ROI file not found" error**
 
@@ -137,7 +138,7 @@ A: For CSV files:
 - Must have columns named `file_name` and `class_name` (exact names required)
 - Optionally include a `score` column (confidence value between 0 and 1)
 - The CSV file must be named after the sample (e.g., `D20230101T120000_IFCB134.csv`)
-- File should be in the Classification Folder (searched recursively)
+- File should be in the Classification Folder (indexed via file cache; click Sync to refresh)
 
 For MAT files:
 
@@ -347,6 +348,48 @@ A: This sample has both manual annotations AND auto-classifications available. W
 
 ---
 
+## File Index Cache
+
+**Q: What is the file index cache?**
+
+A: The file index cache stores the locations of all IFCB files (ROI, classification, annotation) found in your configured folders. It's saved to disk so the app doesn't need to re-scan your entire folder hierarchy every time it starts. This significantly speeds up startup for large datasets.
+
+**Q: How do I refresh the file cache?**
+
+A: Click the **Sync** button (circular arrow icon) in the sidebar, next to the sample navigation buttons. The cache age indicator below shows when the last scan occurred.
+
+**Q: New samples I added aren't showing up**
+
+A: The app loads from the cached file index. Click the **Sync** button to rescan your folders and pick up new files.
+
+**Q: Can I update the cache without opening the app?**
+
+A: Yes. Use `rescan_file_index()` from the R console or a scheduled script:
+
+```{r, eval = FALSE}
+ClassiPyR::rescan_file_index()
+```
+
+This reads folder paths from your saved settings and rebuilds the cache. You can also pass paths explicitly:
+
+```{r, eval = FALSE}
+ClassiPyR::rescan_file_index(
+  roi_folder = "/data/ifcb/raw",
+  csv_folder = "/data/ifcb/classified",
+  output_folder = "/data/ifcb/manual"
+)
+```
+
+**Q: Where is the cache file stored?**
+
+A: In the same config directory as your settings:
+
+- **Linux**: `~/.local/share/ClassiPyR/file_index.json`
+- **macOS**: `~/Library/Application Support/ClassiPyR/file_index.json`
+- **Windows**: `%LOCALAPPDATA%/ClassiPyR/file_index.json`
+
+---
+
 ## Error Messages
 
 | Error | Solution |
@@ -362,13 +405,17 @@ A: This sample has both manual annotations AND auto-classifications available. W
 
 ## Performance Tips
 
-1. **Use pagination** - Lower images per page for faster loading
+1. **File index cache** - The app caches folder scan results for fast startup. Click Sync only when you've added new data.
 
-2. **Filter by class** - Reduces rendering load
+2. **Use pagination** - Lower images per page for faster loading
 
-3. **Close other apps** - Image extraction uses memory
+3. **Filter by class** - Reduces rendering load
 
-4. **SSD storage** - Faster file access
+4. **Close other apps** - Image extraction uses memory
+
+5. **SSD storage** - Faster file access
+
+6. **Scheduled rescans** - On servers with regularly arriving data, use `ClassiPyR::rescan_file_index()` in a cron job to keep the cache current without manual intervention
 
 ---
 

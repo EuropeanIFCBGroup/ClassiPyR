@@ -418,7 +418,7 @@ ui <- page_sidebar(
 
     # Navigation buttons
     div(
-      style = "display: flex; gap: 5px; margin-bottom: 15px;",
+      style = "display: flex; gap: 5px; margin-bottom: 5px;",
       actionButton("load_sample", "Load",
                    class = "btn-primary", style = "flex: 1;"),
       actionButton("prev_sample", label = icon("arrow-left"),
@@ -429,8 +429,14 @@ ui <- page_sidebar(
                    title = "Next sample"),
       actionButton("random_sample", label = icon("random"),
                    class = "btn-outline-secondary", style = "flex: 0;",
-                   title = "Random sample")
+                   title = "Random sample"),
+      actionButton("rescan_folders", label = icon("sync"),
+                   class = "btn-outline-secondary", style = "flex: 0;",
+                   title = "Sync folders (refresh file index)")
     ),
+
+    # Cache age indicator
+    uiOutput("cache_age_text"),
 
     hr(),
 
