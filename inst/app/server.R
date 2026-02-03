@@ -70,7 +70,24 @@ server <- function(input, output, session) {
   startup_wd <- getOption("ClassiPyR.startup_wd", default = getwd())
 
   # Volumes for shinyFiles directory browser
-  volumes <- c("Working Dir" = startup_wd, shinyFiles::getVolumes()())
+  base_volumes <- c("Working Dir" = startup_wd, shinyFiles::getVolumes()())
+
+  # Build volumes with optional "Current" root from a text input path
+  get_browse_volumes <- function(current_path = NULL) {
+    if (!is.null(current_path) && nzchar(current_path) && dir.exists(current_path)) {
+      c("Current" = normalizePath(current_path), base_volumes)
+    } else {
+      base_volumes
+    }
+  }
+
+  # Create a dynamic roots object for shinyDirChoose that reads the current
+
+  # text input value each time the dialog opens or navigates
+  make_dynamic_roots <- function(input_id) {
+    f <- function() get_browse_volumes(input[[input_id]])
+    structure(f, class = c("dynamic_roots", "function"))
+  }
 
   # Load saved settings or use defaults
   load_settings <- function() {
@@ -287,16 +304,21 @@ server <- function(input, output, session) {
     ))
   })
 
-  # shinyFiles directory browser setup
-  shinyDirChoose(input, "browse_csv_folder", roots = volumes, session = session)
-  shinyDirChoose(input, "browse_roi_folder", roots = volumes, session = session)
-  shinyDirChoose(input, "browse_output_folder", roots = volumes, session = session)
-  shinyDirChoose(input, "browse_png_folder", roots = volumes, session = session)
+  # shinyFiles directory browser setup - dynamic roots so the dialog
+  # opens at the path currently typed in the corresponding text field
+  shinyDirChoose(input, "browse_csv_folder",
+    roots = make_dynamic_roots("cfg_csv_folder"), session = session)
+  shinyDirChoose(input, "browse_roi_folder",
+    roots = make_dynamic_roots("cfg_roi_folder"), session = session)
+  shinyDirChoose(input, "browse_output_folder",
+    roots = make_dynamic_roots("cfg_output_folder"), session = session)
+  shinyDirChoose(input, "browse_png_folder",
+    roots = make_dynamic_roots("cfg_png_output_folder"), session = session)
 
   # Browse button observers - parse selection and update text input
   observeEvent(input$browse_csv_folder, {
     if (!is.integer(input$browse_csv_folder)) {
-      folder <- parseDirPath(volumes, input$browse_csv_folder)
+      folder <- parseDirPath(get_browse_volumes(input$cfg_csv_folder), input$browse_csv_folder)
       if (length(folder) > 0) {
         updateTextInput(session, "cfg_csv_folder", value = as.character(folder))
       }
@@ -305,7 +327,7 @@ server <- function(input, output, session) {
 
   observeEvent(input$browse_roi_folder, {
     if (!is.integer(input$browse_roi_folder)) {
-      folder <- parseDirPath(volumes, input$browse_roi_folder)
+      folder <- parseDirPath(get_browse_volumes(input$cfg_roi_folder), input$browse_roi_folder)
       if (length(folder) > 0) {
         updateTextInput(session, "cfg_roi_folder", value = as.character(folder))
       }
@@ -314,7 +336,7 @@ server <- function(input, output, session) {
 
   observeEvent(input$browse_output_folder, {
     if (!is.integer(input$browse_output_folder)) {
-      folder <- parseDirPath(volumes, input$browse_output_folder)
+      folder <- parseDirPath(get_browse_volumes(input$cfg_output_folder), input$browse_output_folder)
       if (length(folder) > 0) {
         updateTextInput(session, "cfg_output_folder", value = as.character(folder))
       }
@@ -323,7 +345,7 @@ server <- function(input, output, session) {
 
   observeEvent(input$browse_png_folder, {
     if (!is.integer(input$browse_png_folder)) {
-      folder <- parseDirPath(volumes, input$browse_png_folder)
+      folder <- parseDirPath(get_browse_volumes(input$cfg_png_output_folder), input$browse_png_folder)
       if (length(folder) > 0) {
         updateTextInput(session, "cfg_png_output_folder", value = as.character(folder))
       }
@@ -926,10 +948,9 @@ server <- function(input, output, session) {
 
       rv$class2use <- classes
 
-      # Copy to a persistent location in the working directory
-      # This ensures the file survives between sessions
+      # Copy to user config directory so it survives package reinstalls
       ext <- tools::file_ext(input$class2use_file$name)
-      persistent_path <- file.path(getwd(), paste0("class2use_saved.", ext))
+      persistent_path <- file.path(get_config_dir(), paste0("class2use_saved.", ext))
       file.copy(input$class2use_file$datapath, persistent_path, overwrite = TRUE)
       rv$class2use_path <- persistent_path
 

@@ -49,5 +49,10 @@ MAX_CACHED_SAMPLES <- 20
 # Initialize Python on app startup with configured venv path
 python_available <- init_python_env(venv_path = .get_venv_path())
 
+# S3 method for dynamic_roots: allows shinyFiles to subscript a function-based
+# roots object. shinyFiles 0.9.3 internally does roots[selectedRoot] without
+# checking if roots is a function, so this class bridges the gap.
+`[.dynamic_roots` <- function(x, i) x()[i]
+
 # App settings
 options(shiny.launch.browser = TRUE)
