@@ -22,7 +22,6 @@ A Shiny application for manual (human) image classification and validation of Im
 - **MATLAB Compatible**: Export for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox
 - **CNN Training Ready**: Organized PNG output by class
 - **Measure Tool**: Built-in ruler for image measurements
-- **Fast Startup**: File index cache avoids redundant folder scans
 - **Cross-Platform**: Web-based folder browser works on all platforms
 
 ## Installation
@@ -40,7 +39,8 @@ Python is required for saving annotations as MATLAB .mat files. If you only need
 
 ```r
 library(iRfcb)
-ifcb_py_install()
+venv_path = "/path/to/your/venv"
+ifcb_py_install(venv_path)
 ```
 
 ## Quick Start
@@ -50,7 +50,7 @@ library(ClassiPyR)
 run_app()
 
 # Or specify a Python virtual environment (takes priority over saved settings)
-run_app(venv_path = "/path/to/your/venv")
+run_app(venv_path = venv_path)
 ```
 
 See the [Getting Started](https://europeanifcbgroup.github.io/ClassiPyR/articles/getting-started.html) guide for detailed setup instructions.

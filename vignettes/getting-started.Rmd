@@ -136,9 +136,9 @@ Choose a sample from the dropdown:
 - \* = Unannotated (new sample)
 
 <a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/sample-browser.png">
-<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/sample-browser.png" alt="Sample browser with year/month filters and status indicators." style="max-width:60%;">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/sample-browser.png" alt="Sample browser with year/month filters." style="max-width:60%;">
 </a>
-<p><em>Sample browser with year/month filters and status indicators. Click to enlarge.</em></p>
+<p><em>Sample browser with year/month filters. Click to enlarge.</em></p>
 
 Click **Load**.
 
