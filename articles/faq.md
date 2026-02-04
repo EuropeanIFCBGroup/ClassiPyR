@@ -30,14 +30,14 @@ separate folders.
 
 **Q: I see “Python not available” warning**
 
-A: This warning affects reading and writing .mat files. Python is
-required for:
+A: This warning affects saving .mat files. Python is required for:
 
-- Loading existing manual annotations (.mat files)
-- Loading MATLAB classifier output (.mat files)
-- Saving annotations as .mat files
+- Saving annotations as .mat files for
+  [ifcb-analysis](https://github.com/hsosik/ifcb-analysis)
 
-If you only work with CSV files, you can ignore this warning.
+Reading .mat files (annotations, classifier output, class lists) does
+not require Python. If you do not need to save .mat files, you can
+ignore this warning.
 
 To enable .mat support:
 
@@ -52,19 +52,33 @@ Then restart the app.
 
 A: By default,
 [`ifcb_py_install()`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html)
-creates a `venv` folder in your current working directory. You can
-specify a different location:
+creates a `venv` folder in your home directory. You can specify a
+different location:
 
 ``` r
 ifcb_py_install("/path/to/your/venv")
 ```
 
-You can also configure the venv path in Settings or when launching the
-app:
+You can also specify the venv path when launching the app:
 
 ``` r
 run_app(venv_path = "/path/to/your/venv")
 ```
+
+**Q: How is the Python virtual environment path resolved?**
+
+A: The app uses the following priority order:
+
+1.  **`venv_path` argument** passed to
+    [`run_app()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/run_app.md)
+    (highest priority)
+2.  **Saved settings** from a previous session (stored in
+    `settings.json`)
+3.  **Default** `./venv` in the working directory
+
+When you specify `run_app(venv_path = "/path/to/venv")`, that path is
+used for Python initialization and pre-filled in the Settings dialog,
+overriding any previously saved path.
 
 **Q: Package installation fails**
 
@@ -80,7 +94,7 @@ remotes::install_github("EuropeanIFCBGroup/ClassiPyR")
 A: Try reinstalling the package:
 
 ``` r
-remotes::install_github("EuropeanIFCBGroup/ClassiPyR", force = TRUE)
+install.packages("iRfcb")
 ```
 
 **Q: iRfcb won’t install**
@@ -90,7 +104,7 @@ dependency for `ClassiPyR` and is installed automatically. If you
 encounter issues:
 
 ``` r
-remotes::install_github("EuropeanIFCBGroup/iRfcb")
+install.packages("iRfcb")
 ```
 
 ------------------------------------------------------------------------
@@ -102,32 +116,39 @@ remotes::install_github("EuropeanIFCBGroup/iRfcb")
 A: Check that:
 
 1.  ROI Data Folder points to your data
-2.  Data is organized as: `folder/YYYY/DYYYYMMDD/files`
-3.  ROI files exist and are readable
+2.  ROI files exist and are readable
+3.  Click the **Sync** button (circular arrow icon) to rescan folders if
+    you recently added new data
 
 **Q: “ROI file not found” error**
 
-A: The app expects this structure:
+A: The app scans the ROI Data Folder recursively, so any subfolder
+layout works (including flat). Check that:
 
-    roi_folder/
-      2023/
-        D20230101/
-          D20230101T120000_IFCB134.roi
-          D20230101T120000_IFCB134.adc
+1.  The ROI Data Folder path is correct
+2.  Each `.roi` file has a matching `.adc` file in the same directory
+3.  Filenames follow the IFCB naming convention
+    (`DYYYYMMDDTHHMMSS_IFCBNNN`)
+4.  Click the **Sync** button to rescan if you recently moved or added
+    files
 
 **Q: Classifications not loading**
 
 A: For CSV files:
 
-- Must have columns containing “file” and “class” in their names
-- Recommended column names: `file_name` and `class_name`
-- File should be in the Classification Folder (searched recursively)
+- Must have columns named `file_name` and `class_name` (exact names
+  required)
+- Optionally include a `score` column (confidence value between 0 and 1)
+- The CSV file must be named after the sample (e.g.,
+  `D20230101T120000_IFCB134.csv`)
+- File should be in the Classification Folder (indexed via file cache;
+  click Sync to refresh)
 
 For MAT files:
 
 - Must match pattern `*_class*.mat`
 - Must contain `roinum` and `TBclass` variables
-- Requires Python to be available
+- Must contain `roinum` and `TBclass` variables
 
 ------------------------------------------------------------------------
 
@@ -135,24 +156,35 @@ For MAT files:
 
 **Q: What should my classification CSV look like?**
 
-A: At minimum, your CSV needs:
+A: The CSV must have columns named `file_name` and `class_name`. The
+file must be named after the sample (e.g.,
+`D20230101T120000_IFCB134.csv`).
+
+Minimal example:
 
     file_name,class_name
     D20230101T120000_IFCB134_00001.png,Diatom
     D20230101T120000_IFCB134_00002.png,Ciliate
 
-Optional columns include `score` for confidence values (0-1).
+With optional `score` column (confidence values between 0 and 1):
+
+    file_name,class_name,score
+    D20230101T120000_IFCB134_00001.png,Diatom,0.95
+    D20230101T120000_IFCB134_00002.png,Ciliate,0.87
+    D20230101T120000_IFCB134_00003.png,Dinoflagellate,0.72
 
 **Q: My CNN classifier outputs different column names**
 
-A: The app uses flexible column matching and looks for columns
-containing “file” and “class”. These variants work:
+A: The column names must be exactly `file_name` and `class_name`. If
+your classifier uses different names, rename the columns before loading.
+For example in R:
 
-- `filename`, `image_file`, `file_path` → matched as file column
-- `class`, `predicted_class`, `classification` → matched as class column
-
-If your format is different, rename the columns to `file_name` and
-`class_name`.
+``` r
+df <- read.csv("my_classifications.csv")
+names(df)[names(df) == "predicted_class"] <- "class_name"
+names(df)[names(df) == "filename"] <- "file_name"
+write.csv(df, "D20230101T120000_IFCB134.csv", row.names = FALSE)
+```
 
 ------------------------------------------------------------------------
 
@@ -176,7 +208,7 @@ automatically on load.
 A: Check that:
 
 1.  Output folder is writable
-2.  Python is available (required for .mat files)
+2.  Python is available (required for saving .mat files)
 3.  Click “Save Annotations” before closing
 
 ------------------------------------------------------------------------
@@ -205,8 +237,7 @@ A:
 
 **Q: Can I import a class list from MATLAB?**
 
-A: Yes, load your existing `class2use.mat` file via Settings. Note: this
-requires Python.
+A: Yes, load your existing `class2use.mat` file via Settings.
 
 **Q: My class names look different after loading**
 
@@ -247,14 +278,15 @@ A: In the Output Folder you configured:
 
 A: Yes, the MAT files are compatible with the
 [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox (Sosik
-& Olson, 2007). Use:
+& Olson, 2007). Use the list in `startMC`, or load the list in MATLAB
+using:
 
 ``` matlab
 load('sample_name.mat');
 % classlist contains [roi_number, class_index]
 ```
 
-Note: Python with scipy must be installed to save .mat files.
+Note: Python with `scipy` must be installed to save .mat files.
 
 **Q: What’s in the statistics CSV?**
 
@@ -286,12 +318,39 @@ A: Open Settings and find “Pixels per Micrometer”. The default is 3.4
 
 A: Yes! Settings are stored in a configuration file:
 
-- **Linux**: `~/.local/share/ClassiPyR/settings.json`
-- **macOS**: `~/Library/Application Support/ClassiPyR/settings.json`
-- **Windows**: `%LOCALAPPDATA%/ClassiPyR/settings.json`
+- **Linux**: `~/.config/R/ClassiPyR/settings.json`
+- **macOS**:
+  `~/Library/Preferences/org.R-project.R/R/ClassiPyR/settings.json`
+- **Windows**: `%APPDATA%/R/config/R/ClassiPyR/settings.json`
 
 Folder paths, class list location, and Python venv path are
 automatically restored when you restart the app.
+
+**Q: How do I reset all settings to defaults?**
+
+A: Use the `reset_settings` argument when launching the app:
+
+``` r
+run_app(reset_settings = TRUE)
+```
+
+This deletes the saved `settings.json` file and starts the app with
+default values. All folder paths, the class list reference, and the
+Python venv path are cleared, so you will need to reconfigure them. The
+class list file itself (`class2use_saved.*`) is not deleted from the
+config directory but will not be loaded until you re-upload it. This is
+useful if:
+
+- The app fails to start due to invalid saved paths
+- Folder paths point to locations that no longer exist
+- You want a clean slate after changing your data layout
+
+You can also combine it with other arguments:
+
+``` r
+# Reset settings and specify a new Python environment
+run_app(reset_settings = TRUE, venv_path = "/path/to/your/venv")
+```
 
 **Q: What’s the yellow warning on some classes?**
 
@@ -317,27 +376,88 @@ available. When you load it:
 
 ------------------------------------------------------------------------
 
+## File Index Cache
+
+**Q: What is the file index cache?**
+
+A: The file index cache stores the locations of all IFCB files (ROI,
+classification, annotation) found in your configured folders. It’s saved
+to disk so the app doesn’t need to re-scan your entire folder hierarchy
+every time it starts. This significantly speeds up startup for large
+datasets.
+
+**Q: How do I refresh the file cache?**
+
+A: Click the **Sync** button (circular arrow icon) in the sidebar, next
+to the sample navigation buttons. The cache age indicator below shows
+when the last scan occurred.
+
+**Q: New samples I added aren’t showing up**
+
+A: The app loads from the cached file index. Click the **Sync** button
+to rescan your folders and pick up new files.
+
+**Q: Can I update the cache without opening the app?**
+
+A: Yes. Use
+[`rescan_file_index()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/rescan_file_index.md)
+from the R console or a scheduled script:
+
+``` r
+ClassiPyR::rescan_file_index()
+```
+
+This reads folder paths from your saved settings and rebuilds the cache.
+You can also pass paths explicitly:
+
+``` r
+ClassiPyR::rescan_file_index(
+  roi_folder = "/data/ifcb/raw",
+  csv_folder = "/data/ifcb/classified",
+  output_folder = "/data/ifcb/manual"
+)
+```
+
+**Q: Where is the cache file stored?**
+
+A: In the same config directory as your settings:
+
+- **Linux**: `~/.config/R/ClassiPyR/file_index.json`
+- **macOS**:
+  `~/Library/Preferences/org.R-project.R/R/ClassiPyR/file_index.json`
+- **Windows**: `%APPDATA%/R/config/R/ClassiPyR/file_index.json`
+
+------------------------------------------------------------------------
+
 ## Error Messages
 
-| Error                      | Solution                                                                                                                       |
-|----------------------------|--------------------------------------------------------------------------------------------------------------------------------|
-| “ROI file not found”       | Check ROI Data Folder path and file structure                                                                                  |
-| “ADC file not found”       | ADC file must be alongside ROI file                                                                                            |
-| “Python not available”     | Affects .mat files. Run [`iRfcb::ifcb_py_install()`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html) |
-| “Error loading class list” | Check file format (.mat or .txt)                                                                                               |
-| “No samples found”         | Check ROI Data Folder configuration                                                                                            |
+| Error                      | Solution                                                                                                                              |
+|----------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
+| “ROI file not found”       | Check ROI Data Folder path; ensure `.roi` files use IFCB naming and click Sync                                                        |
+| “ADC file not found”       | ADC file must be alongside ROI file                                                                                                   |
+| “Python not available”     | Affects saving .mat files. Run [`iRfcb::ifcb_py_install()`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html) |
+| “Error loading class list” | Check file format (.mat or .txt)                                                                                                      |
+| “No samples found”         | Check ROI Data Folder configuration                                                                                                   |
+| App fails to start         | Try `run_app(reset_settings = TRUE)` to clear saved settings                                                                          |
 
 ------------------------------------------------------------------------
 
 ## Performance Tips
 
-1.  **Use pagination** - Lower images per page for faster loading
+1.  **File index cache** - The app caches folder scan results for fast
+    startup. Click Sync only when you’ve added new data.
 
-2.  **Filter by class** - Reduces rendering load
+2.  **Use pagination** - Lower images per page for faster loading
 
-3.  **Close other apps** - Image extraction uses memory
+3.  **Filter by class** - Reduces rendering load
 
-4.  **SSD storage** - Faster file access
+4.  **Close other apps** - Image extraction uses memory
+
+5.  **SSD storage** - Faster file access
+
+6.  **Scheduled rescans** - On servers with regularly arriving data, use
+    [`ClassiPyR::rescan_file_index()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/rescan_file_index.md)
+    in a cron job to keep the cache current without manual intervention
 
 ------------------------------------------------------------------------
 

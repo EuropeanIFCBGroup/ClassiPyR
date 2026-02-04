@@ -17,7 +17,8 @@ save_sample_annotations(
   png_output_folder,
   roi_folder,
   class2use_path,
-  annotator = "Unknown"
+  annotator = "Unknown",
+  adc_folder = NULL
 )
 ```
 
@@ -54,7 +55,7 @@ save_sample_annotations(
 
 - roi_folder:
 
-  ROI folder path (for ADC file location)
+  ROI folder path (for ADC file location, used as fallback)
 
 - class2use_path:
 
@@ -63,6 +64,13 @@ save_sample_annotations(
 - annotator:
 
   Annotator name for statistics
+
+- adc_folder:
+
+  Direct path to the ADC folder. When provided, this is used instead of
+  constructing the path via
+  [`get_sample_paths`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_sample_paths.md).
+  This supports non-standard folder structures.
 
 ## Value
 

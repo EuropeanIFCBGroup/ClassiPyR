@@ -18,14 +18,38 @@ load_from_csv(csv_path)
 
 ## Value
 
-Data frame with classifications (columns depend on CSV content)
+Data frame with classifications. Expected columns: \`file_name\`,
+\`class_name\`, and optionally \`score\`.
+
+## Details
+
+The CSV file must contain the following columns:
+
+- file_name:
+
+  Image filename including the \`.png\` extension (e.g.,
+  \`D20230101T120000_IFCB134_00001.png\`).
+
+- class_name:
+
+  Predicted class name (e.g., \`Diatom\`).
+
+An optional column may also be included:
+
+- score:
+
+  Classification confidence value between 0 and 1.
+
+The CSV file must be named after the sample it describes (e.g.,
+\`D20230101T120000_IFCB134.csv\`) and placed inside the Classification
+Folder configured in the app (subfolders are searched recursively).
 
 ## Examples
 
 ``` r
 if (FALSE) { # \dontrun{
 # Load classifications from a CSV file
-classifications <- load_from_csv("/path/to/classifications.csv")
+classifications <- load_from_csv("/path/to/D20230101T120000_IFCB134.csv")
 head(classifications)
 } # }
 ```

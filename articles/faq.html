@@ -108,14 +108,15 @@ to separate folders.</p>
 <h2 id="installation-issues">Installation Issues<a class="anchor" aria-label="anchor" href="#installation-issues"></a>
 </h2>
 <p><strong>Q: I see “Python not available” warning</strong></p>
-<p>A: This warning affects reading and writing .mat files. Python is
-required for:</p>
+<p>A: This warning affects saving .mat files. Python is required
+for:</p>
 <ul>
-<li>Loading existing manual annotations (.mat files)</li>
-<li>Loading MATLAB classifier output (.mat files)</li>
-<li>Saving annotations as .mat files</li>
+<li>Saving annotations as .mat files for <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a>
+</li>
 </ul>
-<p>If you only work with CSV files, you can ignore this warning.</p>
+<p>Reading .mat files (annotations, classifier output, class lists) does
+not require Python. If you do not need to save .mat files, you can
+ignore this warning.</p>
 <p>To enable .mat support:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://europeanifcbgroup.github.io/iRfcb/" class="external-link">iRfcb</a></span><span class="op">)</span></span>
@@ -124,14 +125,30 @@ required for:</p>
 <p><strong>Q: Where is the Python virtual environment
 created?</strong></p>
 <p>A: By default, <code><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">ifcb_py_install()</a></code> creates a
-<code>venv</code> folder in your current working directory. You can
-specify a different location:</p>
+<code>venv</code> folder in your home directory. You can specify a
+different location:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">ifcb_py_install</a></span><span class="op">(</span><span class="st">"/path/to/your/venv"</span><span class="op">)</span></span></code></pre></div>
-<p>You can also configure the venv path in Settings or when launching
-the app:</p>
+<p>You can also specify the venv path when launching the app:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/run_app.html">run_app</a></span><span class="op">(</span>venv_path <span class="op">=</span> <span class="st">"/path/to/your/venv"</span><span class="op">)</span></span></code></pre></div>
+<p><strong>Q: How is the Python virtual environment path
+resolved?</strong></p>
+<p>A: The app uses the following priority order:</p>
+<ol style="list-style-type: decimal">
+<li>
+<strong><code>venv_path</code> argument</strong> passed to
+<code><a href="../reference/run_app.html">run_app()</a></code> (highest priority)</li>
+<li>
+<strong>Saved settings</strong> from a previous session (stored in
+<code>settings.json</code>)</li>
+<li>
+<strong>Default</strong> <code>./venv</code> in the working
+directory</li>
+</ol>
+<p>When you specify <code>run_app(venv_path = "/path/to/venv")</code>,
+that path is used for Python initialization and pre-filled in the
+Settings dialog, overriding any previously saved path.</p>
 <p><strong>Q: Package installation fails</strong></p>
 <p>A: Make sure you have remotes installed and try:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
@@ -140,13 +157,13 @@ the app:</p>
 <p><strong>Q: “Could not find app directory” error</strong></p>
 <p>A: Try reinstalling the package:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu">remotes</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"EuropeanIFCBGroup/ClassiPyR"</span>, force <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"iRfcb"</span><span class="op">)</span></span></code></pre></div>
 <p><strong>Q: iRfcb won’t install</strong></p>
 <p>A: <a href="https://github.com/EuropeanIFCBGroup/iRfcb" class="external-link">iRfcb</a> is
 the core dependency for <code>ClassiPyR</code> and is installed
 automatically. If you encounter issues:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu">remotes</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"EuropeanIFCBGroup/iRfcb"</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"iRfcb"</span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
 <div class="section level2">
@@ -156,26 +173,33 @@ automatically. If you encounter issues:</p>
 <p>A: Check that:</p>
 <ol style="list-style-type: decimal">
 <li>ROI Data Folder points to your data</li>
-<li>Data is organized as: <code>folder/YYYY/DYYYYMMDD/files</code>
-</li>
 <li>ROI files exist and are readable</li>
+<li>Click the <strong>Sync</strong> button (circular arrow icon) to
+rescan folders if you recently added new data</li>
 </ol>
 <p><strong>Q: “ROI file not found” error</strong></p>
-<p>A: The app expects this structure:</p>
-<pre><code><span><span class="va">roi_folder</span><span class="op">/</span></span>
-<span>  <span class="fl">2023</span><span class="op">/</span></span>
-<span>    <span class="va">D20230101</span><span class="op">/</span></span>
-<span>      <span class="va">D20230101T120000_IFCB134.roi</span></span>
-<span>      <span class="va">D20230101T120000_IFCB134.adc</span></span></code></pre>
+<p>A: The app scans the ROI Data Folder recursively, so any subfolder
+layout works (including flat). Check that:</p>
+<ol style="list-style-type: decimal">
+<li>The ROI Data Folder path is correct</li>
+<li>Each <code>.roi</code> file has a matching <code>.adc</code> file in
+the same directory</li>
+<li>Filenames follow the IFCB naming convention
+(<code>DYYYYMMDDTHHMMSS_IFCBNNN</code>)</li>
+<li>Click the <strong>Sync</strong> button to rescan if you recently
+moved or added files</li>
+</ol>
 <p><strong>Q: Classifications not loading</strong></p>
 <p>A: For CSV files:</p>
 <ul>
-<li>Must have columns containing “file” and “class” in their names</li>
-<li>Recommended column names: <code>file_name</code> and
-<code>class_name</code>
-</li>
-<li>File should be in the Classification Folder (searched
-recursively)</li>
+<li>Must have columns named <code>file_name</code> and
+<code>class_name</code> (exact names required)</li>
+<li>Optionally include a <code>score</code> column (confidence value
+between 0 and 1)</li>
+<li>The CSV file must be named after the sample (e.g.,
+<code>D20230101T120000_IFCB134.csv</code>)</li>
+<li>File should be in the Classification Folder (indexed via file cache;
+click Sync to refresh)</li>
 </ul>
 <p>For MAT files:</p>
 <ul>
@@ -183,7 +207,8 @@ recursively)</li>
 </li>
 <li>Must contain <code>roinum</code> and <code>TBclass</code>
 variables</li>
-<li>Requires Python to be available</li>
+<li>Must contain <code>roinum</code> and <code>TBclass</code>
+variables</li>
 </ul>
 <hr>
 </div>
@@ -191,26 +216,29 @@ variables</li>
 <h2 id="csv-format">CSV Format<a class="anchor" aria-label="anchor" href="#csv-format"></a>
 </h2>
 <p><strong>Q: What should my classification CSV look like?</strong></p>
-<p>A: At minimum, your CSV needs:</p>
+<p>A: The CSV must have columns named <code>file_name</code> and
+<code>class_name</code>. The file must be named after the sample (e.g.,
+<code>D20230101T120000_IFCB134.csv</code>).</p>
+<p>Minimal example:</p>
 <pre><code>file_name,class_name
 D20230101T120000_IFCB134_00001.png,Diatom
 D20230101T120000_IFCB134_00002.png,Ciliate</code></pre>
-<p>Optional columns include <code>score</code> for confidence values
-(0-1).</p>
+<p>With optional <code>score</code> column (confidence values between 0
+and 1):</p>
+<pre><code>file_name,class_name,score
+D20230101T120000_IFCB134_00001.png,Diatom,0.95
+D20230101T120000_IFCB134_00002.png,Ciliate,0.87
+D20230101T120000_IFCB134_00003.png,Dinoflagellate,0.72</code></pre>
 <p><strong>Q: My CNN classifier outputs different column
 names</strong></p>
-<p>A: The app uses flexible column matching and looks for columns
-containing “file” and “class”. These variants work:</p>
-<ul>
-<li>
-<code>filename</code>, <code>image_file</code>,
-<code>file_path</code> → matched as file column</li>
-<li>
-<code>class</code>, <code>predicted_class</code>,
-<code>classification</code> → matched as class column</li>
-</ul>
-<p>If your format is different, rename the columns to
-<code>file_name</code> and <code>class_name</code>.</p>
+<p>A: The column names must be exactly <code>file_name</code> and
+<code>class_name</code>. If your classifier uses different names, rename
+the columns before loading. For example in R:</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">df</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/utils/read.table.html" class="external-link">read.csv</a></span><span class="op">(</span><span class="st">"my_classifications.csv"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">df</span><span class="op">)</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">df</span><span class="op">)</span> <span class="op">==</span> <span class="st">"predicted_class"</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="st">"class_name"</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">df</span><span class="op">)</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">df</span><span class="op">)</span> <span class="op">==</span> <span class="st">"filename"</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="st">"file_name"</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/write.table.html" class="external-link">write.csv</a></span><span class="op">(</span><span class="va">df</span>, <span class="st">"D20230101T120000_IFCB134.csv"</span>, row.names <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
 <div class="section level2">
@@ -230,7 +258,7 @@ out automatically on load.</p>
 <p>A: Check that:</p>
 <ol style="list-style-type: decimal">
 <li>Output folder is writable</li>
-<li>Python is available (required for .mat files)</li>
+<li>Python is available (required for saving .mat files)</li>
 <li>Click “Save Annotations” before closing</li>
 </ol>
 <hr>
@@ -261,7 +289,7 @@ the text area</li>
 </ol>
 <p><strong>Q: Can I import a class list from MATLAB?</strong></p>
 <p>A: Yes, load your existing <code>class2use.mat</code> file via
-Settings. Note: this requires Python.</p>
+Settings.</p>
 <p><strong>Q: My class names look different after loading</strong></p>
 <p>A: The app may truncate trailing numbers from class names (e.g.,
 “Diatom_01” → “Diatom”). This matches iRfcb behavior.</p>
@@ -323,10 +351,12 @@ statistics</li>
 </ul>
 <p><strong>Q: Can I import annotations back to MATLAB?</strong></p>
 <p>A: Yes, the MAT files are compatible with the <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a> toolbox
-(Sosik &amp; Olson, 2007). Use:</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode matlab"><code class="sourceCode matlab"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="va">load</span>(<span class="ss">'sample_name.mat'</span>)<span class="op">;</span></span>
-<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a><span class="co">% classlist contains [roi_number, class_index]</span></span></code></pre></div>
-<p>Note: Python with scipy must be installed to save .mat files.</p>
+(Sosik &amp; Olson, 2007). Use the list in <code>startMC</code>, or load
+the list in MATLAB using:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode matlab"><code class="sourceCode matlab"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="va">load</span>(<span class="ss">'sample_name.mat'</span>)<span class="op">;</span></span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a><span class="co">% classlist contains [roi_number, class_index]</span></span></code></pre></div>
+<p>Note: Python with <code>scipy</code> must be installed to save .mat
+files.</p>
 <p><strong>Q: What’s in the statistics CSV?</strong></p>
 <p>A: Two files per sample:</p>
 <ol style="list-style-type: decimal">
@@ -357,19 +387,39 @@ line. The distance is displayed in micrometers and pixels.</p>
 <ul>
 <li>
 <strong>Linux</strong>:
-<code>~/.local/share/ClassiPyR/settings.json</code>
+<code>~/.config/R/ClassiPyR/settings.json</code>
 </li>
 <li>
 <strong>macOS</strong>:
-<code>~/Library/Application Support/ClassiPyR/settings.json</code>
+<code>~/Library/Preferences/org.R-project.R/R/ClassiPyR/settings.json</code>
 </li>
 <li>
 <strong>Windows</strong>:
-<code>%LOCALAPPDATA%/ClassiPyR/settings.json</code>
+<code>%APPDATA%/R/config/R/ClassiPyR/settings.json</code>
 </li>
 </ul>
 <p>Folder paths, class list location, and Python venv path are
 automatically restored when you restart the app.</p>
+<p><strong>Q: How do I reset all settings to defaults?</strong></p>
+<p>A: Use the <code>reset_settings</code> argument when launching the
+app:</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/run_app.html">run_app</a></span><span class="op">(</span>reset_settings <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+<p>This deletes the saved <code>settings.json</code> file and starts the
+app with default values. All folder paths, the class list reference, and
+the Python venv path are cleared, so you will need to reconfigure them.
+The class list file itself (<code>class2use_saved.*</code>) is not
+deleted from the config directory but will not be loaded until you
+re-upload it. This is useful if:</p>
+<ul>
+<li>The app fails to start due to invalid saved paths</li>
+<li>Folder paths point to locations that no longer exist</li>
+<li>You want a clean slate after changing your data layout</li>
+</ul>
+<p>You can also combine it with other arguments:</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Reset settings and specify a new Python environment</span></span>
+<span><span class="fu"><a href="../reference/run_app.html">run_app</a></span><span class="op">(</span>reset_settings <span class="op">=</span> <span class="cn">TRUE</span>, venv_path <span class="op">=</span> <span class="st">"/path/to/your/venv"</span><span class="op">)</span></span></code></pre></div>
 <p><strong>Q: What’s the yellow warning on some classes?</strong></p>
 <p>A: Classes marked with a warning are in your classification data but
 not in your class list. This can happen when:</p>
@@ -394,6 +444,55 @@ header</li>
 <hr>
 </div>
 <div class="section level2">
+<h2 id="file-index-cache">File Index Cache<a class="anchor" aria-label="anchor" href="#file-index-cache"></a>
+</h2>
+<p><strong>Q: What is the file index cache?</strong></p>
+<p>A: The file index cache stores the locations of all IFCB files (ROI,
+classification, annotation) found in your configured folders. It’s saved
+to disk so the app doesn’t need to re-scan your entire folder hierarchy
+every time it starts. This significantly speeds up startup for large
+datasets.</p>
+<p><strong>Q: How do I refresh the file cache?</strong></p>
+<p>A: Click the <strong>Sync</strong> button (circular arrow icon) in
+the sidebar, next to the sample navigation buttons. The cache age
+indicator below shows when the last scan occurred.</p>
+<p><strong>Q: New samples I added aren’t showing up</strong></p>
+<p>A: The app loads from the cached file index. Click the
+<strong>Sync</strong> button to rescan your folders and pick up new
+files.</p>
+<p><strong>Q: Can I update the cache without opening the
+app?</strong></p>
+<p>A: Yes. Use <code><a href="../reference/rescan_file_index.html">rescan_file_index()</a></code> from the R console or a
+scheduled script:</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu">ClassiPyR</span><span class="fu">::</span><span class="fu"><a href="../reference/rescan_file_index.html">rescan_file_index</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<p>This reads folder paths from your saved settings and rebuilds the
+cache. You can also pass paths explicitly:</p>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu">ClassiPyR</span><span class="fu">::</span><span class="fu"><a href="../reference/rescan_file_index.html">rescan_file_index</a></span><span class="op">(</span></span>
+<span>  roi_folder <span class="op">=</span> <span class="st">"/data/ifcb/raw"</span>,</span>
+<span>  csv_folder <span class="op">=</span> <span class="st">"/data/ifcb/classified"</span>,</span>
+<span>  output_folder <span class="op">=</span> <span class="st">"/data/ifcb/manual"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p><strong>Q: Where is the cache file stored?</strong></p>
+<p>A: In the same config directory as your settings:</p>
+<ul>
+<li>
+<strong>Linux</strong>:
+<code>~/.config/R/ClassiPyR/file_index.json</code>
+</li>
+<li>
+<strong>macOS</strong>:
+<code>~/Library/Preferences/org.R-project.R/R/ClassiPyR/file_index.json</code>
+</li>
+<li>
+<strong>Windows</strong>:
+<code>%APPDATA%/R/config/R/ClassiPyR/file_index.json</code>
+</li>
+</ul>
+<hr>
+</div>
+<div class="section level2">
 <h2 id="error-messages">Error Messages<a class="anchor" aria-label="anchor" href="#error-messages"></a>
 </h2>
 <table class="table">
@@ -408,7 +507,8 @@ header</li>
 <tbody>
 <tr class="odd">
 <td>“ROI file not found”</td>
-<td>Check ROI Data Folder path and file structure</td>
+<td>Check ROI Data Folder path; ensure <code>.roi</code> files use IFCB
+naming and click Sync</td>
 </tr>
 <tr class="even">
 <td>“ADC file not found”</td>
@@ -416,7 +516,8 @@ header</li>
 </tr>
 <tr class="odd">
 <td>“Python not available”</td>
-<td>Affects .mat files. Run <code><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">iRfcb::ifcb_py_install()</a></code>
+<td>Affects saving .mat files. Run
+<code><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">iRfcb::ifcb_py_install()</a></code>
 </td>
 </tr>
 <tr class="even">
@@ -427,6 +528,11 @@ header</li>
 <td>“No samples found”</td>
 <td>Check ROI Data Folder configuration</td>
 </tr>
+<tr class="even">
+<td>App fails to start</td>
+<td>Try <code>run_app(reset_settings = TRUE)</code> to clear saved
+settings</td>
+</tr>
 </tbody>
 </table>
 <hr>
@@ -435,6 +541,9 @@ header</li>
 <h2 id="performance-tips">Performance Tips<a class="anchor" aria-label="anchor" href="#performance-tips"></a>
 </h2>
 <ol style="list-style-type: decimal">
+<li><p><strong>File index cache</strong> - The app caches folder scan
+results for fast startup. Click Sync only when you’ve added new
+data.</p></li>
 <li><p><strong>Use pagination</strong> - Lower images per page for
 faster loading</p></li>
 <li><p><strong>Filter by class</strong> - Reduces rendering
@@ -442,6 +551,9 @@ load</p></li>
 <li><p><strong>Close other apps</strong> - Image extraction uses
 memory</p></li>
 <li><p><strong>SSD storage</strong> - Faster file access</p></li>
+<li><p><strong>Scheduled rescans</strong> - On servers with regularly
+arriving data, use <code><a href="../reference/rescan_file_index.html">ClassiPyR::rescan_file_index()</a></code> in a cron
+job to keep the cache current without manual intervention</p></li>
 </ol>
 <hr>
 </div>

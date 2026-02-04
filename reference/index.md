@@ -41,6 +41,19 @@ Functions for saving annotations and exporting images
 - [`copy_images_to_class_folders()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/copy_images_to_class_folders.md)
   : Copy images to class-organized folders
 
+## File Index Cache
+
+Functions for managing the file index cache for faster startup
+
+- [`get_file_index_path()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_file_index_path.md)
+  : Get path to file index cache
+- [`load_file_index()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_file_index.md)
+  : Load file index from disk cache
+- [`save_file_index()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/save_file_index.md)
+  : Save file index to disk cache
+- [`rescan_file_index()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/rescan_file_index.md)
+  : Rescan folders and rebuild the file index cache
+
 ## Utilities
 
 Helper functions for IFCB data processing

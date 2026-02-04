@@ -9,7 +9,7 @@ document provides guidelines for contributing to the project.
 
 - R (\>= 4.0.0)
 - devtools package for development
-- Python with `scipy` (required for .mat file operations)
+- Python with `scipy` (required for saving .mat annotation files)
 
 ### Setting Up the Development Environment
 
@@ -29,7 +29,8 @@ document provides guidelines for contributing to the project.
     devtools::load_all()
     ```
 
-4.  Set up Python environment (required for .mat file support):
+4.  Set up Python environment (required for saving .mat annotation
+    files):
 
     ``` r
     library(iRfcb)

@@ -14,12 +14,22 @@ init_python_env(venv_path = NULL)
 
 - venv_path:
 
-  Optional path to virtual environment. If NULL (default), uses a 'venv'
+  Optional path to virtual environment. If NULL (default), uses a `venv`
   folder in the current working directory.
 
 ## Value
 
 TRUE if Python is available, FALSE otherwise
+
+## Details
+
+The resolution order is: 1. If Python is already configured via
+reticulate, use it directly (installs scipy if missing). 2. If
+`venv_path` is provided and the virtual environment exists, activate it.
+3. If `venv_path` is provided but does not exist, create it via
+[`ifcb_py_install`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html).
+4. If `venv_path` is NULL, default to `./venv` in the current working
+directory for steps 2–3.
 
 ## Examples
 

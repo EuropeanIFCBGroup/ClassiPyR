@@ -100,6 +100,8 @@
 <strong>CNN Training Ready</strong>: Organized PNG output by class</li>
 <li>
 <strong>Measure Tool</strong>: Built-in ruler for image measurements</li>
+<li>
+<strong>Cross-Platform</strong>: Web-based folder browser works on all platforms</li>
 </ul>
 </div>
 <div class="section level2">
@@ -112,10 +114,11 @@
 <div class="section level3">
 <h3 id="python-setup">Python Setup<a class="anchor" aria-label="anchor" href="#python-setup"></a>
 </h3>
-<p>Python is required for reading and writing MATLAB .mat files. If you only work with CSV files, this step is optional.</p>
+<p>Python is required for saving annotations as MATLAB .mat files. If you only need to read existing .mat files or work with CSV files, this step is optional.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://europeanifcbgroup.github.io/iRfcb/" class="external-link">iRfcb</a></span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">ifcb_py_install</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<span><span class="va">venv_path</span> <span class="op">=</span> <span class="st">"/path/to/your/venv"</span></span>
+<span><span class="fu"><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">ifcb_py_install</a></span><span class="op">(</span><span class="va">venv_path</span><span class="op">)</span></span></code></pre></div>
 </div>
 </div>
 <div class="section level2">
@@ -123,7 +126,10 @@
 </h2>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://EuropeanIFCBGroup.github.io/ClassiPyR/" class="external-link">ClassiPyR</a></span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/run_app.html">run_app</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="reference/run_app.html">run_app</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Or specify a Python virtual environment (takes priority over saved settings)</span></span>
+<span><span class="fu"><a href="reference/run_app.html">run_app</a></span><span class="op">(</span>venv_path <span class="op">=</span> <span class="va">venv_path</span><span class="op">)</span></span></code></pre></div>
 <p>See the <a href="https://europeanifcbgroup.github.io/ClassiPyR/articles/getting-started.html">Getting Started</a> guide for detailed setup instructions.</p>
 </div>
 <div class="section level2">

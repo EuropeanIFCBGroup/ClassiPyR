@@ -16,8 +16,8 @@ gallery area. Click to enlarge.*
 ### Title Bar
 
 - **App name and version**
-- **Mode indicator**: Shows current sample and mode
-  (Validation/Annotation)
+- **Mode indicator**: Shows current state and mode
+  - No sample loaded: Initial state before selecting a sample
   - Validation mode: Shows accuracy percentage
   - Annotation mode: Shows progress (X/Y classified)
 
@@ -26,7 +26,8 @@ gallery area. Click to enlarge.*
 - **Annotator name**: Your name for statistics tracking
 - **Settings**: Configure folders and options
 - **Sample selection**: Year, month, status filters
-- **Navigation**: Load, previous, next, random
+- **Navigation**: Load, previous, next, random, sync
+- **Cache age**: Shows when folders were last scanned
 - **Save button**: Manual save trigger
 
 ### Main Area (Tabs)
@@ -152,9 +153,12 @@ adjust:
 
 ### CSV Files
 
-Standard classification CSV output. Required columns:
+Standard classification CSV output. The CSV file must be named after the
+sample it describes (e.g., `D20230101T120000_IFCB134.csv`).
 
-- `file_name`: Image filename (e.g.,
+Required columns (exact names):
+
+- `file_name`: Image filename including `.png` extension (e.g.,
   `D20230101T120000_IFCB134_00001.png`)
 - `class_name`: Predicted class name
 
@@ -162,22 +166,25 @@ Optional columns:
 
 - `score`: Classification confidence (0-1)
 
-**Example CSV:**
+**Minimal example:**
+
+    file_name,class_name
+    D20230101T120000_IFCB134_00001.png,Diatom
+    D20230101T120000_IFCB134_00002.png,Ciliate
+
+**Example with confidence scores:**
 
     file_name,class_name,score
     D20230101T120000_IFCB134_00001.png,Diatom,0.95
     D20230101T120000_IFCB134_00002.png,Ciliate,0.87
     D20230101T120000_IFCB134_00003.png,Dinoflagellate,0.72
 
-**Flexible column matching**: The app searches for columns containing
-“file” and “class” in their names, so variants like `filename`,
-`image_file`, `predicted_class`, or `class` will also work.
-
 **Different CNN pipelines**: If your classifier produces different
-column names, rename them to `file_name` and `class_name`, or contact us
-to add support for your format.
+column names, rename them to `file_name` and `class_name` before placing
+the CSV in the Classification Folder.
 
-Files are searched recursively in the Classification Folder.
+Files are looked up from the file index cache (see [File Index
+Cache](#file-index-cache) below).
 
 ### MATLAB Classifier Output
 
@@ -190,16 +197,68 @@ Files matching `*_class*.mat` pattern containing:
 **Threshold option**: Enable in Settings to include unclassified
 predictions below confidence threshold.
 
-> **Note**: Reading MATLAB classifier output requires Python (via
-> iRfcb).
-
 ### Existing Annotations
 
 Previously saved annotations (in output folder) are automatically
 detected and can be resumed.
 
-> **Note**: Reading existing .mat annotations requires Python (via
-> iRfcb).
+------------------------------------------------------------------------
+
+## File Index Cache
+
+To avoid slow startup from scanning large folder hierarchies,
+`ClassiPyR` maintains a file index cache on disk. The cache stores the
+locations of all ROI, classification, and annotation files found in your
+configured folders.
+
+### How it Works
+
+- On first launch (or after changing folder paths in Settings), the app
+  scans all configured folders and saves the results to a JSON cache
+  file
+- On subsequent launches, the app loads the cached index instantly
+  instead of re-scanning
+- The cache is stored alongside your settings in the platform config
+  directory (see [Settings Persistence](#settings-persistence))
+
+### Sync Button
+
+The **Sync** button (circular arrow icon) in the sidebar navigation row
+triggers a manual rescan of all folders. Use this when:
+
+- You’ve added new IFCB data files to your folders
+- The sample dropdown seems out of date
+- You want to force a fresh scan
+
+The **cache age indicator** below the navigation buttons shows when the
+folders were last scanned (e.g. “synced just now”, “synced 2 hours
+ago”).
+
+### Auto-Sync
+
+By default, the app checks whether the cache matches your current folder
+settings on startup and rescans automatically if needed. You can disable
+auto-sync in Settings to always load from the existing cache, which
+provides the fastest possible startup.
+
+### Headless Rescan
+
+You can update the file index cache without launching the app using
+[`rescan_file_index()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/rescan_file_index.md).
+This is useful for scheduled updates (e.g. cron jobs) on servers where
+new data arrives regularly:
+
+``` r
+# Rescan using saved settings
+ClassiPyR::rescan_file_index()
+
+# Or specify folder paths explicitly
+ClassiPyR::rescan_file_index(
+  roi_folder = "/data/ifcb/raw",
+  csv_folder = "/data/ifcb/classified",
+  output_folder = "/data/ifcb/manual"
+)
+```
 
 ------------------------------------------------------------------------
 
@@ -221,17 +280,17 @@ MATLAB-compatible format with:
 
 ### Statistics Files
 
-`output/validation_statistics/[sample_name]_validation_stats.csv`
+`output_folder/validation_statistics/[sample_name]_validation_stats.csv`
 
 - Summary: total, correct, incorrect, accuracy
 
-`output/validation_statistics/[sample_name]_validation_detailed.csv`
+`output_folder/validation_statistics/[sample_name]_validation_detailed.csv`
 
 - Per-image: original class, validated class, correct flag
 
 ### Organized PNGs
 
-`png_output/[class_name]/[image_files]`
+`png_output_folder/[class_name]/[image_files]`
 
 Images organized into class folders for training CNN models or other
 classifiers.
@@ -249,17 +308,28 @@ classifiers.
 | Output Folder         | Where MAT and CSV output goes     |
 | PNG Output Folder     | Where organized images go         |
 
+Folder paths are configured using a web-based folder browser that works
+on all platforms (Linux, macOS, Windows). Changing folder paths in
+Settings automatically invalidates the file index cache, triggering a
+fresh scan.
+
+### Auto-Sync
+
+| Setting                      | Description                                                                                                                          |
+|------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| Auto-sync folders on startup | When enabled (default), the app checks and refreshes the file index on launch. Disable for instant startup using the existing cache. |
+
 ### Python Configuration
 
-| Setting                         | Description                       |
-|---------------------------------|-----------------------------------|
-| Python Virtual Environment Path | Path to venv with scipy installed |
-
-The venv path can also be specified when launching the app:
+The Python virtual environment path is configured when launching the
+app:
 
 ``` r
 run_app(venv_path = "/path/to/your/venv")
 ```
+
+The path is remembered for future sessions. **Priority order**:
+`run_app(venv_path=)` argument \> saved settings \> default (`./venv`).
 
 ### Classifier Options
 
@@ -297,13 +367,21 @@ Shows class distribution:
 
 ## Session Cache
 
-The app maintains a session cache:
+The app maintains two types of caches:
+
+**In-memory session cache** (per session):
 
 - Switching samples saves work automatically
 - Returning to a sample restores your changes
 - Cache persists until you close the app
 
 **Note**: Always click Save before closing for permanent storage.
+
+**File index cache** (persistent on disk):
+
+- Stores the locations of all IFCB files across your configured folders
+- Persists between sessions for fast startup
+- See [File Index Cache](#file-index-cache) for details
 
 ------------------------------------------------------------------------
 
@@ -312,9 +390,10 @@ The app maintains a session cache:
 `ClassiPyR` stores your settings in a configuration file that follows R
 standards:
 
-- **Linux**: `~/.local/share/ClassiPyR/settings.json`
-- **macOS**: `~/Library/Application Support/ClassiPyR/settings.json`
-- **Windows**: `%LOCALAPPDATA%/ClassiPyR/settings.json`
+- **Linux**: `~/.config/R/ClassiPyR/settings.json`
+- **macOS**:
+  `~/Library/Preferences/org.R-project.R/R/ClassiPyR/settings.json`
+- **Windows**: `%APPDATA%/R/config/R/ClassiPyR/settings.json`
 
 Settings are loaded automatically when you start the app, so your folder
 paths, class list location, and Python venv path are remembered between
@@ -326,7 +405,7 @@ sessions. Settings can be reset by specifying
 ## Dependencies
 
 `ClassiPyR` relies on
-**[iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb)** for all IFCB
+**[`iRfcb`](https://github.com/EuropeanIFCBGroup/iRfcb)** for all IFCB
 data operations:
 
 - Extracting images from ROI files
@@ -334,5 +413,5 @@ data operations:
 - Reading and writing MATLAB .mat files
 - Class list handling
 
-iRfcb is installed automatically as a dependency when you install
+`iRfcb` is installed automatically as a dependency when you install
 `ClassiPyR`.

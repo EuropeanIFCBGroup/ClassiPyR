@@ -72,6 +72,17 @@
 </ul></li>
 </ul></div>
 <div class="section level4">
+<h4 id="file-index-cache-development-version">File Index Cache<a class="anchor" aria-label="anchor" href="#file-index-cache-development-version"></a></h4>
+<ul><li>Disk-based file index cache for faster app startup on subsequent launches</li>
+<li>Avoids expensive recursive directory scans when folder contents haven’t changed</li>
+<li>Sync button in sidebar to manually refresh the file index</li>
+<li>Cache age indicator shows when folders were last scanned</li>
+<li>
+<code><a href="../reference/rescan_file_index.html">rescan_file_index()</a></code> function for headless use (e.g. cron jobs)</li>
+<li>Cache stored in platform-appropriate config directory alongside settings</li>
+<li>Auto-sync option (enabled by default) to control whether app scans on startup</li>
+</ul></div>
+<div class="section level4">
 <h4 id="image-gallery-development-version">Image Gallery<a class="anchor" aria-label="anchor" href="#image-gallery-development-version"></a></h4>
 <ul><li>Paginated image display (50/100/200/500 images per page)</li>
 <li>Images grouped by class on consecutive pages for efficient review</li>
@@ -104,13 +115,17 @@
 <li>Save validation statistics as CSV (in <code>validation_statistics/</code> subfolder)</li>
 <li>Organize output PNGs by class folder (for CNN training)</li>
 <li>Auto-save when navigating between samples</li>
+<li>Support for non-standard folder structures via direct ADC path resolution</li>
+<li>Graceful handling of empty (0-byte) ADC files</li>
 </ul></div>
 <div class="section level4">
 <h4 id="settings--persistence-development-version">Settings &amp; Persistence<a class="anchor" aria-label="anchor" href="#settings--persistence-development-version"></a></h4>
 <ul><li>Configurable folder paths via settings modal</li>
+<li>Cross-platform web-based folder browser (shinyFiles)</li>
 <li>Settings persisted between sessions (<code>.classipyr_settings.json</code>)</li>
 <li>Class list file path remembered and auto-loaded on startup</li>
 <li>Annotator name tracking for statistics</li>
+<li>Cache invalidation when folder paths change in settings</li>
 </ul></div>
 <div class="section level4">
 <h4 id="user-interface-development-version">User Interface<a class="anchor" aria-label="anchor" href="#user-interface-development-version"></a></h4>
@@ -125,6 +140,7 @@
 <ul><li>Requires Python with scipy for MAT file writing (optional - only for ifcb-analysis compatibility)</li>
 <li>Uses iRfcb package for IFCB data handling</li>
 <li>Session cache preserves work when switching samples</li>
+<li>File index cache reduces startup time by avoiding redundant folder scans</li>
 <li>Security: Input validation, XSS prevention, path traversal protection</li>
 </ul></div>
 <div class="section level3">

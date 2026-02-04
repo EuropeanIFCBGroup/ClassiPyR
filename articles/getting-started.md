@@ -11,18 +11,35 @@ Make sure you have:
 2.  Your IFCB data files (ROI, ADC, HDR)
 3.  Optionally: a class list file (.mat or .txt) - you can also create
     one from scratch in the app
-4.  Optionally: existing classifications (CSV or classifier MAT files)
+4.  Optionally: existing classifications (CSV or classifier MAT files,
+    see below)
 
 ### Python Requirements
 
-Python is required if you work with MATLAB .mat files:
+Python is required for saving annotations as MATLAB .mat files for use
+with [ifcb-analysis](https://github.com/hsosik/ifcb-analysis). Reading
+existing .mat files (annotations, classifier output, class lists) does
+not require Python.
 
-- **Loading existing annotations** (.mat files from previous sessions)
-- **Loading MATLAB classifier output** (.mat files)
-- **Saving annotations** as .mat files for
-  [ifcb-analysis](https://github.com/hsosik/ifcb-analysis)
+If you only need to read .mat files or work with CSV classification
+files, Python is not required.
 
-If you only work with CSV classification files, Python is not required.
+### CSV Classification Format
+
+If you have existing classifications in CSV format, each file must be
+named after its sample (e.g., `D20230101T120000_IFCB134.csv`) and
+contain at least these columns:
+
+    file_name,class_name
+    D20230101T120000_IFCB134_00001.png,Diatom
+    D20230101T120000_IFCB134_00002.png,Ciliate
+
+An optional `score` column (confidence values between 0 and 1) can also
+be included. See the [User
+Guide](https://europeanifcbgroup.github.io/ClassiPyR/articles/user-guide.md)
+for more details.
+
+### Python Setup
 
 To set up Python:
 
@@ -41,8 +58,8 @@ Launch the app:
 library(ClassiPyR)
 run_app()
 
-# Or specify a custom Python virtual environment path
-run_app(venv_path = "/path/to/your/venv")
+# Or specify a custom Python virtual environment path (takes priority over saved settings)
+run_app(venv_path = "./venv")
 ```
 
 Click the **gear icon** next to your username in the sidebar.
@@ -53,7 +70,7 @@ options.](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/settin
 *Settings dialog showing folder configuration options. Click to
 enlarge.*
 
-Configure your folders:
+Configure your folders using the built-in folder browser:
 
 | Setting               | Description                            | Example             |
 |-----------------------|----------------------------------------|---------------------|
@@ -62,10 +79,13 @@ Configure your folders:
 | Output Folder         | Where annotations will be saved        | `/ifcb/manual/`     |
 | PNG Output Folder     | Where images will be organized         | `/ifcb/png/`        |
 
-Click **Save Settings**.
+Click **Save Settings**. The app will scan your folders and build a file
+index cache for fast loading.
 
-> **Note**: You can also configure the Python virtual environment path
-> in Settings if you didn’t specify it when launching the app.
+> **Note**: The Python virtual environment path is configured via
+> `run_app(venv_path = ...)` and remembered for future sessions. See the
+> [FAQ](https://europeanifcbgroup.github.io/ClassiPyR/articles/faq.md)
+> for details on how the path is resolved.
 
 ------------------------------------------------------------------------
 
@@ -122,13 +142,16 @@ Choose a sample from the dropdown:
 - ✎✓ = Has both (can switch between modes)
 - \* = Unannotated (new sample)
 
-[![Sample browser with year/month filters and status
-indicators.](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/sample-browser.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/sample-browser.png)
+[![Sample browser with year/month
+filters.](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/sample-browser.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/sample-browser.png)
 
-*Sample browser with year/month filters and status indicators. Click to
-enlarge.*
+*Sample browser with year/month filters. Click to enlarge.*
 
 Click **Load**.
+
+> **Tip**: If your sample list seems out of date, click the **Sync**
+> button (circular arrow icon) next to the navigation buttons to rescan
+> your folders.
 
 > **Tip**: Samples with ✎✓ let you switch between viewing your manual
 > annotations and the auto-classifications using a button in the header.

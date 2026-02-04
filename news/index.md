@@ -27,6 +27,21 @@
   - ✎✓ = Has both (can switch between modes)
   - - = Unannotated
 
+#### File Index Cache
+
+- Disk-based file index cache for faster app startup on subsequent
+  launches
+- Avoids expensive recursive directory scans when folder contents
+  haven’t changed
+- Sync button in sidebar to manually refresh the file index
+- Cache age indicator shows when folders were last scanned
+- [`rescan_file_index()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/rescan_file_index.md)
+  function for headless use (e.g. cron jobs)
+- Cache stored in platform-appropriate config directory alongside
+  settings
+- Auto-sync option (enabled by default) to control whether app scans on
+  startup
+
 #### Image Gallery
 
 - Paginated image display (50/100/200/500 images per page)
@@ -62,13 +77,18 @@
   subfolder)
 - Organize output PNGs by class folder (for CNN training)
 - Auto-save when navigating between samples
+- Support for non-standard folder structures via direct ADC path
+  resolution
+- Graceful handling of empty (0-byte) ADC files
 
 #### Settings & Persistence
 
 - Configurable folder paths via settings modal
+- Cross-platform web-based folder browser (shinyFiles)
 - Settings persisted between sessions (`.classipyr_settings.json`)
 - Class list file path remembered and auto-loaded on startup
 - Annotator name tracking for statistics
+- Cache invalidation when folder paths change in settings
 
 #### User Interface
 
@@ -83,6 +103,8 @@
   ifcb-analysis compatibility)
 - Uses iRfcb package for IFCB data handling
 - Session cache preserves work when switching samples
+- File index cache reduces startup time by avoiding redundant folder
+  scans
 - Security: Input validation, XSS prevention, path traversal protection
 
 ### Development

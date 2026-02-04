@@ -92,27 +92,37 @@
 <li>Your IFCB data files (ROI, ADC, HDR)</li>
 <li>Optionally: a class list file (.mat or .txt) - you can also create
 one from scratch in the app</li>
-<li>Optionally: existing classifications (CSV or classifier MAT
-files)</li>
+<li>Optionally: existing classifications (CSV or classifier MAT files,
+see below)</li>
 </ol>
 <div class="section level3">
 <h3 id="python-requirements">Python Requirements<a class="anchor" aria-label="anchor" href="#python-requirements"></a>
 </h3>
-<p>Python is required if you work with MATLAB .mat files:</p>
-<ul>
-<li>
-<strong>Loading existing annotations</strong> (.mat files from
-previous sessions)</li>
-<li>
-<strong>Loading MATLAB classifier output</strong> (.mat files)</li>
-<li>
-<strong>Saving annotations</strong> as .mat files for <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a>
-</li>
-</ul>
-<p>If you only work with CSV classification files, Python is not
-required.</p>
+<p>Python is required for saving annotations as MATLAB .mat files for
+use with <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a>.
+Reading existing .mat files (annotations, classifier output, class
+lists) does not require Python.</p>
+<p>If you only need to read .mat files or work with CSV classification
+files, Python is not required.</p>
+</div>
+<div class="section level3">
+<h3 id="csv-classification-format">CSV Classification Format<a class="anchor" aria-label="anchor" href="#csv-classification-format"></a>
+</h3>
+<p>If you have existing classifications in CSV format, each file must be
+named after its sample (e.g., <code>D20230101T120000_IFCB134.csv</code>)
+and contain at least these columns:</p>
+<pre><code>file_name,class_name
+D20230101T120000_IFCB134_00001.png,Diatom
+D20230101T120000_IFCB134_00002.png,Ciliate</code></pre>
+<p>An optional <code>score</code> column (confidence values between 0
+and 1) can also be included. See the <a href="user-guide.html">User
+Guide</a> for more details.</p>
+</div>
+<div class="section level3">
+<h3 id="python-setup">Python Setup<a class="anchor" aria-label="anchor" href="#python-setup"></a>
+</h3>
 <p>To set up Python:</p>
-<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://europeanifcbgroup.github.io/iRfcb/" class="external-link">iRfcb</a></span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">ifcb_py_install</a></span><span class="op">(</span>envname <span class="op">=</span> <span class="st">"./venv"</span><span class="op">)</span>  <span class="co"># Creates venv in current working directory</span></span></code></pre></div>
 <hr>
@@ -122,12 +132,12 @@ required.</p>
 <h2 id="step-1-configure-settings">Step 1: Configure Settings<a class="anchor" aria-label="anchor" href="#step-1-configure-settings"></a>
 </h2>
 <p>Launch the app:</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://EuropeanIFCBGroup.github.io/ClassiPyR/" class="external-link">ClassiPyR</a></span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/run_app.html">run_app</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Or specify a custom Python virtual environment path</span></span>
-<span><span class="fu"><a href="../reference/run_app.html">run_app</a></span><span class="op">(</span>venv_path <span class="op">=</span> <span class="st">"/path/to/your/venv"</span><span class="op">)</span></span></code></pre></div>
+<span><span class="co"># Or specify a custom Python virtual environment path (takes priority over saved settings)</span></span>
+<span><span class="fu"><a href="../reference/run_app.html">run_app</a></span><span class="op">(</span>venv_path <span class="op">=</span> <span class="st">"./venv"</span><span class="op">)</span></span></code></pre></div>
 <p>Click the <strong>gear icon</strong> next to your username in the
 sidebar.</p>
 <a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/settings-dialog.png">
@@ -136,7 +146,7 @@ sidebar.</p>
 <em>Settings dialog showing folder configuration options. Click to
 enlarge.</em>
 </p>
-<p>Configure your folders:</p>
+<p>Configure your folders using the built-in folder browser:</p>
 <table class="table">
 <colgroup>
 <col width="29%">
@@ -171,11 +181,13 @@ enlarge.</em>
 </tr>
 </tbody>
 </table>
-<p>Click <strong>Save Settings</strong>.</p>
+<p>Click <strong>Save Settings</strong>. The app will scan your folders
+and build a file index cache for fast loading.</p>
 <blockquote>
-<p><strong>Note</strong>: You can also configure the Python virtual
-environment path in Settings if you didn’t specify it when launching the
-app.</p>
+<p><strong>Note</strong>: The Python virtual environment path is
+configured via <code>run_app(venv_path = ...)</code> and remembered for
+future sessions. See the <a href="faq.html">FAQ</a> for details on how
+the path is resolved.</p>
 </blockquote>
 <hr>
 </div>
@@ -250,12 +262,16 @@ annotated</li>
 <li>* = Unannotated (new sample)</li>
 </ul>
 <a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/sample-browser.png">
-<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/sample-browser.png" alt="Sample browser with year/month filters and status indicators." style="max-width:60%;"></a>
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/sample-browser.png" alt="Sample browser with year/month filters." style="max-width:60%;"></a>
 <p>
-<em>Sample browser with year/month filters and status indicators. Click
-to enlarge.</em>
+<em>Sample browser with year/month filters. Click to enlarge.</em>
 </p>
 <p>Click <strong>Load</strong>.</p>
+<blockquote>
+<p><strong>Tip</strong>: If your sample list seems out of date, click
+the <strong>Sync</strong> button (circular arrow icon) next to the
+navigation buttons to rescan your folders.</p>
+</blockquote>
 <blockquote>
 <p><strong>Tip</strong>: Samples with ✎✓ let you switch between viewing
 your manual annotations and the auto-classifications using a button in

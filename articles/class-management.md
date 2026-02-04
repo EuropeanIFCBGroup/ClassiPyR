@@ -76,8 +76,6 @@ Standard MATLAB class2use format:
 2.  Click Browse next to “Class List File”
 3.  Select your `.mat` file
 
-> **Note**: Reading .mat files requires Python (via iRfcb).
-
 ### From Text File
 
 One class per line:

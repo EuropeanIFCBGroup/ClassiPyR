@@ -98,9 +98,9 @@ gallery area. Click to enlarge.</em>
 <ul>
 <li><strong>App name and version</strong></li>
 <li>
-<strong>Mode indicator</strong>: Shows current sample and mode
-(Validation/Annotation)
+<strong>Mode indicator</strong>: Shows current state and mode
 <ul>
+<li>No sample loaded: Initial state before selecting a sample</li>
 <li>Validation mode: Shows accuracy percentage</li>
 <li>Annotation mode: Shows progress (X/Y classified)</li>
 </ul>
@@ -119,7 +119,10 @@ tracking</li>
 <li>
 <strong>Sample selection</strong>: Year, month, status filters</li>
 <li>
-<strong>Navigation</strong>: Load, previous, next, random</li>
+<strong>Navigation</strong>: Load, previous, next, random, sync</li>
+<li>
+<strong>Cache age</strong>: Shows when folders were last
+scanned</li>
 <li>
 <strong>Save button</strong>: Manual save trigger</li>
 </ul>
@@ -297,11 +300,14 @@ formats.</p>
 <div class="section level3">
 <h3 id="csv-files">CSV Files<a class="anchor" aria-label="anchor" href="#csv-files"></a>
 </h3>
-<p>Standard classification CSV output. Required columns:</p>
+<p>Standard classification CSV output. The CSV file must be named after
+the sample it describes (e.g.,
+<code>D20230101T120000_IFCB134.csv</code>).</p>
+<p>Required columns (exact names):</p>
 <ul>
 <li>
-<code>file_name</code>: Image filename (e.g.,
-<code>D20230101T120000_IFCB134_00001.png</code>)</li>
+<code>file_name</code>: Image filename including <code>.png</code>
+extension (e.g., <code>D20230101T120000_IFCB134_00001.png</code>)</li>
 <li>
 <code>class_name</code>: Predicted class name</li>
 </ul>
@@ -310,20 +316,20 @@ formats.</p>
 <li>
 <code>score</code>: Classification confidence (0-1)</li>
 </ul>
-<p><strong>Example CSV:</strong></p>
+<p><strong>Minimal example:</strong></p>
+<pre><code>file_name,class_name
+D20230101T120000_IFCB134_00001.png,Diatom
+D20230101T120000_IFCB134_00002.png,Ciliate</code></pre>
+<p><strong>Example with confidence scores:</strong></p>
 <pre><code>file_name,class_name,score
 D20230101T120000_IFCB134_00001.png,Diatom,0.95
 D20230101T120000_IFCB134_00002.png,Ciliate,0.87
 D20230101T120000_IFCB134_00003.png,Dinoflagellate,0.72</code></pre>
-<p><strong>Flexible column matching</strong>: The app searches for
-columns containing “file” and “class” in their names, so variants like
-<code>filename</code>, <code>image_file</code>,
-<code>predicted_class</code>, or <code>class</code> will also work.</p>
 <p><strong>Different CNN pipelines</strong>: If your classifier produces
 different column names, rename them to <code>file_name</code> and
-<code>class_name</code>, or contact us to add support for your
-format.</p>
-<p>Files are searched recursively in the Classification Folder.</p>
+<code>class_name</code> before placing the CSV in the Classification
+Folder.</p>
+<p>Files are looked up from the file index cache (see <a href="#file-index-cache">File Index Cache</a> below).</p>
 </div>
 <div class="section level3">
 <h3 id="matlab-classifier-output">MATLAB Classifier Output<a class="anchor" aria-label="anchor" href="#matlab-classifier-output"></a>
@@ -339,20 +345,75 @@ format.</p>
 </ul>
 <p><strong>Threshold option</strong>: Enable in Settings to include
 unclassified predictions below confidence threshold.</p>
-<blockquote>
-<p><strong>Note</strong>: Reading MATLAB classifier output requires
-Python (via iRfcb).</p>
-</blockquote>
 </div>
 <div class="section level3">
 <h3 id="existing-annotations">Existing Annotations<a class="anchor" aria-label="anchor" href="#existing-annotations"></a>
 </h3>
 <p>Previously saved annotations (in output folder) are automatically
 detected and can be resumed.</p>
-<blockquote>
-<p><strong>Note</strong>: Reading existing .mat annotations requires
-Python (via iRfcb).</p>
-</blockquote>
+<hr>
+</div>
+</div>
+<div class="section level2">
+<h2 id="file-index-cache">File Index Cache<a class="anchor" aria-label="anchor" href="#file-index-cache"></a>
+</h2>
+<p>To avoid slow startup from scanning large folder hierarchies,
+<code>ClassiPyR</code> maintains a file index cache on disk. The cache
+stores the locations of all ROI, classification, and annotation files
+found in your configured folders.</p>
+<div class="section level3">
+<h3 id="how-it-works">How it Works<a class="anchor" aria-label="anchor" href="#how-it-works"></a>
+</h3>
+<ul>
+<li>On first launch (or after changing folder paths in Settings), the
+app scans all configured folders and saves the results to a JSON cache
+file</li>
+<li>On subsequent launches, the app loads the cached index instantly
+instead of re-scanning</li>
+<li>The cache is stored alongside your settings in the platform config
+directory (see <a href="#settings-persistence">Settings
+Persistence</a>)</li>
+</ul>
+</div>
+<div class="section level3">
+<h3 id="sync-button">Sync Button<a class="anchor" aria-label="anchor" href="#sync-button"></a>
+</h3>
+<p>The <strong>Sync</strong> button (circular arrow icon) in the sidebar
+navigation row triggers a manual rescan of all folders. Use this
+when:</p>
+<ul>
+<li>You’ve added new IFCB data files to your folders</li>
+<li>The sample dropdown seems out of date</li>
+<li>You want to force a fresh scan</li>
+</ul>
+<p>The <strong>cache age indicator</strong> below the navigation buttons
+shows when the folders were last scanned (e.g. “synced just now”,
+“synced 2 hours ago”).</p>
+</div>
+<div class="section level3">
+<h3 id="auto-sync">Auto-Sync<a class="anchor" aria-label="anchor" href="#auto-sync"></a>
+</h3>
+<p>By default, the app checks whether the cache matches your current
+folder settings on startup and rescans automatically if needed. You can
+disable auto-sync in Settings to always load from the existing cache,
+which provides the fastest possible startup.</p>
+</div>
+<div class="section level3">
+<h3 id="headless-rescan">Headless Rescan<a class="anchor" aria-label="anchor" href="#headless-rescan"></a>
+</h3>
+<p>You can update the file index cache without launching the app using
+<code><a href="../reference/rescan_file_index.html">rescan_file_index()</a></code>. This is useful for scheduled updates
+(e.g. cron jobs) on servers where new data arrives regularly:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Rescan using saved settings</span></span>
+<span><span class="fu">ClassiPyR</span><span class="fu">::</span><span class="fu"><a href="../reference/rescan_file_index.html">rescan_file_index</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Or specify folder paths explicitly</span></span>
+<span><span class="fu">ClassiPyR</span><span class="fu">::</span><span class="fu"><a href="../reference/rescan_file_index.html">rescan_file_index</a></span><span class="op">(</span></span>
+<span>  roi_folder <span class="op">=</span> <span class="st">"/data/ifcb/raw"</span>,</span>
+<span>  csv_folder <span class="op">=</span> <span class="st">"/data/ifcb/classified"</span>,</span>
+<span>  output_folder <span class="op">=</span> <span class="st">"/data/ifcb/manual"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
 <hr>
 </div>
 </div>
@@ -379,11 +440,11 @@ scipy.</p>
 <div class="section level3">
 <h3 id="statistics-files">Statistics Files<a class="anchor" aria-label="anchor" href="#statistics-files"></a>
 </h3>
-<p><code>output/validation_statistics/[sample_name]_validation_stats.csv</code></p>
+<p><code>output_folder/validation_statistics/[sample_name]_validation_stats.csv</code></p>
 <ul>
 <li>Summary: total, correct, incorrect, accuracy</li>
 </ul>
-<p><code>output/validation_statistics/[sample_name]_validation_detailed.csv</code></p>
+<p><code>output_folder/validation_statistics/[sample_name]_validation_detailed.csv</code></p>
 <ul>
 <li>Per-image: original class, validated class, correct flag</li>
 </ul>
@@ -391,7 +452,7 @@ scipy.</p>
 <div class="section level3">
 <h3 id="organized-pngs">Organized PNGs<a class="anchor" aria-label="anchor" href="#organized-pngs"></a>
 </h3>
-<p><code>png_output/[class_name]/[image_files]</code></p>
+<p><code>png_output_folder/[class_name]/[image_files]</code></p>
 <p>Images organized into class folders for training CNN models or other
 classifiers.</p>
 <hr>
@@ -427,23 +488,40 @@ classifiers.</p>
 </tr>
 </tbody>
 </table>
+<p>Folder paths are configured using a web-based folder browser that
+works on all platforms (Linux, macOS, Windows). Changing folder paths in
+Settings automatically invalidates the file index cache, triggering a
+fresh scan.</p>
 </div>
 <div class="section level3">
-<h3 id="python-configuration">Python Configuration<a class="anchor" aria-label="anchor" href="#python-configuration"></a>
+<h3 id="auto-sync-1">Auto-Sync<a class="anchor" aria-label="anchor" href="#auto-sync-1"></a>
 </h3>
 <table class="table">
+<colgroup>
+<col width="40%">
+<col width="59%">
+</colgroup>
 <thead><tr class="header">
 <th>Setting</th>
 <th>Description</th>
 </tr></thead>
 <tbody><tr class="odd">
-<td>Python Virtual Environment Path</td>
-<td>Path to venv with scipy installed</td>
+<td>Auto-sync folders on startup</td>
+<td>When enabled (default), the app checks and refreshes the file index
+on launch. Disable for instant startup using the existing cache.</td>
 </tr></tbody>
 </table>
-<p>The venv path can also be specified when launching the app:</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+</div>
+<div class="section level3">
+<h3 id="python-configuration">Python Configuration<a class="anchor" aria-label="anchor" href="#python-configuration"></a>
+</h3>
+<p>The Python virtual environment path is configured when launching the
+app:</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/run_app.html">run_app</a></span><span class="op">(</span>venv_path <span class="op">=</span> <span class="st">"/path/to/your/venv"</span><span class="op">)</span></span></code></pre></div>
+<p>The path is remembered for future sessions. <strong>Priority
+order</strong>: <code>run_app(venv_path=)</code> argument &gt; saved
+settings &gt; default (<code>./venv</code>).</p>
 </div>
 <div class="section level3">
 <h3 id="classifier-options">Classifier Options<a class="anchor" aria-label="anchor" href="#classifier-options"></a>
@@ -488,7 +566,8 @@ classifier output, use <code>TBclass_above_threshold</code> (checked) or
 <div class="section level2">
 <h2 id="session-cache">Session Cache<a class="anchor" aria-label="anchor" href="#session-cache"></a>
 </h2>
-<p>The app maintains a session cache:</p>
+<p>The app maintains two types of caches:</p>
+<p><strong>In-memory session cache</strong> (per session):</p>
 <ul>
 <li>Switching samples saves work automatically</li>
 <li>Returning to a sample restores your changes</li>
@@ -496,6 +575,14 @@ classifier output, use <code>TBclass_above_threshold</code> (checked) or
 </ul>
 <p><strong>Note</strong>: Always click Save before closing for permanent
 storage.</p>
+<p><strong>File index cache</strong> (persistent on disk):</p>
+<ul>
+<li>Stores the locations of all IFCB files across your configured
+folders</li>
+<li>Persists between sessions for fast startup</li>
+<li>See <a href="#file-index-cache">File Index Cache</a> for
+details</li>
+</ul>
 <hr>
 </div>
 <div class="section level2">
@@ -506,15 +593,15 @@ that follows R standards:</p>
 <ul>
 <li>
 <strong>Linux</strong>:
-<code>~/.local/share/ClassiPyR/settings.json</code>
+<code>~/.config/R/ClassiPyR/settings.json</code>
 </li>
 <li>
 <strong>macOS</strong>:
-<code>~/Library/Application Support/ClassiPyR/settings.json</code>
+<code>~/Library/Preferences/org.R-project.R/R/ClassiPyR/settings.json</code>
 </li>
 <li>
 <strong>Windows</strong>:
-<code>%LOCALAPPDATA%/ClassiPyR/settings.json</code>
+<code>%APPDATA%/R/config/R/ClassiPyR/settings.json</code>
 </li>
 </ul>
 <p>Settings are loaded automatically when you start the app, so your
@@ -526,16 +613,16 @@ between sessions. Settings can be reset by specifying
 <div class="section level2">
 <h2 id="dependencies">Dependencies<a class="anchor" aria-label="anchor" href="#dependencies"></a>
 </h2>
-<p><code>ClassiPyR</code> relies on <strong><a href="https://github.com/EuropeanIFCBGroup/iRfcb" class="external-link">iRfcb</a></strong> for
-all IFCB data operations:</p>
+<p><code>ClassiPyR</code> relies on <strong><a href="https://github.com/EuropeanIFCBGroup/iRfcb" class="external-link"><code>iRfcb</code></a></strong>
+for all IFCB data operations:</p>
 <ul>
 <li>Extracting images from ROI files</li>
 <li>Reading ADC metadata (dimensions, timestamps)</li>
 <li>Reading and writing MATLAB .mat files</li>
 <li>Class list handling</li>
 </ul>
-<p>iRfcb is installed automatically as a dependency when you install
-<code>ClassiPyR</code>.</p>
+<p><code>iRfcb</code> is installed automatically as a dependency when
+you install <code>ClassiPyR</code>.</p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>
