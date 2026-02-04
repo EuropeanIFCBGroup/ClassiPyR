@@ -41,7 +41,8 @@ load_from_classifier_mat(
 
 ## Value
 
-Data frame with columns: file_name, class_name, score, roi_area
+Data frame with columns: file_name, class_name, score, width, height,
+roi_area
 
 ## Examples
 

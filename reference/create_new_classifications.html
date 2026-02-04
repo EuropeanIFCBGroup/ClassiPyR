@@ -72,7 +72,7 @@ for use when annotating a sample from scratch.</p>
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>Data frame with columns: file_name, class_name, score, roi_area</p>
+    <p>Data frame with columns: file_name, class_name, score, width, height, roi_area</p>
     </div>
 
     <div class="section level2">
@@ -91,12 +91,12 @@ for use when annotating a sample from scratch.</p>
 <span class="r-in"><span>  roi_dimensions <span class="op">=</span> <span class="va">roi_dims</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">classifications</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>                            file_name   class_name score roi_area</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4 D20230101T120000_IFCB134_00004.png unclassified    NA    30000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2 D20230101T120000_IFCB134_00002.png unclassified    NA    15000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5 D20230101T120000_IFCB134_00005.png unclassified    NA    10800</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1 D20230101T120000_IFCB134_00001.png unclassified    NA     8000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3 D20230101T120000_IFCB134_00003.png unclassified    NA     4800</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>                            file_name   class_name score width height roi_area</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4 D20230101T120000_IFCB134_00004.png unclassified    NA   200    150    30000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2 D20230101T120000_IFCB134_00002.png unclassified    NA   150    100    15000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5 D20230101T120000_IFCB134_00005.png unclassified    NA   120     90    10800</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1 D20230101T120000_IFCB134_00001.png unclassified    NA   100     80     8000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3 D20230101T120000_IFCB134_00003.png unclassified    NA    80     60     4800</span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

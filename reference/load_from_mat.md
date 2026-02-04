@@ -30,7 +30,8 @@ load_from_mat(mat_path, sample_name, class2use, roi_dimensions)
 
 ## Value
 
-Data frame with columns: file_name, class_name, score, roi_area
+Data frame with columns: file_name, class_name, score, width, height,
+roi_area
 
 ## Examples
 

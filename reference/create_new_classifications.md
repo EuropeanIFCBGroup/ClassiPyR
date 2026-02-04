@@ -22,7 +22,8 @@ create_new_classifications(sample_name, roi_dimensions)
 
 ## Value
 
-Data frame with columns: file_name, class_name, score, roi_area
+Data frame with columns: file_name, class_name, score, width, height,
+roi_area
 
 ## Examples
 
@@ -41,10 +42,10 @@ classifications <- create_new_classifications(
   roi_dimensions = roi_dims
 )
 print(classifications)
-#>                            file_name   class_name score roi_area
-#> 4 D20230101T120000_IFCB134_00004.png unclassified    NA    30000
-#> 2 D20230101T120000_IFCB134_00002.png unclassified    NA    15000
-#> 5 D20230101T120000_IFCB134_00005.png unclassified    NA    10800
-#> 1 D20230101T120000_IFCB134_00001.png unclassified    NA     8000
-#> 3 D20230101T120000_IFCB134_00003.png unclassified    NA     4800
+#>                            file_name   class_name score width height roi_area
+#> 4 D20230101T120000_IFCB134_00004.png unclassified    NA   200    150    30000
+#> 2 D20230101T120000_IFCB134_00002.png unclassified    NA   150    100    15000
+#> 5 D20230101T120000_IFCB134_00005.png unclassified    NA   120     90    10800
+#> 1 D20230101T120000_IFCB134_00001.png unclassified    NA   100     80     8000
+#> 3 D20230101T120000_IFCB134_00003.png unclassified    NA    80     60     4800
 ```
