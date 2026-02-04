@@ -8,7 +8,7 @@ init_python_env(venv_path = NULL)
 }
 \arguments{
 \item{venv_path}{Optional path to virtual environment. If NULL (default),
-uses a 'venv' folder in the current working directory.}
+uses a \code{venv} folder in the current working directory.}
 }
 \value{
 TRUE if Python is available, FALSE otherwise
@@ -17,6 +17,17 @@ TRUE if Python is available, FALSE otherwise
 Checks if Python is already available via reticulate, otherwise tries to
 use or create a virtual environment. Required for reading and writing
 MATLAB .mat files.
+}
+\details{
+The resolution order is:
+1. If Python is already configured via reticulate, use it directly
+   (installs scipy if missing).
+2. If \code{venv_path} is provided and the virtual environment exists,
+   activate it.
+3. If \code{venv_path} is provided but does not exist, create it via
+   \code{\link[iRfcb]{ifcb_py_install}}.
+4. If \code{venv_path} is NULL, default to \code{./venv} in the current
+   working directory for steps 2--3.
 }
 \examples{
 \dontrun{

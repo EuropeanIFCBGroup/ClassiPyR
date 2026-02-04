@@ -8,23 +8,38 @@ NULL
 #' Reads a classification CSV file and returns a data frame with classifications.
 #' Class names are processed to truncate trailing numbers (matching iRfcb behavior).
 #'
+#' The CSV file must contain the following columns:
+#' \describe{
+#'   \item{file_name}{Image filename including the `.png` extension
+#'     (e.g., `D20230101T120000_IFCB134_00001.png`).}
+#'   \item{class_name}{Predicted class name (e.g., `Diatom`).}
+#' }
+#'
+#' An optional column may also be included:
+#' \describe{
+#'   \item{score}{Classification confidence value between 0 and 1.}
+#' }
+#'
+#' The CSV file must be named after the sample it describes
+#' (e.g., `D20230101T120000_IFCB134.csv`) and placed inside the Classification
+#' Folder configured in the app (subfolders are searched recursively).
+#'
 #' @param csv_path Path to classification CSV file
-#' @return Data frame with classifications (columns depend on CSV content)
+#' @return Data frame with classifications. Expected columns: `file_name`,
+#'   `class_name`, and optionally `score`.
 #' @export
 #' @examples
 #' \dontrun{
 #' # Load classifications from a CSV file
-#' classifications <- load_from_csv("/path/to/classifications.csv")
+#' classifications <- load_from_csv("/path/to/D20230101T120000_IFCB134.csv")
 #' head(classifications)
 #' }
 load_from_csv <- function(csv_path) {
   classifications <- utils::read.csv(csv_path, stringsAsFactors = FALSE)
 
-  # Truncate trailing numbers from class names
-  classifications$class_name <- sapply(
-    classifications$class_name,
-    iRfcb:::truncate_folder_name
-  )
+  # Strip trailing 3-digit suffix from class names (e.g., "Diatom_001" -> "Diatom")
+  # This matches iRfcb behavior where class folders may include numeric suffixes
+  classifications$class_name <- sub("_\\d{3}$", "", classifications$class_name)
 
   classifications
 }

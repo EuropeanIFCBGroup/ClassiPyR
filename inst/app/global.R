@@ -4,22 +4,25 @@
 # Helper functions are loaded from the ClassiPyR package.
 
 # Load required libraries (ClassiPyR imports these)
-library(ClassiPyR)
-library(shiny)
-library(shinyjs)
-library(bslib)
-library(iRfcb)
-library(dplyr)
-library(DT)
-library(jsonlite)
-library(reticulate)
+suppressPackageStartupMessages({
+  library(ClassiPyR)
+  library(shiny)
+  library(shinyjs)
+  library(shinyFiles)
+  library(bslib)
+  library(iRfcb)
+  library(dplyr)
+  library(DT)
+  library(jsonlite)
+  library(reticulate)
+})
 
 # Get version from package
 app_version <- as.character(utils::packageVersion("ClassiPyR"))
 
-# Constants for session cache
-# Cache stores classification metadata (~1.5 MB per sample with 5000 ROIs)
-# 20 samples ≈ 30 MB memory usage - reasonable for most workflows
+# Session cache limit (used in server.R to evict oldest samples)
+# Each cached sample stores classification metadata (~1.5 MB with 5000 ROIs)
+# 20 samples ≈ 30 MB memory usage
 MAX_CACHED_SAMPLES <- 20
 
 # Get Python venv path from: 1) run_app() argument, 2) saved settings, 3) NULL (use default)
@@ -45,6 +48,11 @@ MAX_CACHED_SAMPLES <- 20
 
 # Initialize Python on app startup with configured venv path
 python_available <- init_python_env(venv_path = .get_venv_path())
+
+# S3 method for dynamic_roots: allows shinyFiles to subscript a function-based
+# roots object. shinyFiles 0.9.3 internally does roots[selectedRoot] without
+# checking if roots is a function, so this class bridges the gap.
+`[.dynamic_roots` <- function(x, i) x()[i]
 
 # App settings
 options(shiny.launch.browser = TRUE)

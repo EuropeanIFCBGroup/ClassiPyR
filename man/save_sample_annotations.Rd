@@ -14,7 +14,8 @@ save_sample_annotations(
   png_output_folder,
   roi_folder,
   class2use_path,
-  annotator = "Unknown"
+  annotator = "Unknown",
+  adc_folder = NULL
 )
 }
 \arguments{
@@ -32,11 +33,15 @@ save_sample_annotations(
 
 \item{png_output_folder}{PNG output folder path (organized by class)}
 
-\item{roi_folder}{ROI folder path (for ADC file location)}
+\item{roi_folder}{ROI folder path (for ADC file location, used as fallback)}
 
 \item{class2use_path}{Path to class2use file}
 
 \item{annotator}{Annotator name for statistics}
+
+\item{adc_folder}{Direct path to the ADC folder. When provided, this is used
+instead of constructing the path via \code{\link{get_sample_paths}}.
+This supports non-standard folder structures.}
 }
 \value{
 TRUE on success, FALSE on failure

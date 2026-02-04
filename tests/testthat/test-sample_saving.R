@@ -226,6 +226,32 @@ test_that("save_sample_annotations returns FALSE for empty changes log", {
   ))
 })
 
+test_that("save_sample_annotations accepts adc_folder parameter", {
+  # When adc_folder is NULL (default), it falls back to get_sample_paths()
+  # When adc_folder is provided, it uses that directly
+  # This is a smoke test for the new parameter. We just verify it does not
+  # error on the parameter itself (the actual save will fail without real data)
+  
+  expect_false(
+    save_sample_annotations(
+      sample_name = NULL,
+      classifications = data.frame(),
+      original_classifications = data.frame(),
+      changes_log = data.frame(
+        image = "x",
+        original_class = "a",
+        new_class = "b"
+      ),
+      temp_png_folder = tempdir(),
+      output_folder = tempdir(),
+      png_output_folder = tempdir(),
+      roi_folder = tempdir(),
+      class2use_path = "/tmp/class2use.txt",
+      adc_folder = "/some/custom/path"
+    )
+  )
+})
+
 # Integration test using real test data files
 
 test_that("save_sample_annotations creates MAT file with real data", {

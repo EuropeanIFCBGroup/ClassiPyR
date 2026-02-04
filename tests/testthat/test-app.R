@@ -37,6 +37,7 @@ test_that("required packages are listed in DESCRIPTION", {
 
   expect_true(grepl("shiny", imports))
   expect_true(grepl("shinyjs", imports))
+  expect_true(grepl("shinyFiles", imports))
   expect_true(grepl("bslib", imports))
   expect_true(grepl("iRfcb", imports))
   expect_true(grepl("dplyr", imports))
@@ -79,4 +80,9 @@ test_that("app server function can be created without errors", {
 
   # Verify server is a function
   expect_true(is.function(app_env$server))
+})
+
+test_that("run_app errors for non-existent app directory", {
+  expect_error(run_app(appDir= "not_an_app_dir"),
+               "No Shiny application exists at the path")
 })

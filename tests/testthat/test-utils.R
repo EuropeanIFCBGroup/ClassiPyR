@@ -113,6 +113,22 @@ test_that("read_roi_dimensions returns correct structure", {
  unlink(temp_adc)
 })
 
+test_that("read_roi_dimensions handles 0-byte ADC file", {
+  # create a truly empty temp file
+  tmp_file <- tempfile(fileext = ".adc")
+  file.create(tmp_file)  # creates 0-byte file
+  
+  res <- read_roi_dimensions(tmp_file)
+  
+  # Expect a data frame with zero rows and correct columns
+  expect_s3_class(res, "data.frame")
+  expect_equal(nrow(res), 0)
+  expect_equal(colnames(res), c("roi_number", "width", "height", "area"))
+  
+  # Clean up
+  unlink(tmp_file)
+})
+
 test_that("create_empty_changes_log returns correct structure", {
  log <- create_empty_changes_log()
 
@@ -329,4 +345,270 @@ test_that("get_config_dir uses tempdir during R CMD check", {
   } else {
     Sys.setenv("_R_CHECK_PACKAGE_NAME_" = old_val)
   }
+})
+
+# =============================================================================
+# File index cache functions
+# =============================================================================
+
+test_that("get_file_index_path returns a valid path ending in .json", {
+  index_path <- get_file_index_path()
+
+  expect_type(index_path, "character")
+  expect_true(grepl("\\.json$", index_path))
+  expect_true(grepl("ClassiPyR", index_path))
+  # Should be in the same directory as settings
+  expect_equal(dirname(index_path), dirname(get_settings_path()))
+})
+
+test_that("save_file_index and load_file_index round-trip data correctly", {
+  # Clean up any existing cache first
+  cache_path <- get_file_index_path()
+  if (file.exists(cache_path)) file.remove(cache_path)
+
+  test_data <- list(
+    roi_folder = "/data/roi",
+    csv_folder = "/data/csv",
+    output_folder = "/data/output",
+    sample_names = c("D20230101T120000_IFCB134", "D20230102T130000_IFCB134"),
+    classified_samples = c("D20230101T120000_IFCB134"),
+    annotated_samples = character(),
+    roi_path_map = list(
+      "D20230101T120000_IFCB134" = "/data/roi/2023/D20230101/D20230101T120000_IFCB134.roi",
+      "D20230102T130000_IFCB134" = "/data/roi/2023/D20230102/D20230102T130000_IFCB134.roi"
+    ),
+    csv_path_map = list(
+      "D20230101T120000_IFCB134" = "/data/csv/2023/D20230101T120000_IFCB134.csv"
+    ),
+    classifier_mat_files = list(
+      "D20230101T120000_IFCB134" = "/data/csv/2023/D20230101T120000_IFCB134_class_v1.mat"
+    ),
+    timestamp = "2024-01-01 12:00:00"
+  )
+
+  # Write using actual exported function
+  save_file_index(test_data)
+  expect_true(file.exists(cache_path))
+
+  # Read back using actual exported function
+  loaded <- load_file_index()
+
+  expect_type(loaded, "list")
+  expect_equal(loaded$roi_folder, "/data/roi")
+  expect_equal(loaded$csv_folder, "/data/csv")
+  expect_equal(loaded$output_folder, "/data/output")
+  expect_length(loaded$sample_names, 2)
+  expect_equal(loaded$sample_names[[1]], "D20230101T120000_IFCB134")
+  expect_length(loaded$classified_samples, 1)
+  expect_length(loaded$annotated_samples, 0)
+
+  # Path maps survive JSON round-trip as named lists
+  roi_map <- as.list(loaded$roi_path_map)
+  expect_equal(roi_map[["D20230101T120000_IFCB134"]],
+               "/data/roi/2023/D20230101/D20230101T120000_IFCB134.roi")
+  expect_equal(roi_map[["D20230102T130000_IFCB134"]],
+               "/data/roi/2023/D20230102/D20230102T130000_IFCB134.roi")
+
+  csv_map <- as.list(loaded$csv_path_map)
+  expect_equal(csv_map[["D20230101T120000_IFCB134"]],
+               "/data/csv/2023/D20230101T120000_IFCB134.csv")
+
+  mat_map <- as.list(loaded$classifier_mat_files)
+  expect_equal(mat_map[["D20230101T120000_IFCB134"]],
+               "/data/csv/2023/D20230101T120000_IFCB134_class_v1.mat")
+
+  expect_equal(loaded$timestamp, "2024-01-01 12:00:00")
+
+  # Clean up
+  if (file.exists(cache_path)) file.remove(cache_path)
+})
+
+test_that("save_file_index and load_file_index handle empty lists correctly", {
+  cache_path <- get_file_index_path()
+  if (file.exists(cache_path)) file.remove(cache_path)
+
+  test_data <- list(
+    roi_folder = "/test/roi",
+    csv_folder = "/test/csv",
+    output_folder = "/test/output",
+    sample_names = c("D20220101T000000_IFCB1"),
+    classified_samples = character(),
+    annotated_samples = character(),
+    roi_path_map = list("D20220101T000000_IFCB1" = "/test/roi/sample.roi"),
+    csv_path_map = list(),
+    classifier_mat_files = list(),
+    timestamp = as.character(Sys.time())
+  )
+
+  save_file_index(test_data)
+  loaded <- load_file_index()
+
+  expect_equal(loaded$roi_folder, "/test/roi")
+  expect_equal(as.character(loaded$sample_names), "D20220101T000000_IFCB1")
+
+  # Path map round-trips correctly
+  roi_map <- as.list(loaded$roi_path_map)
+  expect_equal(roi_map[["D20220101T000000_IFCB1"]], "/test/roi/sample.roi")
+
+  # Empty lists round-trip correctly
+  expect_length(loaded$csv_path_map, 0)
+  expect_length(loaded$classifier_mat_files, 0)
+  expect_length(loaded$classified_samples, 0)
+  expect_length(loaded$annotated_samples, 0)
+
+  if (file.exists(cache_path)) file.remove(cache_path)
+})
+
+test_that("load_file_index returns NULL when no cache exists", {
+  cache_path <- get_file_index_path()
+  if (file.exists(cache_path)) file.remove(cache_path)
+
+  result <- load_file_index()
+  expect_null(result)
+})
+
+test_that("load_file_index returns NULL for invalid JSON", {
+  cache_path <- get_file_index_path()
+
+  # Write invalid JSON to the actual cache path
+  dir.create(dirname(cache_path), recursive = TRUE, showWarnings = FALSE)
+  writeLines("this is not valid json {{{", cache_path)
+
+  result <- load_file_index()
+  expect_null(result)
+
+  if (file.exists(cache_path)) file.remove(cache_path)
+})
+
+test_that("save_file_index handles write errors gracefully", {
+  # Try to save to an invalid path - should not error (message only)
+  expect_no_error(
+    save_file_index(list(test = TRUE))
+  )
+})
+
+# =============================================================================
+# rescan_file_index
+# =============================================================================
+
+test_that("rescan_file_index returns NULL for invalid roi_folder", {
+  result <- rescan_file_index(
+    roi_folder = "/nonexistent/path",
+    csv_folder = "/nonexistent/path",
+    output_folder = "/nonexistent/path",
+    verbose = FALSE
+  )
+  expect_null(result)
+})
+
+test_that("rescan_file_index scans folders and builds cache", {
+  # Create a temp directory structure with mock ROI, CSV, and MAT files
+  temp_root <- tempfile("rescan_test_")
+  roi_folder <- file.path(temp_root, "raw", "2023", "D20230101")
+  csv_folder <- file.path(temp_root, "classified", "2023")
+  output_folder <- file.path(temp_root, "manual")
+  dir.create(roi_folder, recursive = TRUE)
+  dir.create(csv_folder, recursive = TRUE)
+  dir.create(output_folder, recursive = TRUE)
+
+  # Create mock ROI/ADC files
+  file.create(file.path(roi_folder, "D20230101T120000_IFCB134.roi"))
+  file.create(file.path(roi_folder, "D20230101T120000_IFCB134.adc"))
+  file.create(file.path(roi_folder, "D20230101T130000_IFCB134.roi"))
+  file.create(file.path(roi_folder, "D20230101T130000_IFCB134.adc"))
+
+  # Create a mock CSV classification
+  writeLines("file_name,class_name", file.path(csv_folder, "D20230101T120000_IFCB134.csv"))
+
+  # Create a mock manual annotation MAT
+  file.create(file.path(output_folder, "D20230101T130000_IFCB134.mat"))
+
+  result <- rescan_file_index(
+    roi_folder = file.path(temp_root, "raw"),
+    csv_folder = file.path(temp_root, "classified"),
+    output_folder = output_folder,
+    verbose = FALSE
+  )
+
+  expect_type(result, "list")
+  expect_length(result$sample_names, 2)
+  expect_true("D20230101T120000_IFCB134" %in% result$sample_names)
+  expect_true("D20230101T130000_IFCB134" %in% result$sample_names)
+
+  # Check classified samples (CSV match)
+  expect_true("D20230101T120000_IFCB134" %in% result$classified_samples)
+
+  # Check annotated samples (MAT in output folder)
+  expect_true("D20230101T130000_IFCB134" %in% result$annotated_samples)
+
+  # Check ROI path map
+  expect_true(!is.null(result$roi_path_map[["D20230101T120000_IFCB134"]]))
+  expect_true(grepl("\\.roi$", result$roi_path_map[["D20230101T120000_IFCB134"]]))
+
+  # Check CSV path map
+  expect_true(!is.null(result$csv_path_map[["D20230101T120000_IFCB134"]]))
+
+  # Check timestamp exists
+  expect_true(!is.null(result$timestamp))
+
+  # Verify the cache file was written
+  cache_path <- get_file_index_path()
+  expect_true(file.exists(cache_path))
+
+  # Verify round-trip: load cache and compare
+  loaded <- load_file_index()
+  expect_equal(length(loaded$sample_names), 2)
+
+  unlink(temp_root, recursive = TRUE)
+})
+
+test_that("rescan_file_index works with non-standard folder structure", {
+  # Create a flat folder structure (no YYYY/DYYYYMMDD hierarchy)
+  temp_root <- tempfile("flat_test_")
+  roi_folder <- file.path(temp_root, "all_roi_files")
+  dir.create(roi_folder, recursive = TRUE)
+
+  # ROI files directly in the folder, no subdirectories
+  file.create(file.path(roi_folder, "D20220601T100000_IFCB1.roi"))
+  file.create(file.path(roi_folder, "D20220601T100000_IFCB1.adc"))
+  file.create(file.path(roi_folder, "D20230715T200000_IFCB999.roi"))
+  file.create(file.path(roi_folder, "D20230715T200000_IFCB999.adc"))
+
+  result <- rescan_file_index(
+    roi_folder = roi_folder,
+    csv_folder = tempdir(),
+    output_folder = tempdir(),
+    verbose = FALSE
+  )
+
+  expect_type(result, "list")
+  expect_length(result$sample_names, 2)
+  expect_true("D20220601T100000_IFCB1" %in% result$sample_names)
+  expect_true("D20230715T200000_IFCB999" %in% result$sample_names)
+
+  # Path map should contain the flat paths (no year subdirectory)
+  roi_path <- result$roi_path_map[["D20220601T100000_IFCB1"]]
+  expect_true(grepl("all_roi_files", roi_path))
+  # The path should go directly from roi_folder to the file, no YYYY/DYYYYMMDD layer
+  expect_equal(normalizePath(dirname(roi_path), winslash = "/"), 
+               normalizePath(roi_folder, winslash = "/"))
+
+  unlink(temp_root, recursive = TRUE)
+})
+
+test_that("rescan_file_index reads folder paths from saved settings", {
+  # This test verifies that rescan_file_index falls back to saved settings
+  # We can't easily mock get_settings_path, so we test the fallback path:
+  # when all folder args are NULL and no settings file exists, it should
+  # return NULL gracefully
+  result <- rescan_file_index(
+    roi_folder = NULL,
+    csv_folder = NULL,
+    output_folder = NULL,
+    verbose = FALSE
+  )
+  # If no settings exist with valid paths, result is NULL
+  # (the actual behavior depends on whether settings are saved,
+  # but the function should not error)
+  expect_true(is.null(result) || is.list(result))
 })

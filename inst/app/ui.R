@@ -27,6 +27,8 @@ gallery_js <- function() {
       window.wasDragging = false;
       return;
     }
+    // Don't toggle selection when measuring
+    if (measureMode) return;
     var img = $(this).data('img');
     $(this).toggleClass('selected');
     updateCardStyle($(this));
@@ -180,50 +182,58 @@ gallery_js <- function() {
 
     removeMeasureLine();
 
-    var img = $(this);
-    var imgOffset = img.offset();
+    var container = $('.gallery-drag-area');
+    if (container.css('position') === 'static') {
+      container.css('position', 'relative');
+    }
+    var containerOffset = container.offset();
+
+    // Store start position relative to the gallery container
+    var relX = e.pageX - containerOffset.left;
+    var relY = e.pageY - containerOffset.top;
 
     measureStart = {
       x: e.pageX,
       y: e.pageY,
-      imgX: e.pageX - imgOffset.left,
-      imgY: e.pageY - imgOffset.top,
-      img: img
+      relX: relX,
+      relY: relY,
+      containerOffset: containerOffset
     };
 
-    // Create measure line SVG overlay
-    measureLine = $('<svg class=\"measure-line-svg\" style=\"position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;\"><line class=\"measure-line\" stroke=\"#ff0000\" stroke-width=\"2\" stroke-dasharray=\"4,2\"/><circle class=\"measure-start\" r=\"4\" fill=\"#ff0000\"/><circle class=\"measure-end\" r=\"4\" fill=\"#ff0000\"/></svg>');
-    $('body').append(measureLine);
+    // Create SVG overlay inside the gallery container (persists across re-renders)
+    measureLine = $('<svg class=\"measure-line-svg\" style=\"position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:99;overflow:visible;\"><line class=\"measure-line\" stroke=\"#ff0000\" stroke-width=\"2\" stroke-dasharray=\"4,2\"/><circle class=\"measure-start\" r=\"4\" fill=\"#ff0000\"/><circle class=\"measure-end\" r=\"4\" fill=\"#ff0000\"/></svg>');
+    container.append(measureLine);
 
-    measureLine.find('.measure-start').attr('cx', measureStart.x).attr('cy', measureStart.y);
-    measureLine.find('.measure-line').attr('x1', measureStart.x).attr('y1', measureStart.y)
-                                     .attr('x2', measureStart.x).attr('y2', measureStart.y);
-    measureLine.find('.measure-end').attr('cx', measureStart.x).attr('cy', measureStart.y);
+    measureLine.find('.measure-start').attr('cx', relX).attr('cy', relY);
+    measureLine.find('.measure-line').attr('x1', relX).attr('y1', relY)
+                                     .attr('x2', relX).attr('y2', relY);
+    measureLine.find('.measure-end').attr('cx', relX).attr('cy', relY);
   });
 
   // Measure on image - mousemove
   $(document).on('mousemove.measure', function(e) {
     if (!measureMode || !measureStart) return;
 
-    var endX = e.pageX;
-    var endY = e.pageY;
+    // Convert to coordinates relative to the gallery container
+    var endRelX = e.pageX - measureStart.containerOffset.left;
+    var endRelY = e.pageY - measureStart.containerOffset.top;
 
-    measureLine.find('.measure-line').attr('x2', endX).attr('y2', endY);
-    measureLine.find('.measure-end').attr('cx', endX).attr('cy', endY);
+    measureLine.find('.measure-line').attr('x2', endRelX).attr('y2', endRelY);
+    measureLine.find('.measure-end').attr('cx', endRelX).attr('cy', endRelY);
 
-    // Calculate distance and show label
-    var dx = endX - measureStart.x;
-    var dy = endY - measureStart.y;
+    // Calculate distance using the absolute deltas
+    var dx = e.pageX - measureStart.x;
+    var dy = e.pageY - measureStart.y;
     var pixelDist = Math.sqrt(dx*dx + dy*dy);
     var microns = pixelDist / pixelsPerMicron;
 
     if (!measureLabel) {
-      measureLabel = $('<div class=\"measure-label\" style=\"position:fixed;background:rgba(0,0,0,0.8);color:white;padding:4px 8px;border-radius:4px;font-size:12px;z-index:10000;pointer-events:none;\"></div>');
-      $('body').append(measureLabel);
+      measureLabel = $('<div class=\"measure-label\" style=\"position:absolute;background:rgba(0,0,0,0.8);color:white;padding:4px 8px;border-radius:4px;font-size:12px;z-index:99;pointer-events:none;\"></div>');
+      $('.gallery-drag-area').append(measureLabel);
     }
 
     measureLabel.text(microns.toFixed(1) + ' µm (' + Math.round(pixelDist) + ' px)');
-    measureLabel.css({left: (endX + 15) + 'px', top: (endY - 10) + 'px'});
+    measureLabel.css({left: (endRelX + 15) + 'px', top: (endRelY - 10) + 'px'});
   });
 
   // Measure on image - mouseup
@@ -237,33 +247,16 @@ gallery_js <- function() {
   // Click anywhere else to clear measurement
   $(document).on('click.measure', function(e) {
     if (!measureMode) return;
-    if (!$(e.target).closest('.image-card img').length && !$(e.target).closest('.measure-label').length) {
+    if (!$(e.target).closest('.image-card').length && !$(e.target).closest('.measure-label').length) {
       // Don't remove if clicking on measure toggle button
       if (!$(e.target).closest('#measure_toggle').length) {
         removeMeasureLine();
       }
     }
   });
+
   "
 }
-
-# Custom CSS for warning styling in dropdowns
-warning_css <- "
-/* Style selectize options containing warning symbol (⚠) */
-.selectize-dropdown-content .option:has-text('⚠'),
-.selectize-dropdown .option[data-value*='⚠'] {
-  color: #856404 !important;
-  background-color: #fff3cd !important;
-}
-/* Fallback: style any option starting with warning symbol using attribute selector */
-.selectize-dropdown-content .option {
-  /* Default styling */
-}
-/* Target the selected item in the dropdown that contains warning */
-.selectize-input .item {
-  /* Check content dynamically via JS */
-}
-"
 
 # UI object
 ui <- page_sidebar(
@@ -423,8 +416,7 @@ ui <- page_sidebar(
     div(class = "sample-dropdown",
         selectizeInput("sample_select", "Sample", choices = NULL, width = "100%",
                        options = list(
-                         placeholder = "Select sample...",
-                         maxOptions = 500
+                         placeholder = "Select sample..."
                        ))),
 
     # Legend for sample status symbols (compact, single line)
@@ -437,7 +429,7 @@ ui <- page_sidebar(
 
     # Navigation buttons
     div(
-      style = "display: flex; gap: 5px; margin-bottom: 15px;",
+      style = "display: flex; gap: 5px; margin-bottom: 5px;",
       actionButton("load_sample", "Load",
                    class = "btn-primary", style = "flex: 1;"),
       actionButton("prev_sample", label = icon("arrow-left"),
@@ -448,8 +440,14 @@ ui <- page_sidebar(
                    title = "Next sample"),
       actionButton("random_sample", label = icon("random"),
                    class = "btn-outline-secondary", style = "flex: 0;",
-                   title = "Random sample")
+                   title = "Random sample"),
+      actionButton("rescan_folders", label = icon("sync"),
+                   class = "btn-outline-secondary", style = "flex: 0;",
+                   title = "Sync folders (refresh file index)")
     ),
+
+    # Cache age indicator
+    uiOutput("cache_age_text"),
 
     hr(),
 

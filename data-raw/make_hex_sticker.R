@@ -3,6 +3,7 @@
 
 library(hexSticker)
 library(ggplot2)
+library(magick)
 
 # Create a more realistic centric diatom (frustule-like)
 # Based on Coscinodiscus/Thalassiosira appearance
@@ -78,6 +79,60 @@ create_diatom <- function() {
   return(p)
 }
 
+create_diatom_icon <- function() {
+  
+  outer_circle <- function(n = 64) {
+    theta <- seq(0, 2 * pi, length.out = n)
+    r <- 0.85
+    data.frame(x = r * cos(theta), y = r * sin(theta))
+  }
+  
+  ring <- function(r, n = 64) {
+    theta <- seq(0, 2 * pi, length.out = n)
+    data.frame(x = r * cos(theta), y = r * sin(theta))
+  }
+  
+  ribs <- function(n = 12) {
+    angles <- seq(0, 2 * pi, length.out = n + 1)[-1]
+    data.frame(
+      x = 0, y = 0,
+      xend = 0.82 * cos(angles),
+      yend = 0.82 * sin(angles)
+    )
+  }
+  
+  ggplot() +
+    geom_segment(
+      data = ribs(),
+      aes(x = x, y = y, xend = xend, yend = yend),
+      linewidth = 0.9,
+      color = "#D6ECF8"
+    ) +
+    geom_path(
+      data = ring(0.5),
+      aes(x = x, y = y),
+      linewidth = 0.9,
+      color = "#D6ECF8"
+    ) +
+    geom_point(
+      aes(0, 0),
+      size = 4,
+      color = "#EAF4FB"
+    ) +
+    geom_path(
+      data = outer_circle(),
+      aes(x = x, y = y),
+      linewidth = 1.6,
+      color = "#EAF4FB"
+    ) +
+    coord_fixed(xlim = c(-1.05, 1.05), ylim = c(-1.05, 1.05)) +
+    theme_void() +
+    theme(
+      panel.background = element_rect(fill = "transparent", color = NA),
+      plot.background = element_rect(fill = "transparent", color = NA)
+    )
+}
+
 # Generate the diatom subplot
 diatom_plot <- create_diatom()
 
@@ -121,3 +176,37 @@ svg_sticker <- sticker(
 )
 
 message("Hex sticker saved to man/figures/logo.svg")
+
+icon_diatom <- create_diatom_icon()
+
+sticker(
+  subplot = icon_diatom,
+  package = NULL,
+  s_x = 1,
+  s_y = 1,
+  s_width = 1.5,
+  s_height = 1.5,
+  h_fill = "#1A3A5C",
+  h_color = "#3D8EC9",
+  h_size = 1.4,
+  filename = "man/figures/logo_icon.png",
+  dpi = 1200
+)
+
+message("Icon PNG saved to man/figures/logo_icon.png")
+
+img <- image_read("man/figures/logo_icon.png")
+
+sizes <- c(16, 24, 32, 48, 64, 128, 256)
+
+ico_imgs <- lapply(
+  sizes,
+  function(s) image_resize(img, paste0(s, "x", s))
+)
+
+ico <- image_join(ico_imgs) |>
+  image_convert(format = "ico")
+
+image_write(ico, "man/figures/logo.ico")
+
+message("ICO file saved to man/figures/logo.ico")

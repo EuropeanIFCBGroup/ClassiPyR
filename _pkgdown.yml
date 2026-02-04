@@ -45,14 +45,25 @@ reference:
 - title: Sample Loading
   desc: Functions for loading classifications and samples
   contents:
-  - starts_with("load_")
+  - load_class_list
+  - load_from_classifier_mat
+  - load_from_csv
+  - load_from_mat
   - create_new_classifications
   - filter_to_extracted
 - title: Sample Saving
   desc: Functions for saving annotations and exporting images
   contents:
-  - starts_with("save_")
+  - save_sample_annotations
+  - save_validation_statistics
   - copy_images_to_class_folders
+- title: File Index Cache
+  desc: Functions for managing the file index cache for faster startup
+  contents:
+  - get_file_index_path
+  - load_file_index
+  - save_file_index
+  - rescan_file_index
 - title: Utilities
   desc: Helper functions for IFCB data processing
   contents:
