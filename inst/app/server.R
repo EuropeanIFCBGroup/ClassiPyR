@@ -801,10 +801,10 @@ server <- function(input, output, session) {
     }
   })
   
-  # Switch from annotation mode to validation mode
-  observeEvent(input$switch_to_validation, {
+  # Shared helper: switch current sample to validation mode
+  do_switch_to_validation <- function() {
     req(rv$current_sample, rv$has_both_modes)
-    
+
     sample_name <- rv$current_sample
     roi_path <- roi_path_map()[[sample_name]]
     if (is.null(roi_path)) {
@@ -812,11 +812,11 @@ server <- function(input, output, session) {
       return()
     }
     adc_path <- sub("\\.roi$", ".adc", roi_path)
-    
+
     # Find classification source (CSV or classifier MAT)
     csv_path <- find_csv_file(sample_name)
     classifier_mat_path <- classifier_mat_files()[[sample_name]]
-    
+
     if (!is.null(csv_path)) {
       classifications <- load_from_csv(csv_path)
       showNotification("Switched to Validation mode (CSV)", type = "message")
@@ -831,7 +831,7 @@ server <- function(input, output, session) {
       showNotification("No classification data available", type = "warning")
       return()
     }
-    
+
     rv$original_classifications <- classifications
     rv$classifications <- classifications
     rv$is_annotation_mode <- FALSE
@@ -839,7 +839,7 @@ server <- function(input, output, session) {
     rv$selected_images <- character()
     rv$current_page <- 1
     rv$changes_log <- create_empty_changes_log()
-    
+
     # Update class filter dropdown
     available_classes <- sort(unique(classifications$class_name))
     unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
@@ -849,6 +849,11 @@ server <- function(input, output, session) {
     updateSelectInput(session, "class_filter",
                       choices = c("All" = "all", setNames(available_classes, display_names)),
                       selected = "all")
+  }
+
+  # Switch from annotation mode to validation mode
+  observeEvent(input$switch_to_validation, {
+    do_switch_to_validation()
   })
   
   # Switch from validation mode to annotation mode
@@ -1221,7 +1226,12 @@ server <- function(input, output, session) {
     }
     
     new_display <- paste0(sample_name, new_suffix)
-    
+
+    # Escape backslashes and single quotes for safe JS string interpolation
+    safe_js_string <- function(x) gsub("'", "\\\\'", gsub("\\\\", "\\\\\\\\", x))
+    safe_name <- safe_js_string(sample_name)
+    safe_display <- safe_js_string(new_display)
+
     # Use JavaScript to update the selectize display
     shinyjs::runjs(sprintf(
       "var $select = $('#sample_select').selectize();
@@ -1239,7 +1249,7 @@ server <- function(input, output, session) {
          }
        }
      }",
-      sample_name, new_display, new_display
+      safe_name, safe_display, safe_display
     ))
   }
   
@@ -2235,52 +2245,7 @@ server <- function(input, output, session) {
   
   # Switch to validation mode from the tab link (reuse same logic as header button)
   observeEvent(input$switch_to_validation_from_tab, {
-    req(rv$current_sample, rv$has_both_modes)
-    
-    sample_name <- rv$current_sample
-    roi_path <- roi_path_map()[[sample_name]]
-    if (is.null(roi_path)) {
-      showNotification("ROI file not found for this sample", type = "error")
-      return()
-    }
-    adc_path <- sub("\\.roi$", ".adc", roi_path)
-    
-    # Find classification source (CSV or classifier MAT)
-    csv_path <- find_csv_file(sample_name)
-    classifier_mat_path <- classifier_mat_files()[[sample_name]]
-    
-    if (!is.null(csv_path)) {
-      classifications <- load_from_csv(csv_path)
-      showNotification("Switched to Validation mode (CSV)", type = "message")
-    } else if (!is.null(classifier_mat_path)) {
-      roi_dims <- read_roi_dimensions(adc_path)
-      classifications <- load_from_classifier_mat(
-        classifier_mat_path, sample_name, rv$class2use, roi_dims,
-        use_threshold = config$use_threshold
-      )
-      showNotification("Switched to Validation mode (MAT)", type = "message")
-    } else {
-      showNotification("No classification data available", type = "warning")
-      return()
-    }
-    
-    rv$original_classifications <- classifications
-    rv$classifications <- classifications
-    rv$is_annotation_mode <- FALSE
-    rv$using_manual_mode <- FALSE
-    rv$selected_images <- character()
-    rv$current_page <- 1
-    rv$changes_log <- create_empty_changes_log()
-    
-    # Update class filter dropdown
-    available_classes <- sort(unique(classifications$class_name))
-    unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
-    display_names <- sapply(available_classes, function(cls) {
-      if (cls %in% unmatched) paste0("\u26A0 ", cls) else cls
-    })
-    updateSelectInput(session, "class_filter",
-                      choices = c("All" = "all", setNames(available_classes, display_names)),
-                      selected = "all")
+    do_switch_to_validation()
   }, ignoreInit = TRUE)
   
   # Annotation progress (shown in annotation mode)

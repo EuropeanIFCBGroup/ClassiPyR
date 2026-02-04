@@ -95,13 +95,25 @@ load_from_mat <- function(mat_path, sample_name, class2use, roi_dimensions) {
     return(class2use[idx])
   })
 
+  # Match ROI dimensions by roi_number (safe lookup with NA fallback)
+  roi_data <- lapply(roi_numbers, function(rn) {
+    idx <- which(roi_dimensions$roi_number == rn)
+    if (length(idx) > 0) {
+      list(width = roi_dimensions$width[idx],
+           height = roi_dimensions$height[idx],
+           area = roi_dimensions$area[idx])
+    } else {
+      list(width = NA_real_, height = NA_real_, area = NA_real_)
+    }
+  })
+
   classifications <- data.frame(
     file_name = sprintf("%s_%05d.png", sample_name, roi_numbers),
     class_name = class_names,
     score = NA_real_,
-    width = roi_dimensions$width[roi_numbers],
-    height = roi_dimensions$height[roi_numbers],
-    roi_area = roi_dimensions$area[roi_numbers],
+    width = vapply(roi_data, `[[`, numeric(1), "width"),
+    height = vapply(roi_data, `[[`, numeric(1), "height"),
+    roi_area = vapply(roi_data, `[[`, numeric(1), "area"),
     stringsAsFactors = FALSE
   )
 
@@ -157,7 +169,7 @@ load_from_classifier_mat <- function(mat_path, sample_name, class2use, roi_dimen
            height = roi_dimensions$height[idx],
            area = roi_dimensions$area[idx])
     } else {
-      list(width = 1, height = 1, area = 1)
+      list(width = NA_real_, height = NA_real_, area = NA_real_)
     }
   })
 
@@ -165,9 +177,9 @@ load_from_classifier_mat <- function(mat_path, sample_name, class2use, roi_dimen
     file_name = sprintf("%s_%05d.png", sample_name, roi_numbers),
     class_name = class_names,
     score = NA_real_,
-    width = sapply(roi_data, `[[`, "width"),
-    height = sapply(roi_data, `[[`, "height"),
-    roi_area = sapply(roi_data, `[[`, "area"),
+    width = vapply(roi_data, `[[`, numeric(1), "width"),
+    height = vapply(roi_data, `[[`, numeric(1), "height"),
+    roi_area = vapply(roi_data, `[[`, numeric(1), "area"),
     stringsAsFactors = FALSE
   )
 
