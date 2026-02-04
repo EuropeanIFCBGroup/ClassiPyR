@@ -12,7 +12,7 @@ create_new_classifications(sample_name, roi_dimensions)
 \item{roi_dimensions}{Data frame from \code{\link{read_roi_dimensions}}}
 }
 \value{
-Data frame with columns: file_name, class_name, score, roi_area
+Data frame with columns: file_name, class_name, score, width, height, roi_area
 }
 \description{
 Creates a classifications data frame with all ROIs set to "unclassified",

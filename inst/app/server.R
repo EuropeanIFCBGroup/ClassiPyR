@@ -24,54 +24,55 @@
 # - R/sample_saving.R: Saving annotations and statistics
 
 server <- function(input, output, session) {
-
+  
   # ============================================================================
   # REACTIVE VALUES
   # Core application state managed as reactive values
   # ============================================================================
-
+  
   rv <- reactiveValues(
     # Class list (character vector of class names, order = indices for MAT files)
     # Default to "unclassified" so app works without loading a class list
     class2use = "unclassified",
     class2use_path = NULL,
-
+    
     # Current sample data
     classifications = NULL,         # Current state of image classifications
     current_sample = NULL,          # Sample name (e.g., "D20220522T000439_IFCB134")
     temp_png_folder = NULL,         # Temporary folder with extracted PNG images
     original_classifications = NULL, # Original state for comparison/statistics
-
+    
     # Selection and editing state
     selected_images = character(),  # Currently selected image filenames
     changes_log = create_empty_changes_log(), # Track all changes made
-
+    
     # Session management
     session_cache = list(),         # Cache of loaded samples (for quick switching)
-
+    
     # Mode tracking
     is_annotation_mode = FALSE,     # TRUE = annotation (no auto-class), FALSE = validation
     has_both_modes = FALSE,         # TRUE if sample has both manual AND auto-classification
     using_manual_mode = TRUE,       # When has_both_modes, which mode is active
-
+    
     # UI state
     current_page = 1,               # Current pagination page
     class_sort_mode = "id",         # Class list sort: "id" (by index) or "alpha" (A-Z)
     resource_path_name = NULL,      # Session-specific Shiny resource path for images
     is_loading = FALSE,             # TRUE while loading/saving operations in progress
-    measure_mode = FALSE            # TRUE when measure tool is active
+    measure_mode = FALSE,           # TRUE when measure tool is active
+    pending_sample_select = NULL    # Pending sample selection for dropdown update
   )
-
+  
   # Settings file for persistence (uses R_user_dir for CRAN compliance)
   settings_file <- get_settings_path()
-
+  
   # Get working directory at app startup (for default paths)
   # Get user's working directory (captured by run_app() before Shiny changes it)
   startup_wd <- getOption("ClassiPyR.startup_wd", default = getwd())
-
+  
   # Volumes for shinyFiles directory browser
   base_volumes <- c("Working Dir" = startup_wd, shinyFiles::getVolumes()())
-
+  
   # Build volumes with optional "Current" root from a text input path
   get_browse_volumes <- function(current_path = NULL) {
     if (!is.null(current_path) && nzchar(current_path) && dir.exists(current_path)) {
@@ -80,15 +81,15 @@ server <- function(input, output, session) {
       base_volumes
     }
   }
-
+  
   # Create a dynamic roots object for shinyDirChoose that reads the current
-
+  
   # text input value each time the dialog opens or navigates
   make_dynamic_roots <- function(input_id) {
     f <- function() get_browse_volumes(input[[input_id]])
     structure(f, class = c("dynamic_roots", "function"))
   }
-
+  
   # Load saved settings or use defaults
   load_settings <- function() {
     defaults <- list(
@@ -102,7 +103,7 @@ server <- function(input, output, session) {
       class2use_path = NULL,  # Path to class2use file for auto-loading
       python_venv_path = NULL  # NULL = use ./venv in working directory
     )
-
+    
     if (file.exists(settings_file)) {
       tryCatch({
         saved <- jsonlite::fromJSON(settings_file)
@@ -126,7 +127,7 @@ server <- function(input, output, session) {
     }
     defaults
   }
-
+  
   # Save settings to file
   persist_settings <- function(settings) {
     tryCatch({
@@ -135,16 +136,16 @@ server <- function(input, output, session) {
       message("Could not save settings: ", e$message)
     })
   }
-
+  
   # Initialize config from saved settings
   saved_settings <- load_settings()
-
+  
   # run_app(venv_path=) takes precedence over saved settings
   run_app_venv <- getOption("ClassiPyR.venv_path", default = NULL)
   if (!is.null(run_app_venv) && nzchar(run_app_venv)) {
     saved_settings$python_venv_path <- run_app_venv
   }
-
+  
   config <- reactiveValues(
     csv_folder = saved_settings$csv_folder,
     roi_folder = saved_settings$roi_folder,
@@ -155,7 +156,7 @@ server <- function(input, output, session) {
     auto_sync = saved_settings$auto_sync,
     python_venv_path = saved_settings$python_venv_path
   )
-
+  
   # Initialize class dropdown with default class list on startup
   observeEvent(once = TRUE, ignoreNULL = FALSE, session$clientData$url_protocol, {
     sorted_classes <- sort(rv$class2use)
@@ -163,7 +164,7 @@ server <- function(input, output, session) {
                          choices = sorted_classes,
                          selected = character(0))
   })
-
+  
   # Store all sample names and their classification status
   all_samples <- reactiveVal(character())
   classified_samples <- reactiveVal(character())  # Auto-classified (CSV or classifier MAT)
@@ -177,7 +178,7 @@ server <- function(input, output, session) {
   rescan_trigger <- reactiveVal(0)
   # Timestamp of last sync (updated after scan completes)
   last_sync_time <- reactiveVal(NULL)
-
+  
   # Get classes in current classifications that are NOT in class2use
   unmatched_classes <- reactive({
     if (is.null(rv$classifications) || is.null(rv$class2use)) {
@@ -189,7 +190,7 @@ server <- function(input, output, session) {
     unmatched <- setdiff(unmatched, "unclassified")
     unmatched
   })
-
+  
   # Build class filter choices with unmatched classes marked
   build_class_filter_choices <- function(classes) {
     unmatched <- unmatched_classes()
@@ -203,20 +204,20 @@ server <- function(input, output, session) {
     })
     c("All" = "all", setNames(classes, display_names))
   }
-
+  
   # ============================================================================
   # Settings Modal
   # ============================================================================
-
+  
   observeEvent(input$settings_btn, {
     showModal(modalDialog(
       title = "Settings",
       size = "l",
       easyClose = TRUE,
-
+      
       fileInput("class2use_file", "Class List File (.mat or .txt)",
                 accept = c(".mat", ".txt")),
-
+      
       # Classification Folder (CSV and MAT)
       div(
         style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
@@ -226,7 +227,7 @@ server <- function(input, output, session) {
         shinyDirButton("browse_csv_folder", "Browse", "Select Classification Folder",
                        class = "btn-outline-secondary", style = "margin-bottom: 15px;")
       ),
-
+      
       # ROI Folder
       div(
         style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
@@ -236,7 +237,7 @@ server <- function(input, output, session) {
         shinyDirButton("browse_roi_folder", "Browse", "Select ROI Data Folder",
                        class = "btn-outline-secondary", style = "margin-bottom: 15px;")
       ),
-
+      
       # Output Folder
       div(
         style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
@@ -246,7 +247,7 @@ server <- function(input, output, session) {
         shinyDirButton("browse_output_folder", "Browse", "Select Output Folder",
                        class = "btn-outline-secondary", style = "margin-bottom: 15px;")
       ),
-
+      
       # PNG Output Folder
       div(
         style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
@@ -256,26 +257,26 @@ server <- function(input, output, session) {
         shinyDirButton("browse_png_folder", "Browse", "Select PNG Output Folder",
                        class = "btn-outline-secondary", style = "margin-bottom: 15px;")
       ),
-
+      
       hr(),
-
+      
       # Sync options
       checkboxInput("cfg_auto_sync", "Sync folders automatically on startup",
                     value = config$auto_sync),
       tags$small(class = "text-muted",
                  "When disabled, the app loads from cache on startup. Use the sync button to update manually."),
-
+      
       hr(),
-
+      
       # Classifier options
       h5("Classifier Options"),
       checkboxInput("cfg_use_threshold", "Apply classification threshold",
                     value = config$use_threshold),
       tags$small(class = "text-muted",
                  "When enabled, classifications below the confidence threshold are marked as 'unclassified'"),
-
+      
       hr(),
-
+      
       # Image resolution setting
       h5("Image Resolution"),
       div(
@@ -285,9 +286,9 @@ server <- function(input, output, session) {
                      width = "150px"),
         tags$small(class = "text-muted", "IFCB default: 3.4 px/µm")
       ),
-
+      
       hr(),
-
+      
       # Class list editor button
       div(
         style = "display: flex; align-items: center; gap: 10px;",
@@ -296,25 +297,25 @@ server <- function(input, output, session) {
         tags$span(class = "text-muted", style = "font-size: 12px;",
                   textOutput("class_count_text", inline = TRUE))
       ),
-
+      
       footer = tagList(
         modalButton("Cancel"),
         actionButton("save_settings", "Save Settings", class = "btn-primary")
       )
     ))
   })
-
+  
   # shinyFiles directory browser setup - dynamic roots so the dialog
   # opens at the path currently typed in the corresponding text field
   shinyDirChoose(input, "browse_csv_folder",
-    roots = make_dynamic_roots("cfg_csv_folder"), session = session)
+                 roots = make_dynamic_roots("cfg_csv_folder"), session = session)
   shinyDirChoose(input, "browse_roi_folder",
-    roots = make_dynamic_roots("cfg_roi_folder"), session = session)
+                 roots = make_dynamic_roots("cfg_roi_folder"), session = session)
   shinyDirChoose(input, "browse_output_folder",
-    roots = make_dynamic_roots("cfg_output_folder"), session = session)
+                 roots = make_dynamic_roots("cfg_output_folder"), session = session)
   shinyDirChoose(input, "browse_png_folder",
-    roots = make_dynamic_roots("cfg_png_output_folder"), session = session)
-
+                 roots = make_dynamic_roots("cfg_png_output_folder"), session = session)
+  
   # Browse button observers - parse selection and update text input
   observeEvent(input$browse_csv_folder, {
     if (!is.integer(input$browse_csv_folder)) {
@@ -324,7 +325,7 @@ server <- function(input, output, session) {
       }
     }
   })
-
+  
   observeEvent(input$browse_roi_folder, {
     if (!is.integer(input$browse_roi_folder)) {
       folder <- parseDirPath(get_browse_volumes(input$cfg_roi_folder), input$browse_roi_folder)
@@ -333,7 +334,7 @@ server <- function(input, output, session) {
       }
     }
   })
-
+  
   observeEvent(input$browse_output_folder, {
     if (!is.integer(input$browse_output_folder)) {
       folder <- parseDirPath(get_browse_volumes(input$cfg_output_folder), input$browse_output_folder)
@@ -342,7 +343,7 @@ server <- function(input, output, session) {
       }
     }
   })
-
+  
   observeEvent(input$browse_png_folder, {
     if (!is.integer(input$browse_png_folder)) {
       folder <- parseDirPath(get_browse_volumes(input$cfg_png_output_folder), input$browse_png_folder)
@@ -351,10 +352,10 @@ server <- function(input, output, session) {
       }
     }
   })
-
-
+  
+  
   # Class count display
-
+  
   output$class_count_text <- renderText({
     if (is.null(rv$class2use)) {
       "No class list loaded"
@@ -362,14 +363,14 @@ server <- function(input, output, session) {
       paste(length(rv$class2use), "classes loaded")
     }
   })
-
+  
   # Class List Editor Modal
   observeEvent(input$open_class_editor, {
     showModal(modalDialog(
       title = "Class List Editor",
       size = "l",
       easyClose = TRUE,
-
+      
       tags$div(
         class = "alert alert-warning",
         style = "font-size: 12px; padding: 8px;",
@@ -381,7 +382,7 @@ server <- function(input, output, session) {
         " MATLAB toolbox, as this will break existing annotations. ",
         "You may rename classes or add new ones at the end."
       ),
-
+      
       div(
         style = "display: flex; gap: 15px; align-items: stretch;",
         div(
@@ -424,13 +425,13 @@ server <- function(input, output, session) {
           )
         )
       ),
-
+      
       div(
         style = "margin-top: 10px;",
         textInput("new_class_name", "Add new class:", placeholder = "Enter new class name"),
         actionButton("add_class_btn", "Add to End", class = "btn-sm btn-outline-primary")
       ),
-
+      
       footer = tagList(
         div(
           style = "display: flex; gap: 10px; width: 100%; justify-content: space-between;",
@@ -448,16 +449,16 @@ server <- function(input, output, session) {
       )
     ))
   })
-
+  
   # Sort button handlers
   observeEvent(input$sort_by_id, {
     rv$class_sort_mode <- "id"
   })
-
+  
   observeEvent(input$sort_alpha, {
     rv$class_sort_mode <- "alpha"
   })
-
+  
   # Render class list with indices
   output$class_list_display <- renderUI({
     # Handle empty/NULL class list
@@ -467,45 +468,45 @@ server <- function(input, output, session) {
         "No classes defined yet. Add classes using the form below or edit the text area."
       ))
     }
-
+    
     classes <- rv$class2use
     indices <- seq_along(classes)
-
+    
     # Create data frame for sorting
     df <- data.frame(idx = indices, cls = classes, stringsAsFactors = FALSE)
-
+    
     if (rv$class_sort_mode == "alpha") {
       df <- df[order(df$cls), ]
     }
-
+    
     class_lines <- mapply(function(idx, cls) {
       tags$div(sprintf("%3d: %s", idx, cls))
     }, df$idx, df$cls, SIMPLIFY = FALSE)
-
+    
     tagList(class_lines)
   })
-
+  
   # Add new class
   observeEvent(input$add_class_btn, {
     req(input$new_class_name)
     new_class <- trimws(input$new_class_name)
-
+    
     if (new_class == "") {
       showNotification("Please enter a class name", type = "warning")
       return()
     }
-
+    
     # Handle NULL class list (starting from scratch)
     current_classes <- if (is.null(rv$class2use)) character(0) else rv$class2use
-
+    
     if (new_class %in% current_classes) {
       showNotification("Class already exists", type = "warning")
       return()
     }
-
+    
     # Add to class list
     rv$class2use <- c(current_classes, new_class)
-
+    
     # If no class2use_path exists (created from scratch), create a temp file
     if (is.null(rv$class2use_path)) {
       temp_class_file <- file.path(tempdir(), "class2use_temp.txt")
@@ -517,36 +518,36 @@ server <- function(input, output, session) {
         writeLines(rv$class2use, rv$class2use_path)
       }
     }
-
+    
     # Update the text area
     updateTextAreaInput(session, "class_list_edit",
                         value = paste(rv$class2use, collapse = "\n"))
     updateTextInput(session, "new_class_name", value = "")
-
+    
     # Update relabel dropdown
     sorted_classes <- sort(rv$class2use)
     updateSelectizeInput(session, "new_class_quick",
                          choices = sorted_classes,
                          selected = character(0))
-
+    
     showNotification(paste("Added class:", new_class), type = "message")
   })
-
+  
   # Apply class list changes from text area
   observeEvent(input$apply_class_changes, {
     # Get text from textarea (may be empty when starting from scratch)
     text_content <- input$class_list_edit
     if (is.null(text_content)) text_content <- ""
-
+    
     new_classes <- strsplit(text_content, "\n")[[1]]
     new_classes <- trimws(new_classes)
     new_classes <- new_classes[new_classes != ""]
-
+    
     if (length(new_classes) == 0) {
       showNotification("Please enter at least one class name", type = "warning")
       return()
     }
-
+    
     current_count <- if (is.null(rv$class2use)) 0 else length(rv$class2use)
     if (length(new_classes) < current_count) {
       showNotification(
@@ -555,9 +556,9 @@ server <- function(input, output, session) {
         duration = 5
       )
     }
-
+    
     rv$class2use <- new_classes
-
+    
     # If no class2use_path exists (created from scratch), create a temp file
     # This is needed for saving annotations
     if (is.null(rv$class2use_path)) {
@@ -573,16 +574,16 @@ server <- function(input, output, session) {
       # Update the temp file if it exists
       writeLines(new_classes, rv$class2use_path)
     }
-
+    
     # Update relabel dropdown
     sorted_classes <- sort(rv$class2use)
     updateSelectizeInput(session, "new_class_quick",
                          choices = sorted_classes,
                          selected = character(0))
-
+    
     showNotification(paste("Applied", length(new_classes), "classes"), type = "message")
   })
-
+  
   # Download class2use as .mat file
   output$save_class2use_mat <- downloadHandler(
     filename = function() {
@@ -592,7 +593,7 @@ server <- function(input, output, session) {
       ifcb_create_class2use(rv$class2use, file)
     }
   )
-
+  
   # Download class2use as .txt file
   output$save_class2use_txt <- downloadHandler(
     filename = function() {
@@ -602,13 +603,13 @@ server <- function(input, output, session) {
       writeLines(rv$class2use, file)
     }
   )
-
+  
   observeEvent(input$save_settings, {
     # Check if folder paths actually changed (to avoid spurious resets)
     roi_changed <- !identical(config$roi_folder, input$cfg_roi_folder)
     csv_changed <- !identical(config$csv_folder, input$cfg_csv_folder)
     paths_changed <- roi_changed || csv_changed
-
+    
     config$csv_folder <- input$cfg_csv_folder
     config$roi_folder <- input$cfg_roi_folder
     config$output_folder <- input$cfg_output_folder
@@ -616,7 +617,7 @@ server <- function(input, output, session) {
     config$use_threshold <- input$cfg_use_threshold
     config$pixels_per_micron <- input$cfg_pixels_per_micron
     config$auto_sync <- input$cfg_auto_sync
-
+    
     # Persist settings to file for next session
     # python_venv_path is kept from config (set via run_app() or previous save)
     persist_settings(list(
@@ -630,10 +631,10 @@ server <- function(input, output, session) {
       class2use_path = rv$class2use_path,
       python_venv_path = config$python_venv_path
     ))
-
+    
     removeModal()
     showNotification("Settings saved.", type = "message")
-
+    
     # Only trigger sample rescan if folder paths actually changed
     if (paths_changed) {
       cache_path <- get_file_index_path()
@@ -643,11 +644,11 @@ server <- function(input, output, session) {
       rescan_trigger(rescan_trigger() + 1)
     }
   })
-
+  
   # ============================================================================
   # UI Outputs - Warnings and Indicators
   # ============================================================================
-
+  
   output$cache_age_text <- renderUI({
     invalidateLater(60000)
     ts <- last_sync_time()
@@ -666,11 +667,11 @@ server <- function(input, output, session) {
       div(
         style = "font-size: 11px; color: #999; margin-bottom: 5px;",
         icon("clock", style = "margin-right: 3px;"),
-        paste0("Last sync: ", age_text)
+        paste0("Last folder sync: ", age_text)
       )
     }
   })
-
+  
   output$python_warning <- renderUI({
     if (!python_available) {
       div(
@@ -684,12 +685,12 @@ server <- function(input, output, session) {
       )
     }
   })
-
+  
   # Send pixels_per_micron to JavaScript for measure tool
   observe({
     session$sendCustomMessage("updatePixelsPerMicron", config$pixels_per_micron)
   })
-
+  
   # Loading overlay (shown during load/save operations)
   output$loading_overlay <- renderUI({
     if (rv$is_loading) {
@@ -704,7 +705,7 @@ server <- function(input, output, session) {
       )
     }
   })
-
+  
   # Dynamic title with mode-based navbar coloring
   output$dynamic_title <- renderUI({
     # Determine mode class for navbar styling
@@ -715,7 +716,7 @@ server <- function(input, output, session) {
     } else {
       "navbar-mode-validation"
     }
-
+    
     # Add JavaScript to apply class to navbar
     tagList(
       tags$script(HTML(sprintf("
@@ -736,7 +737,7 @@ server <- function(input, output, session) {
       )
     )
   })
-
+  
   output$mode_indicator_inline <- renderUI({
     if (is.null(rv$current_sample)) {
       span(
@@ -748,7 +749,7 @@ server <- function(input, output, session) {
       total <- nrow(rv$classifications)
       classified <- sum(rv$classifications$class_name != "unclassified")
       pct <- round((classified / total) * 100)
-
+      
       # Build mode switch button if both modes available
       switch_btn <- if (rv$has_both_modes) {
         actionLink(
@@ -757,7 +758,7 @@ server <- function(input, output, session) {
           style = "margin-left: 10px;"
         )
       }
-
+      
       span(
         style = "font-size: 14px; color: white;",
         tags$span(
@@ -774,7 +775,7 @@ server <- function(input, output, session) {
     } else {
       # Show accuracy for validation mode
       stats <- calculate_stats()
-
+      
       # Build mode switch button if both modes available
       switch_btn <- if (rv$has_both_modes) {
         actionLink(
@@ -783,7 +784,7 @@ server <- function(input, output, session) {
           style = "margin-left: 10px;"
         )
       }
-
+      
       span(
         style = "font-size: 14px; color: white;",
         tags$span(
@@ -799,11 +800,11 @@ server <- function(input, output, session) {
       )
     }
   })
-
+  
   # Switch from annotation mode to validation mode
   observeEvent(input$switch_to_validation, {
     req(rv$current_sample, rv$has_both_modes)
-
+    
     sample_name <- rv$current_sample
     roi_path <- roi_path_map()[[sample_name]]
     if (is.null(roi_path)) {
@@ -811,11 +812,11 @@ server <- function(input, output, session) {
       return()
     }
     adc_path <- sub("\\.roi$", ".adc", roi_path)
-
+    
     # Find classification source (CSV or classifier MAT)
     csv_path <- find_csv_file(sample_name)
     classifier_mat_path <- classifier_mat_files()[[sample_name]]
-
+    
     if (!is.null(csv_path)) {
       classifications <- load_from_csv(csv_path)
       showNotification("Switched to Validation mode (CSV)", type = "message")
@@ -830,7 +831,7 @@ server <- function(input, output, session) {
       showNotification("No classification data available", type = "warning")
       return()
     }
-
+    
     rv$original_classifications <- classifications
     rv$classifications <- classifications
     rv$is_annotation_mode <- FALSE
@@ -838,7 +839,7 @@ server <- function(input, output, session) {
     rv$selected_images <- character()
     rv$current_page <- 1
     rv$changes_log <- create_empty_changes_log()
-
+    
     # Update class filter dropdown
     available_classes <- sort(unique(classifications$class_name))
     unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
@@ -849,11 +850,11 @@ server <- function(input, output, session) {
                       choices = c("All" = "all", setNames(available_classes, display_names)),
                       selected = "all")
   })
-
+  
   # Switch from validation mode to annotation mode
   observeEvent(input$switch_to_annotation, {
     req(rv$current_sample, rv$has_both_modes)
-
+    
     sample_name <- rv$current_sample
     roi_path <- roi_path_map()[[sample_name]]
     if (is.null(roi_path)) {
@@ -862,11 +863,11 @@ server <- function(input, output, session) {
     }
     adc_path <- sub("\\.roi$", ".adc", roi_path)
     annotation_mat_path <- file.path(config$output_folder, paste0(sample_name, ".mat"))
-
+    
     if (file.exists(annotation_mat_path)) {
       roi_dims <- read_roi_dimensions(adc_path)
       classifications <- load_from_mat(annotation_mat_path, sample_name, rv$class2use, roi_dims)
-
+      
       rv$original_classifications <- classifications
       rv$classifications <- classifications
       rv$is_annotation_mode <- TRUE
@@ -874,7 +875,7 @@ server <- function(input, output, session) {
       rv$selected_images <- character()
       rv$current_page <- 1
       rv$changes_log <- create_empty_changes_log()
-
+      
       # Update class filter dropdown
       available_classes <- sort(unique(classifications$class_name))
       unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
@@ -884,22 +885,22 @@ server <- function(input, output, session) {
       updateSelectInput(session, "class_filter",
                         choices = c("All" = "all", setNames(available_classes, display_names)),
                         selected = "all")
-
+      
       showNotification("Switched to Manual annotation mode", type = "message")
     } else {
       showNotification("No manual annotation file found", type = "warning")
     }
   })
-
+  
   # ============================================================================
   # Class List Loading
   # ============================================================================
-
+  
   # Try to load class2use file on startup (from persisted path or default locations)
   observe({
     # Skip if we've already loaded a class list from a file
     if (!is.null(rv$class2use_path)) return()
-
+    
     # Only load from persisted settings path (no auto-loading from root directory)
     class2use_path <- saved_settings$class2use_path
     # Validate: must be non-null, non-NA, non-empty single string
@@ -907,24 +908,24 @@ server <- function(input, output, session) {
         isTRUE(is.na(class2use_path)) || !nzchar(class2use_path)) {
       return()  # Start with empty class list
     }
-
+    
     path_to_try <- class2use_path
     if (file.exists(path_to_try)) {
       tryCatch({
         classes <- load_class_list(path_to_try)
-
+        
         if (!"unclassified" %in% classes) {
           classes <- c("unclassified", classes)
         }
-
+        
         rv$class2use <- classes
         rv$class2use_path <- path_to_try
-
+        
         sorted_classes <- sort(rv$class2use)
         updateSelectizeInput(session, "new_class_quick",
                              choices = sorted_classes,
                              selected = character(0))
-
+        
         showNotification(
           paste("Auto-loaded", length(rv$class2use), "classes from", basename(path_to_try)),
           type = "message"
@@ -934,26 +935,26 @@ server <- function(input, output, session) {
       })
     }
   })
-
+  
   # Load uploaded class2use file (from settings modal)
   observeEvent(input$class2use_file, {
     req(input$class2use_file)
-
+    
     tryCatch({
       classes <- load_class_list(input$class2use_file$datapath)
-
+      
       if (!"unclassified" %in% classes) {
         classes <- c("unclassified", classes)
       }
-
+      
       rv$class2use <- classes
-
+      
       # Copy to user config directory so it survives package reinstalls
       ext <- tools::file_ext(input$class2use_file$name)
       persistent_path <- file.path(get_config_dir(), paste0("class2use_saved.", ext))
       file.copy(input$class2use_file$datapath, persistent_path, overwrite = TRUE)
       rv$class2use_path <- persistent_path
-
+      
       # Persist settings immediately
       persist_settings(list(
         csv_folder = config$csv_folder,
@@ -963,14 +964,14 @@ server <- function(input, output, session) {
         use_threshold = config$use_threshold,
         class2use_path = persistent_path
       ))
-
+      
       sorted_classes <- sort(rv$class2use)
       updateSelectizeInput(session, "new_class_quick",
                            choices = sorted_classes,
                            selected = character(0))
-
+      
       showNotification(paste("Loaded", length(rv$class2use), "classes"), type = "message")
-
+      
       # Force filter update to work around Shiny reactivity quirk
       update_month_choices()
       update_sample_list()
@@ -978,37 +979,37 @@ server <- function(input, output, session) {
       showNotification(paste("Error loading class list:", e$message), type = "error")
     })
   })
-
+  
   # ============================================================================
   # Sample Discovery and Selection
   # ============================================================================
-
+  
   # Helper: populate reactive values from file index data
   populate_from_index <- function(index_data) {
     sample_names <- as.character(index_data$sample_names)
     if (length(sample_names) == 0) return(FALSE)
-
+    
     safe_char <- function(x) as.character(if (is.null(x)) character() else x)
     safe_list <- function(x) as.list(if (is.null(x)) list() else x)
-
+    
     all_samples(sample_names)
     classified_samples(safe_char(index_data$classified_samples))
     annotated_samples(safe_char(index_data$annotated_samples))
     roi_path_map(safe_list(index_data$roi_path_map))
     csv_path_map(safe_list(index_data$csv_path_map))
     classifier_mat_files(safe_list(index_data$classifier_mat_files))
-
+    
     years <- unique(substr(sample_names, 2, 5))
     years <- sort(years)
     first_year <- if (length(years) > 0) years[1] else "all"
     updateSelectInput(session, "year_select",
                       choices = c("All" = "all", setNames(years, years)),
                       selected = first_year)
-
+    
     last_sync_time(index_data$timestamp)
     TRUE
   }
-
+  
   # Scan for available ROI files and classification files (CSV and MAT)
   # Uses disk cache for fast startup on subsequent launches
   observe({
@@ -1016,31 +1017,31 @@ server <- function(input, output, session) {
     roi_folder <- config$roi_folder
     csv_folder <- config$csv_folder
     output_folder <- config$output_folder
-
+    
     # Validate folder paths before using them
     roi_valid <- !is.null(roi_folder) && length(roi_folder) == 1 && !isTRUE(is.na(roi_folder)) && nzchar(roi_folder) && dir.exists(roi_folder)
-
+    
     if (!roi_valid) return()
-
+    
     # Try loading from cache first
     cached <- load_file_index()
     cache_valid <- !is.null(cached) &&
       identical(cached$roi_folder, roi_folder) &&
       identical(cached$csv_folder, csv_folder) &&
       identical(cached$output_folder, output_folder)
-
+    
     if (cache_valid) {
       populate_from_index(cached)
       return()
     }
-
+    
     # When auto-sync is disabled, load stale cache if available
     auto_sync <- config$auto_sync
     if (!isTRUE(auto_sync) && !is.null(cached)) {
       populate_from_index(cached)
       return()
     }
-
+    
     # Full scan with progress indicator (delegates to rescan_file_index)
     withProgress(message = "Syncing folders...", value = 0, {
       result <- rescan_file_index(
@@ -1050,12 +1051,12 @@ server <- function(input, output, session) {
         verbose = FALSE
       )
     })
-
+    
     if (!is.null(result)) {
       populate_from_index(result)
     }
   })
-
+  
   # Update cache when annotations are saved (so status is correct after restart)
   observe({
     annotated <- annotated_samples()
@@ -1066,7 +1067,7 @@ server <- function(input, output, session) {
       save_file_index(cached)
     }
   })
-
+  
   # Rescan button: invalidate cache and trigger fresh scan
   observeEvent(input$rescan_folders, {
     cache_path <- get_file_index_path()
@@ -1075,29 +1076,29 @@ server <- function(input, output, session) {
     }
     rescan_trigger(rescan_trigger() + 1)
   })
-
+  
   # Helper function to update month choices based on year selection
   update_month_choices <- function() {
     samples <- all_samples()
     if (length(samples) == 0) return()
-
+    
     year_val <- input$year_select
-
+    
     if (!is.null(year_val) && year_val != "all") {
       # Filter to selected year
       year_pattern <- paste0("^D", year_val)
       year_samples <- samples[grepl(year_pattern, samples)]
-
+      
       # Extract months (characters 6-7 of sample name: DYYYYMMDD...)
       months <- unique(substr(year_samples, 6, 7))
       months <- sort(months)
-
+      
       # Create month names
       month_names <- c("01" = "Jan", "02" = "Feb", "03" = "Mar", "04" = "Apr",
                        "05" = "May", "06" = "Jun", "07" = "Jul", "08" = "Aug",
                        "09" = "Sep", "10" = "Oct", "11" = "Nov", "12" = "Dec")
       month_labels <- month_names[months]
-
+      
       # Auto-select first month for better UX with large sample lists
       first_month <- if (length(months) > 0) months[1] else "all"
       updateSelectInput(session, "month_select",
@@ -1109,30 +1110,30 @@ server <- function(input, output, session) {
                         selected = "all")
     }
   }
-
+  
   # Helper function to update sample list based on filters
   update_sample_list <- function() {
     samples <- all_samples()
     if (length(samples) == 0) return()
-
+    
     year_val <- input$year_select
     month_val <- input$month_select
     status_val <- input$sample_status_filter
     classified <- classified_samples()
     annotated <- annotated_samples()
-
+    
     # Filter by year
     if (!is.null(year_val) && year_val != "all") {
       year_pattern <- paste0("^D", year_val)
       samples <- samples[grepl(year_pattern, samples)]
     }
-
+    
     # Filter by month
     if (!is.null(month_val) && month_val != "all") {
       month_pattern <- paste0("^D\\d{4}", month_val)
       samples <- samples[grepl(month_pattern, samples)]
     }
-
+    
     # Filter by classification status
     if (!is.null(status_val)) {
       if (status_val == "classified") {
@@ -1146,9 +1147,9 @@ server <- function(input, output, session) {
         samples <- samples[samples %in% annotated]
       }
     }
-
+    
     samples <- sort(samples)
-
+    
     if (length(samples) > 0) {
       is_annotated <- samples %in% annotated
       is_classified <- samples %in% classified
@@ -1171,50 +1172,114 @@ server <- function(input, output, session) {
     } else {
       choices <- character(0)
     }
-
+    
+    # Determine which sample should be selected:
+    # 1. Use pending_sample_select if set (from navigation buttons)
+    # 2. Otherwise use rv$current_sample (the loaded sample)
+    # 3. Otherwise no selection
+    current_selection <- if (!is.null(rv$pending_sample_select)) {
+      rv$pending_sample_select
+    } else {
+      rv$current_sample
+    }
+    
+    selected_value <- if (!is.null(current_selection) && current_selection %in% samples) {
+      current_selection
+    } else {
+      character(0)  # No selection if current sample not in filtered list
+    }
+    
+    # Clear the pending selection after using it
+    rv$pending_sample_select <- NULL
+    
     # Update sample dropdown with server-side processing for large datasets
     updateSelectizeInput(session, "sample_select", choices = choices,
+                         selected = selected_value,
                          options = list(placeholder = "Select sample..."),
                          server = TRUE)
   }
-
+  
+  # Update the display text for current sample in dropdown to show pencil symbol
+  # Uses JavaScript to modify just the displayed text without rebuilding dropdown
+  update_current_sample_status <- function(sample_name) {
+    classified <- classified_samples()
+    annotated <- annotated_samples()
+    
+    has_manual <- sample_name %in% annotated
+    has_classified <- sample_name %in% classified
+    
+    # Determine the new display suffix
+    new_suffix <- if (has_manual && has_classified) {
+      "\u270E\u2713"  # ✎✓ Both
+      
+    } else if (has_manual) {
+      "\u270E"        # ✎ Pencil
+    } else if (has_classified) {
+      "\u2713"        # ✓ Checkmark
+    } else {
+      "*"             # Asterisk
+    }
+    
+    new_display <- paste0(sample_name, new_suffix)
+    
+    # Use JavaScript to update the selectize display
+    shinyjs::runjs(sprintf(
+      "var $select = $('#sample_select').selectize();
+     if ($select.length && $select[0].selectize) {
+       var selectize = $select[0].selectize;
+       var currentVal = selectize.getValue();
+       if (currentVal === '%s') {
+         // Update the option's label
+         var option = selectize.options[currentVal];
+         if (option) {
+           option.label = '%s';
+           selectize.updateOption(currentVal, option);
+           // Also update the displayed item
+           selectize.$control.find('.item').text('%s');
+         }
+       }
+     }",
+      sample_name, new_display, new_display
+    ))
+  }
+  
   # Simple observeEvent handlers that call the helper functions
   # These are more robust than using list() or reactive() in observeEvent
   observeEvent(input$year_select, {
     update_month_choices()
     update_sample_list()
   }, ignoreInit = TRUE, ignoreNULL = TRUE)
-
+  
   observeEvent(input$month_select, {
     update_sample_list()
   }, ignoreInit = TRUE, ignoreNULL = TRUE)
-
+  
   observeEvent(input$sample_status_filter, {
     update_sample_list()
   }, ignoreInit = TRUE, ignoreNULL = TRUE)
-
+  
   # Also trigger on sample list changes (when paths change)
   observeEvent(all_samples(), {
     update_month_choices()
     update_sample_list()
   }, ignoreInit = FALSE, ignoreNULL = TRUE)
-
+  
   # Helper function to get filtered sample list
   get_filtered_samples <- function() {
     samples <- all_samples()
     classified <- classified_samples()
     annotated <- annotated_samples()
-
+    
     if (!is.null(input$year_select) && input$year_select != "all") {
       year_pattern <- paste0("^D", input$year_select)
       samples <- samples[grepl(year_pattern, samples)]
     }
-
+    
     if (!is.null(input$month_select) && input$month_select != "all") {
       month_pattern <- paste0("^D\\d{4}", input$month_select)
       samples <- samples[grepl(month_pattern, samples)]
     }
-
+    
     if (!is.null(input$sample_status_filter)) {
       if (input$sample_status_filter == "classified") {
         samples <- samples[samples %in% classified & !samples %in% annotated]
@@ -1224,26 +1289,27 @@ server <- function(input, output, session) {
         samples <- samples[samples %in% annotated]
       }
     }
-
+    
     sort(samples)
   }
-
+  
   # Random sample selection
   observeEvent(input$random_sample, {
     samples <- get_filtered_samples()
-
+    
     if (length(samples) > 0) {
       random_sample <- sample(samples, 1)
+      rv$pending_sample_select <- random_sample
       updateSelectizeInput(session, "sample_select", selected = random_sample)
     } else {
       showNotification("No samples match current filters", type = "warning")
     }
   })
-
+  
   # ============================================================================
   # Helper: Find classification file (CSV or classifier MAT)
   # ============================================================================
-
+  
   find_csv_file <- function(sample_name) {
     csv_map <- csv_path_map()
     path <- csv_map[[sample_name]]
@@ -1252,7 +1318,7 @@ server <- function(input, output, session) {
     }
     return(NULL)
   }
-
+  
   # Find classifier MAT file for a sample
   find_classifier_mat <- function(sample_name) {
     mat_map <- classifier_mat_files()
@@ -1261,11 +1327,11 @@ server <- function(input, output, session) {
     }
     return(NULL)
   }
-
+  
   # ============================================================================
   # Sample Loading
   # ============================================================================
-
+  
   # Save current sample to cache with LRU eviction
   save_to_cache <- function() {
     if (!is.null(rv$current_sample) && !is.null(rv$classifications)) {
@@ -1276,19 +1342,19 @@ server <- function(input, output, session) {
         oldest_sample <- names(rv$session_cache)[1]
         rv$session_cache[[oldest_sample]] <- NULL
       }
-
+      
       rv$session_cache[[rv$current_sample]] <- list(
         classifications = rv$classifications,
         original_classifications = rv$original_classifications,
         changes_log = rv$changes_log,
         is_annotation_mode = rv$is_annotation_mode
       )
-
+      
       # Auto-save annotations
       tryCatch({
         roi_path_for_save <- roi_path_map()[[rv$current_sample]]
         adc_folder_for_save <- if (!is.null(roi_path_for_save)) dirname(roi_path_for_save) else NULL
-        save_sample_annotations(
+        saved <- save_sample_annotations(
           sample_name = rv$current_sample,
           classifications = rv$classifications,
           original_classifications = rv$original_classifications,
@@ -1301,22 +1367,30 @@ server <- function(input, output, session) {
           annotator = input$annotator_name,
           adc_folder = adc_folder_for_save
         )
+        # Only update annotated samples list if changes were actually saved
+        if (isTRUE(saved)) {
+          current_annotated <- annotated_samples()
+          if (!rv$current_sample %in% current_annotated) {
+            annotated_samples(c(current_annotated, rv$current_sample))
+            update_current_sample_status(rv$current_sample)
+          }
+        }
       }, error = function(e) {
         showNotification(paste("Auto-save failed:", e$message), type = "error")
       })
     }
   }
-
+  
   # Main sample loading function
   load_sample_data <- function(sample_name) {
     req(rv$class2use)
-
+    
     # Find classification files
     csv_path <- find_csv_file(sample_name)
     classifier_mat_path <- find_classifier_mat(sample_name)
     has_csv <- !is.null(csv_path)
     has_classifier_mat <- !is.null(classifier_mat_path)
-
+    
     # Use discovered paths from scan (supports any folder structure)
     roi_path <- roi_path_map()[[sample_name]]
     if (is.null(roi_path) || !file.exists(roi_path)) {
@@ -1324,21 +1398,24 @@ server <- function(input, output, session) {
       return(FALSE)
     }
     adc_path <- sub("\\.roi$", ".adc", roi_path)
-
+    
     # Check session cache first
     if (sample_name %in% names(rv$session_cache)) {
       return(load_from_cache(sample_name, roi_path))
     }
-
+    
     tryCatch({
       annotation_mat_path <- file.path(config$output_folder, paste0(sample_name, ".mat"))
       has_existing_annotation <- file.exists(annotation_mat_path)
       has_classification <- has_csv || has_classifier_mat
-
+      
       # Track if sample has both modes available
       rv$has_both_modes <- has_existing_annotation && has_classification
       rv$using_manual_mode <- has_existing_annotation  # Default to manual if available
-
+      
+      # Variable to hold mode message for notification (shown after filtering)
+      mode_message <- NULL
+      
       # Priority: Manual annotation > Classification > New annotation
       if (has_existing_annotation) {
         # ANNOTATION MODE - from existing manual annotation (priority when both exist)
@@ -1346,60 +1423,50 @@ server <- function(input, output, session) {
           showNotification(paste("ADC file not found:", adc_path), type = "error")
           return(FALSE)
         }
-
+        
         roi_dims <- read_roi_dimensions(adc_path)
         classifications <- load_from_mat(annotation_mat_path, sample_name, rv$class2use, roi_dims)
         rv$is_annotation_mode <- TRUE
-
-        n_classified <- sum(classifications$class_name != "unclassified")
-        mode_msg <- if (rv$has_both_modes) "Manual mode (switch available)" else "Resumed"
-        showNotification(
-          paste0(mode_msg, ": ", n_classified, " of ", nrow(classifications), " classified"),
-          type = "message"
-        )
-
+        
+        mode_message <- if (rv$has_both_modes) "Manual mode (switch available)" else "Resumed"
+        
       } else if (has_csv) {
         # VALIDATION MODE - from CSV
         classifications <- load_from_csv(csv_path)
         rv$is_annotation_mode <- FALSE
-        showNotification(paste("Validation mode (CSV):", nrow(classifications), "images"),
-                         type = "message")
-
+        mode_message <- "Validation mode (CSV)"
+        
       } else if (has_classifier_mat) {
         # VALIDATION MODE - from classifier MAT file
         if (!file.exists(adc_path)) {
           showNotification(paste("ADC file not found:", adc_path), type = "error")
           return(FALSE)
         }
-
+        
         roi_dims <- read_roi_dimensions(adc_path)
         classifications <- load_from_classifier_mat(
           classifier_mat_path, sample_name, rv$class2use, roi_dims,
           use_threshold = config$use_threshold
         )
         rv$is_annotation_mode <- FALSE
-
+        
         threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
-        showNotification(
-          paste0("Validation mode (MAT, ", threshold_text, "): ", nrow(classifications), " images"),
-          type = "message"
-        )
-
+        mode_message <- paste0("Validation mode (MAT, ", threshold_text, ")")
+        
       } else {
         # NEW ANNOTATION
         if (!file.exists(adc_path)) {
           showNotification(paste("ADC file not found:", adc_path), type = "error")
           return(FALSE)
         }
-
+        
         roi_dims <- read_roi_dimensions(adc_path)
         classifications <- create_new_classifications(sample_name, roi_dims)
         rv$is_annotation_mode <- TRUE
-
-        showNotification(paste("New annotation:", nrow(classifications), "images"),
-                         type = "message")
+        
+        mode_message <- "New annotation"
       }
-
+      
       # Store state
       rv$original_classifications <- classifications
       rv$classifications <- classifications
@@ -1407,7 +1474,7 @@ server <- function(input, output, session) {
       rv$selected_images <- character()
       rv$current_page <- 1
       rv$changes_log <- create_empty_changes_log()
-
+      
       # Update class filter with warnings for unmatched classes
       available_classes <- sort(unique(classifications$class_name))
       unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
@@ -1416,18 +1483,18 @@ server <- function(input, output, session) {
       })
       updateSelectInput(session, "class_filter",
                         choices = c("All" = "all", setNames(available_classes, display_names)))
-
-      # Extract images
-      extract_sample_images(sample_name, roi_path, classifications)
-
+      
+      # Extract images (notification shown after filtering with correct count)
+      extract_sample_images(sample_name, roi_path, classifications, mode_message = mode_message)
+      
       return(TRUE)
-
+      
     }, error = function(e) {
       showNotification(paste("Error loading sample:", e$message), type = "error")
       return(FALSE)
     })
   }
-
+  
   # Load from session cache
   load_from_cache <- function(sample_name, roi_path) {
     cached <- rv$session_cache[[sample_name]]
@@ -1437,7 +1504,7 @@ server <- function(input, output, session) {
     rv$current_sample <- sample_name
     rv$selected_images <- character()
     rv$is_annotation_mode <- cached$is_annotation_mode
-
+    
     available_classes <- sort(unique(rv$classifications$class_name))
     unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
     display_names <- sapply(available_classes, function(cls) {
@@ -1445,16 +1512,16 @@ server <- function(input, output, session) {
     })
     updateSelectInput(session, "class_filter",
                       choices = c("All" = "all", setNames(available_classes, display_names)))
-
+    
     if (!is.null(rv$temp_png_folder) && dir.exists(rv$temp_png_folder)) {
       unlink(rv$temp_png_folder, recursive = TRUE)
     }
-
+    
     rv$temp_png_folder <- tempfile(pattern = "ifcb_validator_")
     dir.create(rv$temp_png_folder, recursive = TRUE)
-
+    
     roi_numbers <- as.numeric(gsub(".*_(\\d+)\\.png$", "\\1", rv$classifications$file_name))
-
+    
     withProgress(message = "Extracting images...", {
       ifcb_extract_pngs(
         roi_file = roi_path,
@@ -1463,23 +1530,23 @@ server <- function(input, output, session) {
         verbose = FALSE
       )
     })
-
+    
     n_changes <- nrow(rv$changes_log)
     showNotification(paste("Restored from cache:", n_changes, "changes"), type = "message")
     return(TRUE)
   }
-
+  
   # Extract images from ROI file
-  extract_sample_images <- function(sample_name, roi_path, classifications) {
+  extract_sample_images <- function(sample_name, roi_path, classifications, mode_message = NULL) {
     if (!is.null(rv$temp_png_folder) && dir.exists(rv$temp_png_folder)) {
       unlink(rv$temp_png_folder, recursive = TRUE)
     }
-
+    
     rv$temp_png_folder <- tempfile(pattern = "ifcb_validator_")
     dir.create(rv$temp_png_folder, recursive = TRUE)
-
+    
     roi_numbers <- as.numeric(gsub(".*_(\\d+)\\.png$", "\\1", classifications$file_name))
-
+    
     withProgress(message = "Extracting images...", {
       ifcb_extract_pngs(
         roi_file = roi_path,
@@ -1488,16 +1555,16 @@ server <- function(input, output, session) {
         verbose = FALSE
       )
     })
-
+    
     # Filter out empty triggers
     extracted_folder <- file.path(rv$temp_png_folder, sample_name)
     if (dir.exists(extracted_folder)) {
       extracted_files <- list.files(extracted_folder, pattern = "\\.png$")
-
+      
       rv$classifications <- rv$classifications[rv$classifications$file_name %in% extracted_files, ]
       rv$original_classifications <- rv$original_classifications[
         rv$original_classifications$file_name %in% extracted_files, ]
-
+      
       available_classes <- sort(unique(rv$classifications$class_name))
       unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
       display_names <- sapply(available_classes, function(cls) {
@@ -1506,10 +1573,15 @@ server <- function(input, output, session) {
       updateSelectInput(session, "class_filter",
                         choices = c("All" = "all", setNames(available_classes, display_names)))
     }
+    
+    # Show notification with correct count AFTER filtering
+    if (!is.null(mode_message)) {
+      actual_count <- nrow(rv$classifications)
+      showNotification(paste0(mode_message, ": ", actual_count, " images"), type = "message")
+    }
   }
-
+  
   # Helper to disable/enable navigation buttons during loading
-
   disable_nav_buttons <- function() {
     shinyjs::disable("load_sample")
     shinyjs::disable("prev_sample")
@@ -1517,7 +1589,7 @@ server <- function(input, output, session) {
     shinyjs::disable("random_sample")
     shinyjs::disable("save_btn")
   }
-
+  
   enable_nav_buttons <- function() {
     shinyjs::enable("load_sample")
     shinyjs::enable("prev_sample")
@@ -1525,7 +1597,7 @@ server <- function(input, output, session) {
     shinyjs::enable("random_sample")
     shinyjs::enable("save_btn")
   }
-
+  
   # Load sample button
   observeEvent(input$load_sample, {
     req(input$sample_select, input$sample_select != "")
@@ -1536,16 +1608,17 @@ server <- function(input, output, session) {
       enable_nav_buttons()
     })
     save_to_cache()
+    rv$pending_sample_select <- input$sample_select
     load_sample_data(input$sample_select)
   })
-
+  
   # Reset to home (click on title)
   observeEvent(input$reset_to_home, {
     # Save current work if there's a sample loaded
     if (!is.null(rv$current_sample)) {
       save_to_cache()
     }
-
+    
     # Reset all sample-related state
     rv$current_sample <- NULL
     rv$classifications <- NULL
@@ -1554,14 +1627,14 @@ server <- function(input, output, session) {
     rv$selected_images <- character(0)
     rv$is_annotation_mode <- FALSE
     rv$has_both_modes <- FALSE
-
+    
     # Clear sample selection
     updateSelectizeInput(session, "sample_select", selected = "")
-
+    
     # Clear any displayed content via JavaScript
     shinyjs::runjs("$('.image-card').remove();")
   })
-
+  
   # Previous sample button
   observeEvent(input$prev_sample, {
     rv$is_loading <- TRUE
@@ -1573,22 +1646,24 @@ server <- function(input, output, session) {
     save_to_cache()
     samples <- get_filtered_samples()
     current_idx <- which(samples == rv$current_sample)
-
+    
     if (length(current_idx) == 0) {
       if (length(samples) > 0) {
         prev_sample <- samples[length(samples)]
+        rv$pending_sample_select <- prev_sample
         updateSelectizeInput(session, "sample_select", selected = prev_sample)
         load_sample_data(prev_sample)
       }
     } else if (current_idx > 1) {
       prev_sample <- samples[current_idx - 1]
+      rv$pending_sample_select <- prev_sample
       updateSelectizeInput(session, "sample_select", selected = prev_sample)
       load_sample_data(prev_sample)
     } else {
       showNotification("Already at first sample", type = "warning")
     }
   })
-
+  
   # Next sample button
   observeEvent(input$next_sample, {
     rv$is_loading <- TRUE
@@ -1600,26 +1675,28 @@ server <- function(input, output, session) {
     save_to_cache()
     samples <- get_filtered_samples()
     current_idx <- which(samples == rv$current_sample)
-
+    
     if (length(current_idx) == 0) {
       if (length(samples) > 0) {
         next_sample <- samples[1]
+        rv$pending_sample_select <- next_sample
         updateSelectizeInput(session, "sample_select", selected = next_sample)
         load_sample_data(next_sample)
       }
     } else if (current_idx < length(samples)) {
       next_sample <- samples[current_idx + 1]
+      rv$pending_sample_select <- next_sample
       updateSelectizeInput(session, "sample_select", selected = next_sample)
       load_sample_data(next_sample)
     } else {
       showNotification("No more samples in list", type = "warning")
     }
   })
-
+  
   # ============================================================================
   # Image Gallery
   # ============================================================================
-
+  
   # Register temp folder as session-specific resource path
   observe({
     req(rv$temp_png_folder)
@@ -1630,37 +1707,57 @@ server <- function(input, output, session) {
       rv$resource_path_name <- path_name
     }
   })
-
-  # Filter images by class (sorted by class name for grouping on consecutive pages)
+  
+  # Filter images by class (sorted appropriately for current mode)
   filtered_images <- reactive({
     req(rv$classifications)
-
+    
+    df <- rv$classifications
+    
     if (input$class_filter == "all") {
-      # Sort by class name so all images of a class appear together,
-      # then by file name for consistent ordering within each class
-      rv$classifications %>% arrange(class_name, file_name)
+      if (rv$is_annotation_mode) {
+        # In annotation mode: sort unclassified by area (largest first),
+        # then classified by class name
+        unclassified <- df %>%
+          filter(class_name == "unclassified") %>%
+          arrange(desc(roi_area))
+        
+        classified <- df %>%
+          filter(class_name != "unclassified") %>%
+          arrange(class_name, file_name)
+        
+        bind_rows(unclassified, classified)
+      } else {
+        # Validation mode: sort by class name, then file name
+        df %>% arrange(class_name, file_name)
+      }
     } else {
-      # When filtering by single class, just sort by file name
-      rv$classifications %>%
-        filter(class_name == input$class_filter) %>%
-        arrange(file_name)
+      # Single class filter
+      filtered <- df %>% filter(class_name == input$class_filter)
+      
+      if (rv$is_annotation_mode && input$class_filter == "unclassified") {
+        # Sort unclassified by area in annotation mode
+        filtered %>% arrange(desc(roi_area))
+      } else {
+        filtered %>% arrange(file_name)
+      }
     }
   })
-
+  
   # Pagination
   paginated_images <- reactive({
     req(filtered_images())
-
+    
     images <- filtered_images()
     per_page <- as.numeric(input$images_per_page)
     if (is.null(per_page)) per_page <- 100
-
+    
     total_pages <- ceiling(nrow(images) / per_page)
     current_page <- min(rv$current_page, max(1, total_pages))
-
+    
     start_idx <- (current_page - 1) * per_page + 1
     end_idx <- min(current_page * per_page, nrow(images))
-
+    
     list(
       images = images[start_idx:end_idx, , drop = FALSE],
       current_page = current_page,
@@ -1670,7 +1767,7 @@ server <- function(input, output, session) {
       end_idx = end_idx
     )
   })
-
+  
   output$page_info <- renderText({
     req(paginated_images())
     p <- paginated_images()
@@ -1678,45 +1775,45 @@ server <- function(input, output, session) {
             p$current_page, max(1, p$total_pages),
             p$start_idx, p$end_idx, p$total_images)
   })
-
+  
   observeEvent(input$prev_page, {
     if (rv$current_page > 1) rv$current_page <- rv$current_page - 1
   })
-
+  
   observeEvent(input$next_page, {
     req(paginated_images())
     if (rv$current_page < paginated_images()$total_pages) {
       rv$current_page <- rv$current_page + 1
     }
   })
-
+  
   observeEvent(input$class_filter, { rv$current_page <- 1 })
   observeEvent(input$images_per_page, { rv$current_page <- 1 })
-
+  
   # Render gallery
   output$image_gallery <- renderUI({
     req(paginated_images())
     req(rv$temp_png_folder)
     req(rv$current_sample)
-
+    
     p <- paginated_images()
     images <- p$images
-
+    
     if (nrow(images) == 0) {
       return(div(class = "alert alert-info", "No images to display"))
     }
-
+    
     classes <- sort(unique(images$class_name))
-
+    
     class_panels <- lapply(classes, function(cls) {
       class_images <- images %>% filter(class_name == cls)
-
+      
       image_cards <- lapply(seq_len(nrow(class_images)), function(i) {
         img_row <- class_images[i, ]
         img_file <- img_row$file_name
-
+        
         is_selected <- img_file %in% rv$selected_images
-
+        
         was_relabeled <- FALSE
         original_class <- ""
         orig_idx <- which(rv$original_classifications$file_name == img_file)
@@ -1724,7 +1821,7 @@ server <- function(input, output, session) {
           original_class <- rv$original_classifications$class_name[orig_idx]
           was_relabeled <- (original_class != img_row$class_name)
         }
-
+        
         border_style <- if (is_selected) {
           "border: 3px solid #007bff;"
         } else if (was_relabeled) {
@@ -1732,15 +1829,15 @@ server <- function(input, output, session) {
         } else {
           "border: 1px solid #ddd;"
         }
-
+        
         card_class <- if (is_selected) "image-card selected" else "image-card"
-
+        
         # Sanitize file names to prevent XSS
         safe_img_file <- htmltools::htmlEscape(img_file)
         safe_sample <- htmltools::htmlEscape(rv$current_sample)
         resource_path <- if (!is.null(rv$resource_path_name)) rv$resource_path_name else "temp_images"
         img_src <- sprintf("%s/%s/%s", resource_path, safe_sample, safe_img_file)
-
+        
         div(
           class = card_class,
           `data-img` = safe_img_file,
@@ -1748,7 +1845,7 @@ server <- function(input, output, session) {
           style = paste0("display: inline-block; margin: 5px; padding: 5px; ",
                          border_style, " border-radius: 5px; cursor: pointer; ",
                          "background-color: ", if(is_selected) "#e7f1ff" else "white", ";"),
-
+          
           tags$img(
             src = img_src,
             style = "max-height: 120px; display: block;",
@@ -1757,7 +1854,7 @@ server <- function(input, output, session) {
           div(style = "width: 100px; height: 80px; background: #f0f0f0; display: none;
                        line-height: 80px; text-align: center; font-size: 11px;",
               "Not found"),
-
+          
           div(
             style = "font-size: 10px; text-align: center; margin-top: 3px;",
             gsub(".*_(\\d+)\\.png$", "ROI \\1", img_file),
@@ -1771,9 +1868,9 @@ server <- function(input, output, session) {
           )
         )
       })
-
+      
       total_in_class <- sum(filtered_images()$class_name == cls)
-
+      
       # Check if this class is unmatched (not in class2use)
       is_unmatched <- !(cls %in% c(rv$class2use, "unclassified"))
       header_style <- if (is_unmatched) {
@@ -1789,7 +1886,7 @@ server <- function(input, output, session) {
       } else {
         cls
       }
-
+      
       div(
         style = "margin-bottom: 20px;",
         h5(style = header_style,
@@ -1801,14 +1898,14 @@ server <- function(input, output, session) {
         div(style = "display: flex; flex-wrap: wrap;", image_cards)
       )
     })
-
+    
     div(class_panels)
   })
-
+  
   # ============================================================================
   # Selection and Relabeling
   # ============================================================================
-
+  
   observeEvent(input$toggle_image, {
     img <- input$toggle_image$img
     if (img %in% rv$selected_images) {
@@ -1817,21 +1914,21 @@ server <- function(input, output, session) {
       rv$selected_images <- c(rv$selected_images, img)
     }
   })
-
+  
   observeEvent(input$drag_select, {
     imgs <- input$drag_select$images
     rv$selected_images <- unique(c(rv$selected_images, imgs))
   })
-
+  
   observeEvent(input$select_all, {
     req(filtered_images())
     rv$selected_images <- unique(c(rv$selected_images, filtered_images()$file_name))
   })
-
+  
   observeEvent(input$deselect_all, {
     rv$selected_images <- character()
   })
-
+  
   # Measure tool toggle
   observeEvent(input$measure_toggle, {
     rv$measure_mode <- !rv$measure_mode
@@ -1847,28 +1944,28 @@ server <- function(input, output, session) {
     # Send measure mode state to JavaScript
     session$sendCustomMessage("measureMode", rv$measure_mode)
   })
-
+  
   output$selected_count_inline <- renderText({
     n <- length(rv$selected_images)
     if (n > 0) paste0("(", n, " selected)")
   })
-
+  
   # Relabel function (uses immutable pattern)
   do_relabel <- function(new_class) {
     req(rv$classifications)
     req(length(rv$selected_images) > 0)
     req(new_class, new_class != "")
-
+    
     # Work with copies to avoid mutation issues with reactivity
     updated_classifications <- rv$classifications
     updated_changes_log <- rv$changes_log
     relabeled_count <- 0
-
+    
     for (img in rv$selected_images) {
       idx <- which(updated_classifications$file_name == img)
       if (length(idx) > 0) {
         old_class <- updated_classifications$class_name[idx]
-
+        
         if (old_class != new_class) {
           updated_changes_log <- rbind(updated_changes_log, data.frame(
             image = img,
@@ -1876,17 +1973,17 @@ server <- function(input, output, session) {
             new_class = new_class,
             stringsAsFactors = FALSE
           ))
-
+          
           updated_classifications$class_name[idx] <- new_class
           relabeled_count <- relabeled_count + 1
         }
       }
     }
-
+    
     # Single assignment to reactive values
     rv$classifications <- updated_classifications
     rv$changes_log <- updated_changes_log
-
+    
     available_classes <- sort(unique(rv$classifications$class_name))
     unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
     display_names <- sapply(available_classes, function(cls) {
@@ -1895,35 +1992,35 @@ server <- function(input, output, session) {
     updateSelectInput(session, "class_filter",
                       choices = c("All" = "all", setNames(available_classes, display_names)),
                       selected = input$class_filter)
-
+    
     showNotification(paste("Relabeled", relabeled_count, "images to", new_class), type = "message")
     rv$selected_images <- character()
   }
-
+  
   observeEvent(input$relabel_quick, {
     do_relabel(input$new_class_quick)
   })
-
+  
   # ============================================================================
   # Manual Save
   # ============================================================================
-
+  
   observeEvent(input$save_btn, {
     req(rv$classifications)
     req(rv$class2use)
     req(rv$current_sample)
     req(rv$class2use_path)
-
+    
     rv$is_loading <- TRUE
     disable_nav_buttons()
     on.exit({
       rv$is_loading <- FALSE
       enable_nav_buttons()
     })
-
+    
     annotator <- input$annotator_name
     if (is.null(annotator) || annotator == "") annotator <- "Unknown"
-
+    
     # Check for unmatched classes and warn
     current_classes <- unique(rv$classifications$class_name)
     unmatched <- setdiff(current_classes, c(rv$class2use, "unclassified"))
@@ -1935,19 +2032,19 @@ server <- function(input, output, session) {
         duration = 10
       )
     }
-
+    
     tryCatch({
       output_folder <- config$output_folder
       stats_folder <- file.path(config$output_folder, "validation_statistics")
       png_output_folder <- config$png_output_folder
-
+      
       if (!dir.exists(output_folder)) dir.create(output_folder, recursive = TRUE)
       if (!dir.exists(stats_folder)) dir.create(stats_folder, recursive = TRUE)
       if (!dir.exists(png_output_folder)) dir.create(png_output_folder, recursive = TRUE)
-
+      
       temp_annotate_folder <- tempfile(pattern = "ifcb_annotate_")
       dir.create(temp_annotate_folder, recursive = TRUE)
-
+      
       withProgress(message = "Copying images...", {
         copy_images_to_class_folders(
           classifications = rv$classifications,
@@ -1956,14 +2053,14 @@ server <- function(input, output, session) {
           output_folder = png_output_folder
         )
       })
-
+      
       roi_path <- roi_path_map()[[rv$current_sample]]
       adc_folder <- if (!is.null(roi_path)) dirname(roi_path) else NULL
       if (is.null(adc_folder)) {
         showNotification("Cannot find ROI data folder for this sample", type = "error")
         return()
       }
-
+      
       withProgress(message = "Saving MAT file...", {
         result <- ifcb_annotate_samples(
           png_folder = temp_annotate_folder,
@@ -1974,7 +2071,7 @@ server <- function(input, output, session) {
           remove_trailing_numbers = FALSE
         )
       })
-
+      
       save_validation_statistics(
         sample_name = rv$current_sample,
         classifications = rv$classifications,
@@ -1982,44 +2079,45 @@ server <- function(input, output, session) {
         stats_folder = stats_folder,
         annotator = annotator
       )
-
+      
       unlink(temp_annotate_folder, recursive = TRUE)
-
+      
       # Update annotated samples list to reflect new manual annotation
       current_annotated <- annotated_samples()
       if (!rv$current_sample %in% current_annotated) {
         annotated_samples(c(current_annotated, rv$current_sample))
+        update_current_sample_status(rv$current_sample)
       }
-
+      
       showNotification(paste("Saved to", config$output_folder), type = "message")
-
+      
     }, error = function(e) {
       showNotification(paste("Error saving:", e$message), type = "error")
     })
   })
-
+  
   # ============================================================================
   # Statistics
   # ============================================================================
-
+  
   calculate_stats <- reactive({
     req(rv$classifications)
     req(rv$original_classifications)
-
+    
     original <- rv$original_classifications
     current <- rv$classifications
-
+    
     comparison <- merge(
       original %>% select(file_name, original_class = class_name),
       current %>% select(file_name, validated_class = class_name),
       by = "file_name"
     )
-
+    
     comparison$correct <- comparison$original_class == comparison$validated_class
-
+    
     total <- nrow(comparison)
     correct <- sum(comparison$correct)
-
+    
     data.frame(
       sample = rv$current_sample,
       total_images = total,
@@ -2028,12 +2126,12 @@ server <- function(input, output, session) {
       accuracy = if (total > 0) correct / total else NA
     )
   })
-
+  
   output$summary_table <- renderDT({
     req(rv$classifications)
-
+    
     has_scores <- !all(is.na(rv$classifications$score))
-
+    
     if (has_scores) {
       summary_df <- rv$classifications %>%
         group_by(class_name) %>%
@@ -2045,7 +2143,7 @@ server <- function(input, output, session) {
           .groups = "drop"
         ) %>%
         arrange(class_name)
-
+      
       datatable(summary_df,
                 options = list(pageLength = 25),
                 colnames = c("Class", "Count", "Avg Score", "Min Score", "Max Score")) %>%
@@ -2055,15 +2153,15 @@ server <- function(input, output, session) {
         group_by(class_name) %>%
         summarise(count = n(), .groups = "drop") %>%
         arrange(class_name)
-
+      
       datatable(summary_df,
                 options = list(pageLength = 25),
                 colnames = c("Class", "Count"))
     }
   })
-
+  
   # Conditional content for Validation Statistics tab
-
+  
   output$validation_tab_content <- renderUI({
     if (is.null(rv$classifications)) {
       return(div(
@@ -2071,7 +2169,7 @@ server <- function(input, output, session) {
         "Load a sample to see statistics."
       ))
     }
-
+    
     if (rv$is_annotation_mode) {
       # In annotation mode, show a message that validation stats are not applicable
       div(
@@ -2134,11 +2232,11 @@ server <- function(input, output, session) {
       )
     }
   })
-
+  
   # Switch to validation mode from the tab link (reuse same logic as header button)
   observeEvent(input$switch_to_validation_from_tab, {
     req(rv$current_sample, rv$has_both_modes)
-
+    
     sample_name <- rv$current_sample
     roi_path <- roi_path_map()[[sample_name]]
     if (is.null(roi_path)) {
@@ -2146,11 +2244,11 @@ server <- function(input, output, session) {
       return()
     }
     adc_path <- sub("\\.roi$", ".adc", roi_path)
-
+    
     # Find classification source (CSV or classifier MAT)
     csv_path <- find_csv_file(sample_name)
     classifier_mat_path <- classifier_mat_files()[[sample_name]]
-
+    
     if (!is.null(csv_path)) {
       classifications <- load_from_csv(csv_path)
       showNotification("Switched to Validation mode (CSV)", type = "message")
@@ -2165,7 +2263,7 @@ server <- function(input, output, session) {
       showNotification("No classification data available", type = "warning")
       return()
     }
-
+    
     rv$original_classifications <- classifications
     rv$classifications <- classifications
     rv$is_annotation_mode <- FALSE
@@ -2173,7 +2271,7 @@ server <- function(input, output, session) {
     rv$selected_images <- character()
     rv$current_page <- 1
     rv$changes_log <- create_empty_changes_log()
-
+    
     # Update class filter dropdown
     available_classes <- sort(unique(classifications$class_name))
     unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
@@ -2184,22 +2282,22 @@ server <- function(input, output, session) {
                       choices = c("All" = "all", setNames(available_classes, display_names)),
                       selected = "all")
   }, ignoreInit = TRUE)
-
+  
   # Annotation progress (shown in annotation mode)
   output$annotation_progress <- renderText({
     req(rv$classifications)
     req(rv$is_annotation_mode)
-
+    
     current <- rv$classifications
-
+    
     class_counts <- current %>%
       group_by(class_name) %>%
       summarise(count = n()) %>%
       arrange(desc(count))
-
+    
     total <- nrow(current)
     classified <- sum(current$class_name != "unclassified")
-
+    
     lines <- c(
       sprintf("Total images: %d", total),
       sprintf("Classified: %d (%.1f%%)", classified, (classified / total) * 100),
@@ -2208,41 +2306,41 @@ server <- function(input, output, session) {
       "=== Classification Distribution ===",
       sprintf("%-40s %8s %10s", "Class", "Count", "Percent")
     )
-
+    
     for (i in seq_len(nrow(class_counts))) {
       lines <- c(lines, sprintf("%-40s %8d %9.1f%%",
                                 substr(class_counts$class_name[i], 1, 40),
                                 class_counts$count[i],
                                 (class_counts$count[i] / total) * 100))
     }
-
+    
     paste(lines, collapse = "\n")
   })
-
+  
   output$detailed_stats <- renderText({
     req(rv$classifications)
     req(rv$original_classifications)
     req(!rv$is_annotation_mode)  # Only show in validation mode
-
+    
     stats <- calculate_stats()
-
+    
     original <- rv$original_classifications
     current <- rv$classifications
-
+    
     comparison <- merge(
       original %>% select(file_name, original_class = class_name),
       current %>% select(file_name, validated_class = class_name),
       by = "file_name"
     )
-
+    
     comparison$correct <- comparison$original_class == comparison$validated_class
-
+    
     class_stats <- comparison %>%
       group_by(original_class) %>%
       # Note: calculate accuracy BEFORE summing correct, otherwise mean() uses the summed value
       summarise(total = n(), accuracy = mean(correct), n_correct = sum(correct)) %>%
       arrange(desc(total))
-
+    
     lines <- c(
       "=== Overall Statistics ===",
       sprintf("Total images: %d", stats$total_images),
@@ -2252,7 +2350,7 @@ server <- function(input, output, session) {
       "=== Per-Class Statistics ===",
       sprintf("%-40s %8s %8s %10s", "Class", "Total", "Correct", "Accuracy")
     )
-
+    
     for (i in seq_len(nrow(class_stats))) {
       lines <- c(lines, sprintf("%-40s %8d %8d %9.1f%%",
                                 substr(class_stats$original_class[i], 1, 40),
@@ -2260,33 +2358,33 @@ server <- function(input, output, session) {
                                 class_stats$n_correct[i],
                                 class_stats$accuracy[i] * 100))
     }
-
+    
     paste(lines, collapse = "\n")
   })
-
+  
   output$changes_table <- renderDT({
     req(rv$changes_log)
-
+    
     if (nrow(rv$changes_log) == 0) {
       return(datatable(data.frame(Message = "No changes made yet")))
     }
-
+    
     datatable(rv$changes_log,
               options = list(pageLength = 25),
               colnames = c("Image", "Original Class", "New Class"))
   })
-
+  
   # ============================================================================
   # Session Cleanup
   # ============================================================================
-
+  
   session$onSessionEnded(function() {
     # Capture all values upfront while session context is still valid
     tryCatch({
       current_sample <- isolate(rv$current_sample)
       current_classifications <- isolate(rv$classifications)
       resource_path_name <- isolate(rv$resource_path_name)
-
+      
       if (!is.null(current_sample) && !is.null(current_classifications)) {
         isolate({
           rv$session_cache[[current_sample]] <- list(
@@ -2297,7 +2395,7 @@ server <- function(input, output, session) {
           )
         })
       }
-
+      
       session_cache <- isolate(rv$session_cache)
       class2use_path <- isolate(rv$class2use_path)
       temp_png_folder <- isolate(rv$temp_png_folder)
@@ -2305,7 +2403,7 @@ server <- function(input, output, session) {
       png_output_folder <- isolate(config$png_output_folder)
       roi_folder <- isolate(config$roi_folder)
       annotator <- isolate(input$annotator_name)
-
+      
       # Save any unsaved samples with changes
       for (sample_name in names(session_cache)) {
         cached <- session_cache[[sample_name]]
@@ -2328,7 +2426,7 @@ server <- function(input, output, session) {
           })
         }
       }
-
+      
       # Clean up session-specific resource path
       if (!is.null(resource_path_name)) {
         tryCatch({
@@ -2337,7 +2435,7 @@ server <- function(input, output, session) {
           # Resource path may already be removed, ignore
         })
       }
-
+      
       # Clean up temporary files
       if (!is.null(temp_png_folder) && dir.exists(temp_png_folder)) {
         unlink(temp_png_folder, recursive = TRUE)

@@ -142,7 +142,7 @@ test_that("load_from_mat reads manual annotation file correctly", {
 
   expect_s3_class(classifications, "data.frame")
   expect_true(nrow(classifications) > 0)
-  expect_named(classifications, c("file_name", "class_name", "score", "roi_area"))
+  expect_named(classifications, c("file_name", "class_name", "score", "width", "height", "roi_area"))
   # All file names should contain sample name and .png
   expect_true(all(grepl(sample_name, classifications$file_name)))
   expect_true(all(grepl("\\.png$", classifications$file_name)))
@@ -182,7 +182,7 @@ test_that("load_from_classifier_mat reads classifier output correctly", {
 
   expect_s3_class(classifications, "data.frame")
   expect_true(nrow(classifications) > 0)
-  expect_named(classifications, c("file_name", "class_name", "score", "roi_area"))
+  expect_named(classifications, c("file_name", "class_name", "score", "width", "height", "roi_area"))
   # Class names should be strings
   expect_type(classifications$class_name, "character")
   # Should be sorted by area descending
