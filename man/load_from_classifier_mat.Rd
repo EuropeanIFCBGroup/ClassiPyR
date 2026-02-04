@@ -25,7 +25,7 @@ load_from_classifier_mat(
 (TBclass_above_threshold) or raw predictions (TBclass)}
 }
 \value{
-Data frame with columns: file_name, class_name, score, roi_area
+Data frame with columns: file_name, class_name, score, width, height, roi_area
 }
 \description{
 Reads a MATLAB classifier output file (from ifcb-analysis random forest

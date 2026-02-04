@@ -16,7 +16,7 @@ load_from_mat(mat_path, sample_name, class2use, roi_dimensions)
 \item{roi_dimensions}{Data frame from \code{\link{read_roi_dimensions}}}
 }
 \value{
-Data frame with columns: file_name, class_name, score, roi_area
+Data frame with columns: file_name, class_name, score, width, height, roi_area
 }
 \description{
 Reads a MATLAB annotation file (created by ClassiPyR or ifcb-analysis)

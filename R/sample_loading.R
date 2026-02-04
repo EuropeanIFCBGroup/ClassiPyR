@@ -41,6 +41,17 @@ load_from_csv <- function(csv_path) {
   # This matches iRfcb behavior where class folders may include numeric suffixes
   classifications$class_name <- sub("_\\d{3}$", "", classifications$class_name)
 
+  # Add placeholder dimensions if not present (will be populated later if needed)
+  if (!"width" %in% names(classifications)) {
+    classifications$width <- NA_real_
+  }
+  if (!"height" %in% names(classifications)) {
+    classifications$height <- NA_real_
+  }
+  if (!"roi_area" %in% names(classifications)) {
+    classifications$roi_area <- NA_real_
+  }
+
   classifications
 }
 
@@ -53,7 +64,7 @@ load_from_csv <- function(csv_path) {
 #' @param sample_name Sample name (e.g., "D20230101T120000_IFCB134")
 #' @param class2use Character vector of class names (from class2use file)
 #' @param roi_dimensions Data frame from \code{\link{read_roi_dimensions}}
-#' @return Data frame with columns: file_name, class_name, score, roi_area
+#' @return Data frame with columns: file_name, class_name, score, width, height, roi_area
 #' @export
 #' @examples
 #' \dontrun{
@@ -84,11 +95,25 @@ load_from_mat <- function(mat_path, sample_name, class2use, roi_dimensions) {
     return(class2use[idx])
   })
 
+  # Match ROI dimensions by roi_number (safe lookup with NA fallback)
+  roi_data <- lapply(roi_numbers, function(rn) {
+    idx <- which(roi_dimensions$roi_number == rn)
+    if (length(idx) > 0) {
+      list(width = roi_dimensions$width[idx],
+           height = roi_dimensions$height[idx],
+           area = roi_dimensions$area[idx])
+    } else {
+      list(width = NA_real_, height = NA_real_, area = NA_real_)
+    }
+  })
+
   classifications <- data.frame(
     file_name = sprintf("%s_%05d.png", sample_name, roi_numbers),
     class_name = class_names,
     score = NA_real_,
-    roi_area = roi_dimensions$area[roi_numbers],
+    width = vapply(roi_data, `[[`, numeric(1), "width"),
+    height = vapply(roi_data, `[[`, numeric(1), "height"),
+    roi_area = vapply(roi_data, `[[`, numeric(1), "area"),
     stringsAsFactors = FALSE
   )
 
@@ -107,7 +132,7 @@ load_from_mat <- function(mat_path, sample_name, class2use, roi_dimensions) {
 #' @param roi_dimensions Data frame from \code{\link{read_roi_dimensions}}
 #' @param use_threshold Logical, whether to use threshold-based classification
 #'   (TBclass_above_threshold) or raw predictions (TBclass)
-#' @return Data frame with columns: file_name, class_name, score, roi_area
+#' @return Data frame with columns: file_name, class_name, score, width, height, roi_area
 #' @export
 #' @examples
 #' \dontrun{
@@ -136,17 +161,25 @@ load_from_classifier_mat <- function(mat_path, sample_name, class2use, roi_dimen
   # Handle any NA values
   class_names[is.na(class_names)] <- "unclassified"
 
-  # Match ROI dimensions
-  roi_areas <- sapply(roi_numbers, function(rn) {
+  # Match ROI dimensions - extracting width, height, and area
+  roi_data <- lapply(roi_numbers, function(rn) {
     idx <- which(roi_dimensions$roi_number == rn)
-    if (length(idx) > 0) roi_dimensions$area[idx] else 1
+    if (length(idx) > 0) {
+      list(width = roi_dimensions$width[idx],
+           height = roi_dimensions$height[idx],
+           area = roi_dimensions$area[idx])
+    } else {
+      list(width = NA_real_, height = NA_real_, area = NA_real_)
+    }
   })
 
   classifications <- data.frame(
     file_name = sprintf("%s_%05d.png", sample_name, roi_numbers),
     class_name = class_names,
     score = NA_real_,
-    roi_area = roi_areas,
+    width = vapply(roi_data, `[[`, numeric(1), "width"),
+    height = vapply(roi_data, `[[`, numeric(1), "height"),
+    roi_area = vapply(roi_data, `[[`, numeric(1), "area"),
     stringsAsFactors = FALSE
   )
 
@@ -161,7 +194,7 @@ load_from_classifier_mat <- function(mat_path, sample_name, class2use, roi_dimen
 #'
 #' @param sample_name Sample name (e.g., "D20230101T120000_IFCB134")
 #' @param roi_dimensions Data frame from \code{\link{read_roi_dimensions}}
-#' @return Data frame with columns: file_name, class_name, score, roi_area
+#' @return Data frame with columns: file_name, class_name, score, width, height, roi_area
 #' @export
 #' @examples
 #' # Create mock ROI dimensions
@@ -183,6 +216,8 @@ create_new_classifications <- function(sample_name, roi_dimensions) {
     file_name = sprintf("%s_%05d.png", sample_name, roi_dimensions$roi_number),
     class_name = "unclassified",
     score = NA_real_,
+    width = roi_dimensions$width,
+    height = roi_dimensions$height,
     roi_area = roi_dimensions$area,
     stringsAsFactors = FALSE
   )
