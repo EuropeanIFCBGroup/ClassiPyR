@@ -11,6 +11,8 @@
 #' @importFrom jsonlite fromJSON
 #' @importFrom reticulate py_available
 #' @importFrom dplyr filter
+#' @importFrom DBI dbConnect dbDisconnect dbGetQuery dbWriteTable dbExecute
+#' @importFrom RSQLite SQLite
 NULL
 
 #' Get ClassiPyR configuration directory
@@ -31,6 +33,28 @@ get_config_dir <- function() {
     return(file.path(tempdir(), "ClassiPyR"))
   }
   tools::R_user_dir("ClassiPyR", "config")
+}
+
+#' Get default database directory
+#'
+#' Returns the default path for the SQLite annotations database. This is a
+#' persistent, local, user-level directory that survives package reinstalls.
+#' The database should be stored on a local filesystem, not on a network
+#' drive, because SQLite file locking is unreliable over network filesystems.
+#'
+#' @return Path to the default database directory
+#' @export
+#' @seealso \code{\link{get_db_path}} for the full database file path
+#' @examples
+#' # Get the default database directory
+#' db_dir <- get_default_db_dir()
+#' print(db_dir)
+get_default_db_dir <- function() {
+  # Check if running under R CMD check
+  if (nzchar(Sys.getenv("_R_CHECK_PACKAGE_NAME_", ""))) {
+    return(file.path(tempdir(), "ClassiPyR", "db"))
+  }
+  tools::R_user_dir("ClassiPyR", "data")
 }
 
 #' Get path to settings file
@@ -113,8 +137,11 @@ load_file_index <- function() {
 #'
 #' @param roi_folder Path to ROI data folder. If NULL, read from saved settings.
 #' @param csv_folder Path to classification folder (CSV/MAT). If NULL, read from saved settings.
-#' @param output_folder Path to output folder for annotations. If NULL, read from saved settings.
+#' @param output_folder Path to output folder for MAT annotations. If NULL, read from saved settings.
 #' @param verbose If TRUE, print progress messages. Default TRUE.
+#' @param db_folder Path to the database folder for SQLite annotations. If NULL,
+#'   read from saved settings; if not found in settings, defaults to
+#'   \code{\link{get_default_db_dir}()}.
 #' @return Invisibly returns the file index list, or NULL if roi_folder is invalid.
 #' @export
 #' @examples
@@ -133,9 +160,11 @@ load_file_index <- function() {
 #' # Rscript -e 'ClassiPyR::rescan_file_index()'
 #' }
 rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
-                              output_folder = NULL, verbose = TRUE) {
+                              output_folder = NULL, verbose = TRUE,
+                              db_folder = NULL) {
   # Read from saved settings if not provided
-  if (is.null(roi_folder) || is.null(csv_folder) || is.null(output_folder)) {
+  if (is.null(roi_folder) || is.null(csv_folder) || is.null(output_folder) ||
+      is.null(db_folder)) {
     settings_path <- get_settings_path()
     if (file.exists(settings_path)) {
       saved <- tryCatch(
@@ -145,7 +174,13 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
       if (is.null(roi_folder)) roi_folder <- saved$roi_folder
       if (is.null(csv_folder)) csv_folder <- saved$csv_folder
       if (is.null(output_folder)) output_folder <- saved$output_folder
+      if (is.null(db_folder)) db_folder <- saved$db_folder
     }
+  }
+
+  # Fall back to default db folder if still NULL
+  if (is.null(db_folder)) {
+    db_folder <- get_default_db_dir()
   }
 
   # Validate ROI folder
@@ -219,15 +254,24 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
     if (verbose) message("  Found ", length(classified), " classified samples")
   }
 
-  # Scan output folder for manual annotations
+  # Scan output folder for manual annotations (.mat files + SQLite database)
   annotated <- character()
   if (output_valid) {
     if (verbose) message("Scanning output folder: ", output_folder)
+
+    # Scan .mat files
     output_mat_files <- list.files(output_folder, pattern = "\\.mat$",
                                    full.names = FALSE)
     manual_mat_files <- output_mat_files[!grepl("_class", output_mat_files)]
-    annotated <- tools::file_path_sans_ext(manual_mat_files)
-    annotated <- annotated[annotated %in% sample_names]
+    annotated_mat <- tools::file_path_sans_ext(manual_mat_files)
+    annotated_mat <- annotated_mat[annotated_mat %in% sample_names]
+
+    # Scan SQLite database
+    db_path <- get_db_path(db_folder)
+    annotated_db <- list_annotated_samples_db(db_path)
+    annotated_db <- annotated_db[annotated_db %in% sample_names]
+
+    annotated <- unique(c(annotated_mat, annotated_db))
     if (verbose) message("  Found ", length(annotated), " annotated samples")
   }
 

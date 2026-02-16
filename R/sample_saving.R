@@ -3,31 +3,38 @@
 #' @importFrom iRfcb ifcb_annotate_samples
 NULL
 
-#' Save sample annotations to MAT and statistics files
+#' Save sample annotations
 #'
-#' Saves the current annotations for a sample, including:
-#' - MAT file compatible with ifcb-analysis (requires Python)
-#' - Validation statistics CSV files
-#' - PNG images organized by class
+#' Saves the current annotations for a sample. By default annotations are
+#' stored in a local SQLite database (\code{annotations.sqlite} in the database
+#' folder). Optionally, a MATLAB-compatible \code{.mat} file can also be
+#' written (requires Python + scipy).
 #'
 #' @param sample_name Sample name (e.g., "D20230101T120000_IFCB134")
 #' @param classifications Current classifications data frame
 #' @param original_classifications Original classifications data frame (for comparison)
 #' @param changes_log Changes log data frame from \code{\link{create_empty_changes_log}}
 #' @param temp_png_folder Path to temporary folder with extracted PNG images
-#' @param output_folder Output folder path for MAT files
+#' @param output_folder Output folder path for MAT files and statistics
 #' @param png_output_folder PNG output folder path (organized by class)
 #' @param roi_folder ROI folder path (for ADC file location, used as fallback)
 #' @param class2use_path Path to class2use file
+#' @param class2use Character vector of class names. When NULL (default), loaded
+#'   from \code{class2use_path}.
 #' @param annotator Annotator name for statistics
 #' @param adc_folder Direct path to the ADC folder. When provided, this is used
 #'   instead of constructing the path via \code{\link{get_sample_paths}}.
 #'   This supports non-standard folder structures.
+#' @param save_format One of \code{"sqlite"} (default), \code{"mat"}, or
+#'   \code{"both"}. Controls which backend(s) are written.
+#' @param db_folder Path to the database folder for SQLite storage. Defaults to
+#'   \code{\link{get_default_db_dir}()}. Should be a local filesystem path,
+#'   not a network drive.
 #' @return TRUE on success, FALSE on failure
 #' @export
 #' @examples
 #' \dontrun{
-#' # Save annotations for a sample
+#' # Save annotations for a sample (default: SQLite)
 #' success <- save_sample_annotations(
 #'   sample_name = "D20230101T120000_IFCB134",
 #'   classifications = current_classifications,
@@ -50,8 +57,11 @@ save_sample_annotations <- function(sample_name,
                                      png_output_folder,
                                      roi_folder,
                                      class2use_path,
+                                     class2use = NULL,
                                      annotator = "Unknown",
-                                     adc_folder = NULL) {
+                                     adc_folder = NULL,
+                                     save_format = "sqlite",
+                                     db_folder = get_default_db_dir()) {
 
   if (is.null(sample_name) || is.null(classifications) || is.null(class2use_path)) {
     return(FALSE)
@@ -76,11 +86,10 @@ save_sample_annotations <- function(sample_name,
       dir.create(png_output_folder, recursive = TRUE)
     }
 
-    # Create temporary PNG folder structure for ifcb_annotate_samples
+    # Copy images to class subfolders
     temp_annotate_folder <- tempfile(pattern = "ifcb_annotate_")
     dir.create(temp_annotate_folder, recursive = TRUE)
 
-    # Copy images to class subfolders
     copy_images_to_class_folders(
       classifications = classifications,
       src_folder = file.path(temp_png_folder, sample_name),
@@ -88,21 +97,34 @@ save_sample_annotations <- function(sample_name,
       output_folder = png_output_folder
     )
 
-    # Find ADC folder: use provided path, or fall back to get_sample_paths()
-    if (is.null(adc_folder)) {
-      paths <- get_sample_paths(sample_name, roi_folder)
-      adc_folder <- paths$adc_folder
+    # Save to SQLite (fast, no Python needed)
+    if (save_format %in% c("sqlite", "both")) {
+      # Load class list if not provided
+      c2u <- class2use
+      if (is.null(c2u)) {
+        c2u <- load_class_list(class2use_path)
+      }
+      db_path <- get_db_path(db_folder)
+      save_annotations_db(db_path, sample_name, classifications, c2u, annotator)
     }
 
-    # Run annotation - save MAT to output folder directly
-    ifcb_annotate_samples(
-      png_folder = temp_annotate_folder,
-      adc_folder = adc_folder,
-      class2use_file = class2use_path,
-      output_folder = output_folder,
-      sample_names = sample_name,
-      remove_trailing_numbers = FALSE
-    )
+    # Save to .mat (requires Python + scipy)
+    if (save_format %in% c("mat", "both")) {
+      # Find ADC folder: use provided path, or fall back to get_sample_paths()
+      if (is.null(adc_folder)) {
+        paths <- get_sample_paths(sample_name, roi_folder)
+        adc_folder <- paths$adc_folder
+      }
+
+      ifcb_annotate_samples(
+        png_folder = temp_annotate_folder,
+        adc_folder = adc_folder,
+        class2use_file = class2use_path,
+        output_folder = output_folder,
+        sample_names = sample_name,
+        remove_trailing_numbers = FALSE
+      )
+    }
 
     # Save statistics
     save_validation_statistics(

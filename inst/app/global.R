@@ -15,6 +15,8 @@ suppressPackageStartupMessages({
   library(DT)
   library(jsonlite)
   library(reticulate)
+  library(DBI)
+  library(RSQLite)
 })
 
 # Get version from package

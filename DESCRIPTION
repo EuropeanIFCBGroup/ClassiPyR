@@ -24,7 +24,9 @@ Imports:
     dplyr,
     DT,
     jsonlite,
-    reticulate
+    reticulate,
+    DBI,
+    RSQLite
 Suggests:
     testthat (>= 3.0.0),
     covr,

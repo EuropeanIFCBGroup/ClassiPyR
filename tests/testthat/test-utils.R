@@ -347,6 +347,26 @@ test_that("get_config_dir uses tempdir during R CMD check", {
   }
 })
 
+test_that("get_default_db_dir returns a valid path", {
+  db_folder <- get_default_db_dir()
+  expect_true(is.character(db_folder))
+  expect_true(nzchar(db_folder))
+})
+
+test_that("get_default_db_dir uses tempdir during R CMD check", {
+  old_val <- Sys.getenv("_R_CHECK_PACKAGE_NAME_", unset = NA)
+  Sys.setenv("_R_CHECK_PACKAGE_NAME_" = "ClassiPyR")
+
+  db_folder <- get_default_db_dir()
+  expect_true(grepl(tempdir(), db_folder, fixed = TRUE))
+
+  if (is.na(old_val)) {
+    Sys.unsetenv("_R_CHECK_PACKAGE_NAME_")
+  } else {
+    Sys.setenv("_R_CHECK_PACKAGE_NAME_" = old_val)
+  }
+})
+
 # =============================================================================
 # File index cache functions
 # =============================================================================

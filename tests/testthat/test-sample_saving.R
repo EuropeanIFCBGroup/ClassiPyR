@@ -305,6 +305,8 @@ test_that("save_sample_annotations creates MAT file with real data", {
   output_folder <- tempfile("output_")
   png_output_folder <- tempfile("png_output_")
 
+  db_folder <- tempfile("db_")
+
   result <- save_sample_annotations(
     sample_name = sample_name,
     classifications = current_classifications,
@@ -315,7 +317,9 @@ test_that("save_sample_annotations creates MAT file with real data", {
     png_output_folder = png_output_folder,
     roi_folder = roi_folder,
     class2use_path = class2use_path,
-    annotator = "TestUser"
+    annotator = "TestUser",
+    save_format = "mat",
+    db_folder = db_folder
   )
 
   expect_true(result)
@@ -338,4 +342,150 @@ test_that("save_sample_annotations creates MAT file with real data", {
   # Cleanup
   unlink(output_folder, recursive = TRUE)
   unlink(png_output_folder, recursive = TRUE)
+  unlink(db_folder, recursive = TRUE)
+})
+
+test_that("save_sample_annotations with save_format='sqlite' creates database", {
+  sample_name <- "D20230314T001205_IFCB134"
+
+  # Create class2use file
+  class2use_file <- tempfile(fileext = ".txt")
+  writeLines(c("unclassified", "Diatom", "Ciliate"), class2use_file)
+
+  # Create temp source folder with an image
+  src_folder <- tempfile("png_")
+  dir.create(file.path(src_folder, sample_name), recursive = TRUE)
+  file.create(file.path(src_folder, sample_name, paste0(sample_name, "_00001.png")))
+
+  output_folder <- tempfile("output_")
+  png_output_folder <- tempfile("png_out_")
+  db_folder <- tempfile("db_")
+
+  classifications <- data.frame(
+    file_name = paste0(sample_name, "_00001.png"),
+    class_name = "Diatom",
+    score = NA_real_,
+    stringsAsFactors = FALSE
+  )
+
+  changes_log <- data.frame(
+    image = paste0(sample_name, "_00001.png"),
+    original_class = "unclassified",
+    new_class = "Diatom",
+    stringsAsFactors = FALSE
+  )
+
+  result <- save_sample_annotations(
+    sample_name = sample_name,
+    classifications = classifications,
+    original_classifications = classifications,
+    changes_log = changes_log,
+    temp_png_folder = src_folder,
+    output_folder = output_folder,
+    png_output_folder = png_output_folder,
+    roi_folder = tempdir(),
+    class2use_path = class2use_file,
+    annotator = "TestUser",
+    save_format = "sqlite",
+    db_folder = db_folder
+  )
+
+  expect_true(result)
+
+  # SQLite database should exist in db_folder, not output_folder
+  db_path <- get_db_path(db_folder)
+  expect_true(file.exists(db_path))
+
+  # Should be able to load the annotations back
+  samples <- list_annotated_samples_db(db_path)
+  expect_true(sample_name %in% samples)
+
+  # No .mat file should be created
+  mat_path <- file.path(output_folder, paste0(sample_name, ".mat"))
+  expect_false(file.exists(mat_path))
+
+  # No database in output_folder
+  expect_false(file.exists(get_db_path(output_folder)))
+
+  # Cleanup
+  unlink(output_folder, recursive = TRUE)
+  unlink(png_output_folder, recursive = TRUE)
+  unlink(src_folder, recursive = TRUE)
+  unlink(db_folder, recursive = TRUE)
+  unlink(class2use_file)
+})
+
+test_that("save_sample_annotations with save_format='both' creates both outputs", {
+  skip_if_not_installed("iRfcb")
+  skip_if_not(reticulate::py_available(), "Python not available")
+  skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
+
+  sample_name <- "D20220522T000439_IFCB134"
+
+  png_folder <- testthat::test_path("test_data", "png")
+  roi_folder <- testthat::test_path("test_data", "raw")
+  class2use_path <- testthat::test_path("test_data", "class2use.mat")
+
+  skip_if_not(dir.exists(file.path(png_folder, sample_name)), "Test PNG folder not found")
+  skip_if_not(file.exists(class2use_path), "Test class2use file not found")
+  skip_if_not(
+    file.exists(file.path(roi_folder, "2022", "D20220522", paste0(sample_name, ".adc"))),
+    "Test ADC file not found"
+  )
+
+  png_files <- list.files(file.path(png_folder, sample_name), pattern = "\\.png$")
+  skip_if(length(png_files) < 2, "Not enough test PNG files")
+
+  original_classifications <- data.frame(
+    file_name = png_files,
+    class_name = rep("unclassified", length(png_files)),
+    score = rep(NA_real_, length(png_files)),
+    stringsAsFactors = FALSE
+  )
+
+  current_classifications <- data.frame(
+    file_name = png_files,
+    class_name = c("Mesodinium_rubrum", rep("Ciliophora", length(png_files) - 1)),
+    stringsAsFactors = FALSE
+  )
+
+  changes_log <- data.frame(
+    image = png_files[1],
+    original_class = "unclassified",
+    new_class = "Mesodinium_rubrum",
+    stringsAsFactors = FALSE
+  )
+
+  output_folder <- tempfile("output_")
+  png_output_folder <- tempfile("png_output_")
+  db_folder <- tempfile("db_")
+
+  result <- save_sample_annotations(
+    sample_name = sample_name,
+    classifications = current_classifications,
+    original_classifications = original_classifications,
+    changes_log = changes_log,
+    temp_png_folder = png_folder,
+    output_folder = output_folder,
+    png_output_folder = png_output_folder,
+    roi_folder = roi_folder,
+    class2use_path = class2use_path,
+    annotator = "TestUser",
+    save_format = "both",
+    db_folder = db_folder
+  )
+
+  expect_true(result)
+
+  # Both should exist
+  db_path <- get_db_path(db_folder)
+  expect_true(file.exists(db_path))
+
+  mat_file <- file.path(output_folder, paste0(sample_name, ".mat"))
+  expect_true(file.exists(mat_file))
+
+  # Cleanup
+  unlink(output_folder, recursive = TRUE)
+  unlink(png_output_folder, recursive = TRUE)
+  unlink(db_folder, recursive = TRUE)
 })

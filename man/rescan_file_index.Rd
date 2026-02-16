@@ -8,7 +8,8 @@ rescan_file_index(
   roi_folder = NULL,
   csv_folder = NULL,
   output_folder = NULL,
-  verbose = TRUE
+  verbose = TRUE,
+  db_folder = NULL
 )
 }
 \arguments{
@@ -16,9 +17,13 @@ rescan_file_index(
 
 \item{csv_folder}{Path to classification folder (CSV/MAT). If NULL, read from saved settings.}
 
-\item{output_folder}{Path to output folder for annotations. If NULL, read from saved settings.}
+\item{output_folder}{Path to output folder for MAT annotations. If NULL, read from saved settings.}
 
 \item{verbose}{If TRUE, print progress messages. Default TRUE.}
+
+\item{db_folder}{Path to the database folder for SQLite annotations. If NULL,
+read from saved settings; if not found in settings, defaults to
+\code{\link{get_default_db_dir}()}.}
 }
 \value{
 Invisibly returns the file index list, or NULL if roi_folder is invalid.
