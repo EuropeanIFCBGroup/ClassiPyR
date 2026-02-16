@@ -48,6 +48,7 @@ init_db_schema <- function(con) {
       class_name  TEXT NOT NULL,
       annotator   TEXT,
       timestamp   TEXT DEFAULT (datetime('now')),
+      is_manual   INTEGER NOT NULL DEFAULT 1,
       PRIMARY KEY (sample_name, roi_number)
     )
   ")
@@ -60,6 +61,12 @@ init_db_schema <- function(con) {
       PRIMARY KEY (sample_name, class_index)
     )
   ")
+
+  # Migration: add is_manual column to existing databases that lack it
+  cols <- dbGetQuery(con, "PRAGMA table_info(annotations)")
+  if (!"is_manual" %in% cols$name) {
+    dbExecute(con, "ALTER TABLE annotations ADD COLUMN is_manual INTEGER NOT NULL DEFAULT 1")
+  }
 
   invisible(NULL)
 }
@@ -76,6 +83,9 @@ init_db_schema <- function(con) {
 #' @param class2use Character vector of class names (preserves index order for
 #'   .mat export)
 #' @param annotator Annotator name
+#' @param is_manual Integer vector of 0/1 flags indicating whether each ROI was
+#'   manually reviewed (1) or not yet reviewed (0, corresponding to NaN in .mat
+#'   files). If \code{NULL} (the default), all ROIs are treated as reviewed.
 #' @return TRUE on success, FALSE on failure
 #' @export
 #' @examples
@@ -85,7 +95,8 @@ init_db_schema <- function(con) {
 #'                     classifications, class2use, "Jane")
 #' }
 save_annotations_db <- function(db_path, sample_name, classifications,
-                                class2use, annotator = "Unknown") {
+                                class2use, annotator = "Unknown",
+                                is_manual = NULL) {
   if (is.null(classifications) || nrow(classifications) == 0) {
     return(FALSE)
   }
@@ -100,12 +111,17 @@ save_annotations_db <- function(db_path, sample_name, classifications,
   # Extract ROI numbers from file_name (e.g., "D20230101T120000_IFCB134_00001.png" -> 1)
   roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", classifications$file_name))
 
+  if (is.null(is_manual)) {
+    is_manual <- rep(1L, nrow(classifications))
+  }
+
   annotations_df <- data.frame(
     sample_name = sample_name,
     roi_number = roi_numbers,
     class_name = classifications$class_name,
     annotator = annotator,
     timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+    is_manual = as.integer(is_manual),
     stringsAsFactors = FALSE
   )
 
@@ -284,12 +300,13 @@ update_annotator <- function(db_path, sample_names, annotator) {
 #' Import a .mat annotation file into the SQLite database
 #'
 #' Reads an existing .mat annotation file and writes its data into the SQLite
-#' database. Useful for migrating existing annotations to the new backend.
+#' database. The class list (\code{class2use_manual}) and classlist indices are
+#' read directly from the .mat file to ensure a faithful import. ROIs with NaN
+#' indices (not yet reviewed) are stored with \code{is_manual = 0}.
 #'
 #' @param mat_path Path to the .mat annotation file
 #' @param db_path Path to the SQLite database file
 #' @param sample_name Sample name
-#' @param class2use Character vector of class names
 #' @param annotator Annotator name (defaults to \code{"imported"})
 #' @return TRUE on success, FALSE on failure
 #' @export
@@ -298,11 +315,10 @@ update_annotator <- function(db_path, sample_names, annotator) {
 #' import_mat_to_db(
 #'   mat_path = "/data/manual/D20230101T120000_IFCB134.mat",
 #'   db_path = get_db_path("/data/manual"),
-#'   sample_name = "D20230101T120000_IFCB134",
-#'   class2use = load_class_list("/data/class2use.mat")
+#'   sample_name = "D20230101T120000_IFCB134"
 #' )
 #' }
-import_mat_to_db <- function(mat_path, db_path, sample_name, class2use,
+import_mat_to_db <- function(mat_path, db_path, sample_name,
                              annotator = "imported") {
   if (!file.exists(mat_path)) {
     warning("MAT file not found: ", mat_path)
@@ -310,12 +326,20 @@ import_mat_to_db <- function(mat_path, db_path, sample_name, class2use,
   }
 
   tryCatch({
+    # Read the class list embedded in the .mat file
+    class2use <- as.character(ifcb_get_mat_variable(mat_path,
+                                                     variable_name = "class2use_manual"))
+
     classlist <- ifcb_get_mat_variable(mat_path, variable_name = "classlist")
     roi_numbers <- classlist[, 1]
     class_indices <- classlist[, 2]
 
+    # Detect NaN (not yet reviewed) vs classified ROIs
+    is_nan <- is.nan(class_indices)
+    is_manual <- ifelse(is_nan, 0L, 1L)
+
     class_names <- vapply(class_indices, function(idx) {
-      if (is.na(idx) || idx < 1 || idx > length(class2use)) {
+      if (is.na(idx) || is.nan(idx) || idx < 1 || idx > length(class2use)) {
         "unclassified"
       } else {
         class2use[idx]
@@ -329,7 +353,8 @@ import_mat_to_db <- function(mat_path, db_path, sample_name, class2use,
       stringsAsFactors = FALSE
     )
 
-    save_annotations_db(db_path, sample_name, classifications, class2use, annotator)
+    save_annotations_db(db_path, sample_name, classifications, class2use,
+                        annotator, is_manual = is_manual)
   }, error = function(e) {
     warning("Failed to import MAT file: ", e$message)
     FALSE
@@ -361,9 +386,9 @@ export_db_to_mat <- function(db_path, sample_name, output_folder) {
   con <- dbConnect(SQLite(), db_path)
   on.exit(dbDisconnect(con), add = TRUE)
 
-  # Get annotations for this sample
+  # Get annotations for this sample (including is_manual flag)
   rows <- dbGetQuery(con,
-    "SELECT roi_number, class_name FROM annotations WHERE sample_name = ? ORDER BY roi_number",
+    "SELECT roi_number, class_name, is_manual FROM annotations WHERE sample_name = ? ORDER BY roi_number",
     params = list(sample_name)
   )
 
@@ -385,10 +410,13 @@ export_db_to_mat <- function(db_path, sample_name, output_folder) {
 
   class2use <- class_list$class_name
 
-  # Build classlist integer vector: map class names to indices
+  # Build classlist numeric vector: map class names to indices
+  # Use NaN for unreviewed ROIs (is_manual == 0) to preserve the distinction
   classlist_indices <- match(rows$class_name, class2use)
   # Any unmatched classes default to 1 (typically "unclassified")
   classlist_indices[is.na(classlist_indices)] <- 1L
+  classlist_indices <- as.numeric(classlist_indices)
+  classlist_indices[rows$is_manual == 0L] <- NaN
 
   output_file <- file.path(output_folder, paste0(sample_name, ".mat"))
 
@@ -410,22 +438,21 @@ export_db_to_mat <- function(db_path, sample_name, output_folder) {
 #' Bulk import .mat annotation files into the SQLite database
 #'
 #' Scans a folder for \code{.mat} annotation files (excluding classifier output
-#' files matching \code{*_class*.mat}) and imports each into the database.
+#' files matching \code{*_class*.mat}) and imports each into the database. Each
+#' file's embedded \code{class2use_manual} is used for class-name mapping.
 #'
 #' @param mat_folder Folder containing .mat annotation files
 #' @param db_path Path to the SQLite database file
-#' @param class2use Character vector of class names
 #' @param annotator Annotator name (defaults to \code{"imported"})
 #' @return Named list with counts: \code{success}, \code{failed}, \code{skipped}
 #' @export
 #' @examples
 #' \dontrun{
 #' db_path <- get_db_path("/data/manual")
-#' class2use <- load_class_list("/data/class2use.mat")
-#' result <- import_all_mat_to_db("/data/manual", db_path, class2use)
+#' result <- import_all_mat_to_db("/data/manual", db_path)
 #' cat(result$success, "imported,", result$failed, "failed,", result$skipped, "skipped\n")
 #' }
-import_all_mat_to_db <- function(mat_folder, db_path, class2use,
+import_all_mat_to_db <- function(mat_folder, db_path,
                                   annotator = "imported") {
   mat_files <- list.files(mat_folder, pattern = "\\.mat$", full.names = TRUE)
   # Exclude classifier output files (*_class*.mat) and class2use files
@@ -449,7 +476,7 @@ import_all_mat_to_db <- function(mat_folder, db_path, class2use,
       next
     }
 
-    ok <- import_mat_to_db(mat_path, db_path, sample_name, class2use, annotator)
+    ok <- import_mat_to_db(mat_path, db_path, sample_name, annotator)
     if (isTRUE(ok)) {
       counts$success <- counts$success + 1L
     } else {

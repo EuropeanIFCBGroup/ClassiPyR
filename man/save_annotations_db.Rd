@@ -9,7 +9,8 @@ save_annotations_db(
   sample_name,
   classifications,
   class2use,
-  annotator = "Unknown"
+  annotator = "Unknown",
+  is_manual = NULL
 )
 }
 \arguments{
@@ -24,6 +25,10 @@ save_annotations_db(
 .mat export)}
 
 \item{annotator}{Annotator name}
+
+\item{is_manual}{Integer vector of 0/1 flags indicating whether each ROI was
+manually reviewed (1) or not yet reviewed (0, corresponding to NaN in .mat
+files). If \code{NULL} (the default), all ROIs are treated as reviewed.}
 }
 \value{
 TRUE on success, FALSE on failure

@@ -4,13 +4,7 @@
 \alias{import_mat_to_db}
 \title{Import a .mat annotation file into the SQLite database}
 \usage{
-import_mat_to_db(
-  mat_path,
-  db_path,
-  sample_name,
-  class2use,
-  annotator = "imported"
-)
+import_mat_to_db(mat_path, db_path, sample_name, annotator = "imported")
 }
 \arguments{
 \item{mat_path}{Path to the .mat annotation file}
@@ -19,8 +13,6 @@ import_mat_to_db(
 
 \item{sample_name}{Sample name}
 
-\item{class2use}{Character vector of class names}
-
 \item{annotator}{Annotator name (defaults to \code{"imported"})}
 }
 \value{
@@ -28,15 +20,16 @@ TRUE on success, FALSE on failure
 }
 \description{
 Reads an existing .mat annotation file and writes its data into the SQLite
-database. Useful for migrating existing annotations to the new backend.
+database. The class list (\code{class2use_manual}) and classlist indices are
+read directly from the .mat file to ensure a faithful import. ROIs with NaN
+indices (not yet reviewed) are stored with \code{is_manual = 0}.
 }
 \examples{
 \dontrun{
 import_mat_to_db(
   mat_path = "/data/manual/D20230101T120000_IFCB134.mat",
   db_path = get_db_path("/data/manual"),
-  sample_name = "D20230101T120000_IFCB134",
-  class2use = load_class_list("/data/class2use.mat")
+  sample_name = "D20230101T120000_IFCB134"
 )
 }
 }

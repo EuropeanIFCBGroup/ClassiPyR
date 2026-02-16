@@ -725,12 +725,6 @@ server <- function(input, output, session) {
                        type = "error")
       return()
     }
-    if (is.null(rv$class2use) || length(rv$class2use) == 0) {
-      showNotification("No class list loaded. Load a class list first.",
-                       type = "error")
-      return()
-    }
-
     db_path <- get_db_path(config$db_folder)
     annotator <- if (!is.null(input$annotator_name) && nzchar(input$annotator_name)) {
       input$annotator_name
@@ -739,8 +733,7 @@ server <- function(input, output, session) {
     }
 
     withProgress(message = "Importing .mat files to SQLite...", {
-      result <- import_all_mat_to_db(config$output_folder, db_path,
-                                     rv$class2use, annotator)
+      result <- import_all_mat_to_db(config$output_folder, db_path, annotator)
     })
 
     showNotification(

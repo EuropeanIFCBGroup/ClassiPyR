@@ -4,14 +4,12 @@
 \alias{import_all_mat_to_db}
 \title{Bulk import .mat annotation files into the SQLite database}
 \usage{
-import_all_mat_to_db(mat_folder, db_path, class2use, annotator = "imported")
+import_all_mat_to_db(mat_folder, db_path, annotator = "imported")
 }
 \arguments{
 \item{mat_folder}{Folder containing .mat annotation files}
 
 \item{db_path}{Path to the SQLite database file}
-
-\item{class2use}{Character vector of class names}
 
 \item{annotator}{Annotator name (defaults to \code{"imported"})}
 }
@@ -20,13 +18,13 @@ Named list with counts: \code{success}, \code{failed}, \code{skipped}
 }
 \description{
 Scans a folder for \code{.mat} annotation files (excluding classifier output
-files matching \code{*_class*.mat}) and imports each into the database.
+files matching \code{*_class*.mat}) and imports each into the database. Each
+file's embedded \code{class2use_manual} is used for class-name mapping.
 }
 \examples{
 \dontrun{
 db_path <- get_db_path("/data/manual")
-class2use <- load_class_list("/data/class2use.mat")
-result <- import_all_mat_to_db("/data/manual", db_path, class2use)
+result <- import_all_mat_to_db("/data/manual", db_path)
 cat(result$success, "imported,", result$failed, "failed,", result$skipped, "skipped\n")
 }
 }

@@ -385,28 +385,18 @@ test_that("import_mat_to_db migrates data correctly", {
   skip_if_not(reticulate::py_available(), "Python not available")
   skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
 
-  # Use test data if available
-  mat_path <- testthat::test_path("test_data", "raw", "2022", "D20220522",
-                                   "D20220522T000439_IFCB134.mat")
-
-  # Look for a MAT annotation file in test data
-  # If no test .mat annotation exists, create one via save first
   sample_name <- "D20220522T000439_IFCB134"
-  class2use_path <- testthat::test_path("test_data", "class2use.mat")
-  skip_if_not(file.exists(class2use_path), "Test class2use file not found")
 
   # Check if there's a test annotation mat file
   output_test <- testthat::test_path("test_data", "manual")
   test_mat <- file.path(output_test, paste0(sample_name, ".mat"))
   skip_if_not(file.exists(test_mat), "No test MAT annotation file for migration test")
 
-  class2use <- load_class_list(class2use_path)
-
   db_dir <- tempfile("db_")
   dir.create(db_dir)
   db_path <- get_db_path(db_dir)
 
-  result <- import_mat_to_db(test_mat, db_path, sample_name, class2use, "migrated")
+  result <- import_mat_to_db(test_mat, db_path, sample_name, "migrated")
   expect_true(result)
 
   # Verify data was imported
@@ -420,7 +410,7 @@ test_that("import_mat_to_db returns FALSE for missing file", {
   result <- import_mat_to_db(
     "/nonexistent/file.mat",
     tempfile(fileext = ".sqlite"),
-    "sample", c("unclassified"), "test"
+    "sample", "test"
   )
   expect_false(result)
 })
@@ -516,7 +506,7 @@ test_that("import_all_mat_to_db imports multiple files and returns correct count
     classlist = c(1, 2)
   )
 
-  result <- import_all_mat_to_db(mat_dir, db_path, class2use, "test")
+  result <- import_all_mat_to_db(mat_dir, db_path, "test")
 
   expect_equal(result$success, 2L)
   expect_equal(result$failed, 0L)
@@ -529,7 +519,7 @@ test_that("import_all_mat_to_db imports multiple files and returns correct count
   expect_false("sample_C_class_v1" %in% samples)
 
   # Re-import should skip existing
-  result2 <- import_all_mat_to_db(mat_dir, db_path, class2use, "test")
+  result2 <- import_all_mat_to_db(mat_dir, db_path, "test")
   expect_equal(result2$success, 0L)
   expect_equal(result2$skipped, 2L)
 
@@ -601,7 +591,7 @@ test_that("round-trip: DB -> .mat -> DB produces matching data", {
   db_path2 <- get_db_path(db_dir2)
 
   mat_path <- file.path(mat_dir, paste0(sample_name, ".mat"))
-  import_mat_to_db(mat_path, db_path2, sample_name, class2use, "reimported")
+  import_mat_to_db(mat_path, db_path2, sample_name, "reimported")
 
   # Compare: read both DBs and check class names match
   con1 <- DBI::dbConnect(RSQLite::SQLite(), db_path)
@@ -811,4 +801,282 @@ test_that("export_all_db_to_png exports multiple samples and skips missing ROIs"
   expect_true(dir.exists(file.path(png_dir, "Diatom")))
 
   unlink(c(db_dir, png_dir), recursive = TRUE)
+})
+
+test_that("save_annotations_db stores is_manual flags", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  sample_name <- "D20230101T120000_IFCB134"
+  class2use <- c("unclassified", "Diatom", "Ciliate")
+
+  classifications <- data.frame(
+    file_name = sprintf("%s_%05d.png", sample_name, 1:3),
+    class_name = c("Diatom", "unclassified", "Ciliate"),
+    stringsAsFactors = FALSE
+  )
+
+  result <- save_annotations_db(db_path, sample_name, classifications,
+                                class2use, "TestUser",
+                                is_manual = c(1L, 0L, 1L))
+  expect_true(result)
+
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  on.exit(DBI::dbDisconnect(con))
+
+  rows <- DBI::dbGetQuery(con,
+    "SELECT roi_number, class_name, is_manual FROM annotations WHERE sample_name = ? ORDER BY roi_number",
+    params = list(sample_name))
+
+  expect_equal(rows$is_manual, c(1L, 0L, 1L))
+  expect_equal(rows$class_name, c("Diatom", "unclassified", "Ciliate"))
+
+  unlink(db_dir, recursive = TRUE)
+})
+
+test_that("save_annotations_db defaults is_manual to 1", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  sample_name <- "D20230101T120000_IFCB134"
+
+  classifications <- data.frame(
+    file_name = sprintf("%s_%05d.png", sample_name, 1:2),
+    class_name = c("Diatom", "Ciliate"),
+    stringsAsFactors = FALSE
+  )
+
+  save_annotations_db(db_path, sample_name, classifications,
+                      c("unclassified", "Diatom", "Ciliate"), "TestUser")
+
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  on.exit(DBI::dbDisconnect(con))
+
+  rows <- DBI::dbGetQuery(con,
+    "SELECT is_manual FROM annotations WHERE sample_name = ?",
+    params = list(sample_name))
+
+  expect_true(all(rows$is_manual == 1L))
+
+  unlink(db_dir, recursive = TRUE)
+})
+
+test_that("schema migration adds is_manual to existing DB", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  # Create a database with the OLD schema (no is_manual column)
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  DBI::dbExecute(con, "
+    CREATE TABLE annotations (
+      sample_name TEXT NOT NULL,
+      roi_number  INTEGER NOT NULL,
+      class_name  TEXT NOT NULL,
+      annotator   TEXT,
+      timestamp   TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (sample_name, roi_number)
+    )
+  ")
+  DBI::dbExecute(con, "
+    CREATE TABLE class_lists (
+      sample_name TEXT NOT NULL,
+      class_index INTEGER NOT NULL,
+      class_name  TEXT NOT NULL,
+      PRIMARY KEY (sample_name, class_index)
+    )
+  ")
+
+  # Insert a row without is_manual
+  DBI::dbExecute(con,
+    "INSERT INTO annotations (sample_name, roi_number, class_name, annotator) VALUES (?, ?, ?, ?)",
+    params = list("sample_old", 1L, "Diatom", "test"))
+  DBI::dbDisconnect(con)
+
+  # Now run init_db_schema which should migrate
+  con2 <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  on.exit(DBI::dbDisconnect(con2))
+  init_db_schema(con2)
+
+  cols <- DBI::dbGetQuery(con2, "PRAGMA table_info(annotations)")
+  expect_true("is_manual" %in% cols$name)
+
+  # Existing row should have default value 1
+  row <- DBI::dbGetQuery(con2,
+    "SELECT is_manual FROM annotations WHERE sample_name = 'sample_old'")
+  expect_equal(row$is_manual, 1L)
+
+  unlink(db_dir, recursive = TRUE)
+})
+
+test_that("import_mat_to_db reads class2use_manual from .mat", {
+  skip_if_not_installed("iRfcb")
+  skip_if_not(reticulate::py_available(), "Python not available")
+  skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
+
+  # Create a .mat file with a known class list
+  mat_dir <- tempfile("mat_")
+  dir.create(mat_dir)
+  mat_path <- file.path(mat_dir, "test_sample.mat")
+  class2use <- c("unclassified", "Diatom", "Ciliate")
+
+  iRfcb::ifcb_create_manual_file(
+    roi_length = 3, class2use = class2use,
+    output_file = mat_path,
+    classlist = c(2, 3, 1)
+  )
+
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  result <- import_mat_to_db(mat_path, db_path, "test_sample")
+  expect_true(result)
+
+  # Verify the class list stored in DB matches the .mat file's embedded list
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  on.exit(DBI::dbDisconnect(con))
+
+  cl <- DBI::dbGetQuery(con,
+    "SELECT class_name FROM class_lists WHERE sample_name = 'test_sample' ORDER BY class_index")
+  expect_equal(cl$class_name, class2use)
+
+  # Verify class names mapped correctly
+  ann <- DBI::dbGetQuery(con,
+    "SELECT roi_number, class_name FROM annotations WHERE sample_name = 'test_sample' ORDER BY roi_number")
+  expect_equal(ann$class_name, c("Diatom", "Ciliate", "unclassified"))
+
+  unlink(c(mat_dir, db_dir), recursive = TRUE)
+})
+
+test_that("import_mat_to_db preserves NaN as is_manual=0", {
+  skip_if_not_installed("iRfcb")
+  skip_if_not(reticulate::py_available(), "Python not available")
+  skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
+
+  mat_dir <- tempfile("mat_")
+  dir.create(mat_dir)
+  mat_path <- file.path(mat_dir, "test_nan.mat")
+  class2use <- c("unclassified", "Diatom", "Ciliate")
+
+  # Create .mat with NaN entries (unreviewed ROIs)
+  iRfcb::ifcb_create_manual_file(
+    roi_length = 4, class2use = class2use,
+    output_file = mat_path,
+    classlist = c(2, NaN, 3, NaN)
+  )
+
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  result <- import_mat_to_db(mat_path, db_path, "test_nan")
+  expect_true(result)
+
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  on.exit(DBI::dbDisconnect(con))
+
+  rows <- DBI::dbGetQuery(con,
+    "SELECT roi_number, class_name, is_manual FROM annotations WHERE sample_name = 'test_nan' ORDER BY roi_number")
+
+  expect_equal(rows$is_manual, c(1L, 0L, 1L, 0L))
+  expect_equal(rows$class_name, c("Diatom", "unclassified", "Ciliate", "unclassified"))
+
+  unlink(c(mat_dir, db_dir), recursive = TRUE)
+})
+
+test_that("export_db_to_mat restores NaN for is_manual=0 rows", {
+  skip_if_not_installed("iRfcb")
+  skip_if_not(reticulate::py_available(), "Python not available")
+  skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
+
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  sample_name <- "D20230101T120000_IFCB134"
+  class2use <- c("unclassified", "Diatom", "Ciliate")
+
+  classifications <- data.frame(
+    file_name = sprintf("%s_%05d.png", sample_name, 1:4),
+    class_name = c("Diatom", "unclassified", "Ciliate", "unclassified"),
+    stringsAsFactors = FALSE
+  )
+  # ROIs 2 and 4 are unreviewed (NaN in .mat)
+  save_annotations_db(db_path, sample_name, classifications, class2use,
+                      "TestUser", is_manual = c(1L, 0L, 1L, 0L))
+
+  mat_dir <- tempfile("mat_")
+  dir.create(mat_dir)
+
+  result <- export_db_to_mat(db_path, sample_name, mat_dir)
+  expect_true(result)
+
+  mat_path <- file.path(mat_dir, paste0(sample_name, ".mat"))
+  classlist <- iRfcb::ifcb_get_mat_variable(mat_path, variable_name = "classlist")
+
+  # Reviewed ROIs should have valid indices, unreviewed should be NaN
+  expect_equal(classlist[1, 2], 2)   # Diatom
+  expect_true(is.nan(classlist[2, 2]))  # unreviewed -> NaN
+  expect_equal(classlist[3, 2], 3)   # Ciliate
+  expect_true(is.nan(classlist[4, 2]))  # unreviewed -> NaN
+
+  unlink(c(db_dir, mat_dir), recursive = TRUE)
+})
+
+test_that("full roundtrip: .mat -> SQLite -> .mat preserves NaN and class list", {
+  skip_if_not_installed("iRfcb")
+  skip_if_not(reticulate::py_available(), "Python not available")
+  skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
+
+  # Create original .mat with NaN entries
+  mat_dir <- tempfile("mat_orig_")
+  dir.create(mat_dir)
+  original_mat <- file.path(mat_dir, "roundtrip_sample.mat")
+  class2use <- c("unclassified", "Diatom", "Ciliate", "Dinoflagellate")
+
+  original_classlist <- c(2, NaN, 3, 4, NaN)
+  iRfcb::ifcb_create_manual_file(
+    roi_length = 5, class2use = class2use,
+    output_file = original_mat,
+    classlist = original_classlist
+  )
+
+  # Import into SQLite
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  import_mat_to_db(original_mat, db_path, "roundtrip_sample")
+
+  # Export back to .mat
+  export_dir <- tempfile("mat_export_")
+  dir.create(export_dir)
+  export_db_to_mat(db_path, "roundtrip_sample", export_dir)
+
+  # Read back and compare
+  exported_mat <- file.path(export_dir, "roundtrip_sample.mat")
+  exported_classlist <- iRfcb::ifcb_get_mat_variable(exported_mat,
+                                                      variable_name = "classlist")
+  exported_class2use <- as.character(
+    iRfcb::ifcb_get_mat_variable(exported_mat,
+                                  variable_name = "class2use_manual"))
+
+  # Class list should match exactly
+  expect_equal(exported_class2use, class2use)
+
+  # Classlist indices should match: classified ROIs keep their index, NaN stays NaN
+  for (i in seq_along(original_classlist)) {
+    if (is.nan(original_classlist[i])) {
+      expect_true(is.nan(exported_classlist[i, 2]),
+                  info = paste("ROI", i, "should be NaN"))
+    } else {
+      expect_equal(exported_classlist[i, 2], original_classlist[i],
+                   info = paste("ROI", i, "index mismatch"))
+    }
+  }
+
+  unlink(c(mat_dir, db_dir, export_dir), recursive = TRUE)
 })

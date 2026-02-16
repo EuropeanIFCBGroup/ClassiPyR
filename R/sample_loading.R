@@ -104,13 +104,23 @@ load_from_mat <- function(mat_path, sample_name, class2use, roi_dimensions) {
   # Read classlist from MAT file (column 2 contains class indices)
   classlist <- ifcb_get_mat_variable(mat_path, variable_name = "classlist")
 
+  # Prefer the class list embedded in the .mat file for accurate index mapping
+  mat_class2use <- tryCatch(
+    as.character(ifcb_get_mat_variable(mat_path,
+                                       variable_name = "class2use_manual")),
+    error = function(e) NULL
+  )
+  if (!is.null(mat_class2use) && length(mat_class2use) > 0) {
+    class2use <- mat_class2use
+  }
+
   # Map class indices to class names
   roi_numbers <- classlist[, 1]
   class_indices <- classlist[, 2]
 
-  # Get class names from indices (handle 0 or NA as "unclassified")
+  # Get class names from indices (handle NaN, 0, or NA as "unclassified")
   class_names <- sapply(class_indices, function(idx) {
-    if (is.na(idx) || idx < 1 || idx > length(class2use)) {
+    if (is.na(idx) || is.nan(idx) || idx < 1 || idx > length(class2use)) {
       return("unclassified")
     }
     return(class2use[idx])
