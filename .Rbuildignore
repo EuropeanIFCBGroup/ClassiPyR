@@ -27,3 +27,15 @@
 ^CONTRIBUTING\.md$
 ^NEWS\.md$
 ^app\.R$
+^man/figures/class-editor\.png$
+^man/figures/drag-select\.png$
+^man/figures/gallery-view\.png$
+^man/figures/image-card-states\.png$
+^man/figures/interface-overview\.png$
+^man/figures/logo\.ico$
+^man/figures/logo\.svg$
+^man/figures/logo_icon\.png$
+^man/figures/measure-tool\.png$
+^man/figures/relabel-workflow\.png$
+^man/figures/sample-browser\.png$
+^man/figures/settings-dialog\.png$

@@ -1,6 +1,6 @@
 Package: ClassiPyR
 Title: A Shiny App for Manual Image Classification and Validation of IFCB Data
-Version: 0.0.0.9000
+Version: 0.1.0
 Authors@R: c(
     person("Anders", "Torstensson", email = "anders.torstensson@smhi.se", role = c("aut", "cre"),
            comment = c("Swedish Meteorological and Hydrological Institute", ORCID = "0000-0002-8283-656X")),

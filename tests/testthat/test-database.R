@@ -385,32 +385,52 @@ test_that("import_mat_to_db migrates data correctly", {
   skip_if_not(reticulate::py_available(), "Python not available")
   skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
 
-  sample_name <- "D20220522T000439_IFCB134"
+  sample_name <- "D20230101T120000_IFCB134"
+  class2use <- c("unclassified", "Diatom", "Ciliate", "Dinoflagellate")
 
-  # Check if there's a test annotation mat file
-  output_test <- testthat::test_path("test_data", "manual")
-  test_mat <- file.path(output_test, paste0(sample_name, ".mat"))
-  skip_if_not(file.exists(test_mat), "No test MAT annotation file for migration test")
-
-  db_dir <- tempfile("db_")
+  # Create a MAT file via export_db_to_mat so the test is self-contained
+  db_dir <- tempfile("db_export_")
   dir.create(db_dir)
   db_path <- get_db_path(db_dir)
 
-  result <- import_mat_to_db(test_mat, db_path, sample_name, "migrated")
+  classifications <- data.frame(
+    file_name = sprintf("%s_%05d.png", sample_name, 1:4),
+    class_name = c("Diatom", "Ciliate", "Diatom", "Dinoflagellate"),
+    stringsAsFactors = FALSE
+  )
+  save_annotations_db(db_path, sample_name, classifications, class2use, "exporter")
+
+  mat_dir <- tempfile("mat_")
+  dir.create(mat_dir)
+  result <- export_db_to_mat(db_path, sample_name, mat_dir)
+  expect_true(result)
+
+  test_mat <- file.path(mat_dir, paste0(sample_name, ".mat"))
+  expect_true(file.exists(test_mat))
+
+  # Now import the MAT file into a fresh database
+  db_dir2 <- tempfile("db_import_")
+  dir.create(db_dir2)
+  db_path2 <- get_db_path(db_dir2)
+
+  result <- import_mat_to_db(test_mat, db_path2, sample_name, "migrated")
   expect_true(result)
 
   # Verify data was imported
-  samples <- list_annotated_samples_db(db_path)
+  samples <- list_annotated_samples_db(db_path2)
   expect_true(sample_name %in% samples)
 
-  unlink(db_dir, recursive = TRUE)
+  unlink(c(db_dir, db_dir2, mat_dir), recursive = TRUE)
 })
 
 test_that("import_mat_to_db returns FALSE for missing file", {
-  result <- import_mat_to_db(
-    "/nonexistent/file.mat",
-    tempfile(fileext = ".sqlite"),
-    "sample", "test"
+  expect_warning(
+    result <- import_mat_to_db(
+      "/nonexistent/file.mat",
+      tempfile(fileext = ".sqlite"),
+      "sample", "test"
+    ),
+    "MAT file not found"
   )
   expect_false(result)
 })
@@ -464,14 +484,20 @@ test_that("export_db_to_mat returns FALSE for missing sample", {
                                  stringsAsFactors = FALSE),
                       c("unclassified", "Diatom"), "test")
 
-  result <- export_db_to_mat(db_path, "nonexistent_sample", db_dir)
+  expect_warning(
+    result <- export_db_to_mat(db_path, "nonexistent_sample", db_dir),
+    "No annotations found for sample"
+  )
   expect_false(result)
 
   unlink(db_dir, recursive = TRUE)
 })
 
 test_that("export_db_to_mat returns FALSE for non-existent database", {
-  result <- export_db_to_mat("/nonexistent/db.sqlite", "sample", tempdir())
+  expect_warning(
+    result <- export_db_to_mat("/nonexistent/db.sqlite", "sample", tempdir()),
+    "Database not found"
+  )
   expect_false(result)
 })
 
@@ -740,7 +766,10 @@ test_that("export_db_to_png returns FALSE for missing sample", {
                                    "D20220522T000439_IFCB134.roi")
   skip_if_not(file.exists(roi_path), "Test ROI file not found")
 
-  result <- export_db_to_png(db_path, "nonexistent_sample", roi_path, tempdir())
+  expect_warning(
+    result <- export_db_to_png(db_path, "nonexistent_sample", roi_path, tempdir()),
+    "No annotations found for sample"
+  )
   expect_false(result)
 
   unlink(db_dir, recursive = TRUE)
@@ -757,7 +786,10 @@ test_that("export_db_to_png returns FALSE for missing ROI file", {
                                  stringsAsFactors = FALSE),
                       c("unclassified", "Diatom"), "test")
 
-  result <- export_db_to_png(db_path, "sample_A", "/nonexistent/file.roi", tempdir())
+  expect_warning(
+    result <- export_db_to_png(db_path, "sample_A", "/nonexistent/file.roi", tempdir()),
+    "ROI file not found"
+  )
   expect_false(result)
 
   unlink(db_dir, recursive = TRUE)
