@@ -2285,7 +2285,13 @@ server <- function(input, output, session) {
         update_current_sample_status(rv$current_sample)
       }
 
-      showNotification(paste("Saved to", config$output_folder), type = "message")
+      save_msg <- switch(save_fmt,
+        sqlite = paste("Saved to database in", config$db_folder),
+        mat = paste("Saved to", config$output_folder),
+        both = paste("Saved to database and", config$output_folder),
+        paste("Saved to", config$output_folder)
+      )
+      showNotification(save_msg, type = "message")
 
     }, error = function(e) {
       showNotification(paste("Error saving:", e$message), type = "error")
