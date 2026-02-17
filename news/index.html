@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">ClassiPyR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -46,32 +46,21 @@
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="development version" id="classipyr-development-version">ClassiPyR (development version)<a class="anchor" aria-label="anchor" href="#classipyr-development-version"></a></h2>
+<h2 class="pkg-version" data-toc-text="0.1.0" id="classipyr-010">ClassiPyR 0.1.0<a class="anchor" aria-label="anchor" href="#classipyr-010"></a></h2>
+<p>Initial release of ClassiPyR, a Shiny application for manual classification and validation of Imaging FlowCytobot (IFCB) plankton images.</p>
 <div class="section level3">
-<h3 id="features-development-version">Features<a class="anchor" aria-label="anchor" href="#features-development-version"></a></h3>
+<h3 id="features-0-1-0">Features<a class="anchor" aria-label="anchor" href="#features-0-1-0"></a></h3>
 <div class="section level4">
-<h4 id="sqlite-database-backend-development-version">SQLite Database Backend<a class="anchor" aria-label="anchor" href="#sqlite-database-backend-development-version"></a></h4>
-<ul><li>Annotations are now stored in a local SQLite database (<code>annotations.sqlite</code>) by default</li>
-<li>Works out of the box with no Python dependency - only R packages (RSQLite, DBI) are needed</li>
-<li>MATLAB <code>.mat</code> file export is still available as an opt-in for ifcb-analysis compatibility</li>
-<li>Storage format configurable in Settings: “SQLite” (default), “MAT file”, or “Both”</li>
-<li>Existing <code>.mat</code> annotations continue to work and can be loaded as before</li>
-<li>
-<code><a href="../reference/import_mat_to_db.html">import_mat_to_db()</a></code> utility for bulk migration of existing <code>.mat</code> files to SQLite</li>
-<li>Sample discovery scans both <code>.mat</code> files and the SQLite database</li>
-<li>When loading a sample, SQLite is checked first (faster), with <code>.mat</code> fallback</li>
-</ul></div>
-<div class="section level4">
-<h4 id="sample-management-development-version">Sample Management<a class="anchor" aria-label="anchor" href="#sample-management-development-version"></a></h4>
+<h4 id="sample-management-0-1-0">Sample Management<a class="anchor" aria-label="anchor" href="#sample-management-0-1-0"></a></h4>
 <ul><li>Load samples from ROI files with automatic year/month filtering</li>
 <li>Support for validation mode (existing classifications) and annotation mode (new samples)</li>
-<li>Resume previous annotations from saved MAT files</li>
+<li>Resume previous annotations from saved files</li>
 <li>Navigate between samples with previous/next/random buttons</li>
 <li>Filter samples by classification status (all/classified/annotated/unannotated)</li>
 <li>Samples with both manual annotations AND auto-classifications can switch between modes</li>
 </ul></div>
 <div class="section level4">
-<h4 id="classification-loading-development-version">Classification Loading<a class="anchor" aria-label="anchor" href="#classification-loading-development-version"></a></h4>
+<h4 id="classification-loading-0-1-0">Classification Loading<a class="anchor" aria-label="anchor" href="#classification-loading-0-1-0"></a></h4>
 <ul><li>Load classifications from CSV files (recursive folder search)</li>
 <li>Load classifications from MATLAB classifier output (.mat files)</li>
 <li>Option to apply classification threshold for MATLAB results</li>
@@ -84,18 +73,7 @@
 </ul></li>
 </ul></div>
 <div class="section level4">
-<h4 id="file-index-cache-development-version">File Index Cache<a class="anchor" aria-label="anchor" href="#file-index-cache-development-version"></a></h4>
-<ul><li>Disk-based file index cache for faster app startup on subsequent launches</li>
-<li>Avoids expensive recursive directory scans when folder contents haven’t changed</li>
-<li>Sync button in sidebar to manually refresh the file index</li>
-<li>Cache age indicator shows when folders were last scanned</li>
-<li>
-<code><a href="../reference/rescan_file_index.html">rescan_file_index()</a></code> function for headless use (e.g. cron jobs)</li>
-<li>Cache stored in platform-appropriate config directory alongside settings</li>
-<li>Auto-sync option (enabled by default) to control whether app scans on startup</li>
-</ul></div>
-<div class="section level4">
-<h4 id="image-gallery-development-version">Image Gallery<a class="anchor" aria-label="anchor" href="#image-gallery-development-version"></a></h4>
+<h4 id="image-gallery-0-1-0">Image Gallery<a class="anchor" aria-label="anchor" href="#image-gallery-0-1-0"></a></h4>
 <ul><li>Paginated image display (50/100/200/500 images per page)</li>
 <li>Images grouped by class on consecutive pages for efficient review</li>
 <li>Filter images by class</li>
@@ -105,14 +83,14 @@
 <li>Unmatched class detection with yellow warning highlighting</li>
 </ul></div>
 <div class="section level4">
-<h4 id="annotation-tools-development-version">Annotation Tools<a class="anchor" aria-label="anchor" href="#annotation-tools-development-version"></a></h4>
+<h4 id="annotation-tools-0-1-0">Annotation Tools<a class="anchor" aria-label="anchor" href="#annotation-tools-0-1-0"></a></h4>
 <ul><li>Relabel selected images to any class</li>
 <li>Select all / deselect all buttons</li>
 <li>Quick class search in relabel dropdown</li>
 <li>Changes tracked and displayed in statistics tab</li>
 </ul></div>
 <div class="section level4">
-<h4 id="class-list-management-development-version">Class List Management<a class="anchor" aria-label="anchor" href="#class-list-management-development-version"></a></h4>
+<h4 id="class-list-management-0-1-0">Class List Management<a class="anchor" aria-label="anchor" href="#class-list-management-0-1-0"></a></h4>
 <ul><li>Load class lists from .mat or .txt files</li>
 <li>Create class lists from scratch directly in the app</li>
 <li>Edit class names (with warnings about index preservation for ifcb-analysis)</li>
@@ -122,27 +100,43 @@
 <li>Visual warnings for classes in classifications not in class2use list</li>
 </ul></div>
 <div class="section level4">
-<h4 id="output-development-version">Output<a class="anchor" aria-label="anchor" href="#output-development-version"></a></h4>
-<ul><li>Save annotations to SQLite database (default, no Python needed)</li>
-<li>Optional: save annotations as MATLAB-compatible .mat files (using iRfcb, requires Python)</li>
-<li>Configurable storage format: SQLite only, MAT only, or both</li>
-<li>Save validation statistics as CSV (in <code>validation_statistics/</code> subfolder)</li>
+<h4 id="annotation-storage-0-1-0">Annotation Storage<a class="anchor" aria-label="anchor" href="#annotation-storage-0-1-0"></a></h4>
+<ul><li>SQLite database backend (default) — no Python dependency required</li>
+<li>Optional MATLAB <code>.mat</code> file export for ifcb-analysis compatibility (requires Python/scipy)</li>
+<li>Configurable storage format in Settings: “SQLite”, “MAT file”, or “Both”</li>
+<li>
+<code><a href="../reference/import_mat_to_db.html">import_mat_to_db()</a></code> and <code><a href="../reference/export_db_to_mat.html">export_db_to_mat()</a></code> for migration between formats</li>
+<li>Sample discovery scans both <code>.mat</code> files and the SQLite database</li>
+<li>When loading a sample, SQLite is checked first (faster), with <code>.mat</code> fallback</li>
+<li>Separate database folder setting (defaults to output folder)</li>
+</ul></div>
+<div class="section level4">
+<h4 id="output-0-1-0">Output<a class="anchor" aria-label="anchor" href="#output-0-1-0"></a></h4>
+<ul><li>Save validation statistics as CSV</li>
 <li>Organize output PNGs by class folder (for CNN training)</li>
 <li>Auto-save when navigating between samples</li>
 <li>Support for non-standard folder structures via direct ADC path resolution</li>
-<li>Graceful handling of empty (0-byte) ADC files</li>
 </ul></div>
 <div class="section level4">
-<h4 id="settings--persistence-development-version">Settings &amp; Persistence<a class="anchor" aria-label="anchor" href="#settings--persistence-development-version"></a></h4>
+<h4 id="file-index-cache-0-1-0">File Index Cache<a class="anchor" aria-label="anchor" href="#file-index-cache-0-1-0"></a></h4>
+<ul><li>Disk-based file index cache for faster app startup on subsequent launches</li>
+<li>Avoids expensive recursive directory scans when folder contents haven’t changed</li>
+<li>Sync button in sidebar to manually refresh the file index</li>
+<li>Cache age indicator shows when folders were last scanned</li>
+<li>
+<code><a href="../reference/rescan_file_index.html">rescan_file_index()</a></code> function for headless use (e.g. cron jobs)</li>
+<li>Auto-sync option (enabled by default) to control whether app scans on startup</li>
+</ul></div>
+<div class="section level4">
+<h4 id="settings--persistence-0-1-0">Settings &amp; Persistence<a class="anchor" aria-label="anchor" href="#settings--persistence-0-1-0"></a></h4>
 <ul><li>Configurable folder paths via settings modal</li>
 <li>Cross-platform web-based folder browser (shinyFiles)</li>
-<li>Settings persisted between sessions (<code>.classipyr_settings.json</code>)</li>
+<li>Settings persisted between sessions</li>
 <li>Class list file path remembered and auto-loaded on startup</li>
 <li>Annotator name tracking for statistics</li>
-<li>Cache invalidation when folder paths change in settings</li>
 </ul></div>
 <div class="section level4">
-<h4 id="user-interface-development-version">User Interface<a class="anchor" aria-label="anchor" href="#user-interface-development-version"></a></h4>
+<h4 id="user-interface-0-1-0">User Interface<a class="anchor" aria-label="anchor" href="#user-interface-0-1-0"></a></h4>
 <ul><li>Clean, modern interface using bslib (Flatly theme)</li>
 <li>Mode indicator showing current sample and progress/accuracy</li>
 <li>Validation Statistics tab shows appropriate content based on mode</li>
@@ -150,18 +144,20 @@
 </ul></div>
 </div>
 <div class="section level3">
-<h3 id="technical-notes-development-version">Technical Notes<a class="anchor" aria-label="anchor" href="#technical-notes-development-version"></a></h3>
-<ul><li>SQLite is the default annotation storage - works out of the box with RSQLite (no external dependencies)</li>
-<li>Python with scipy is optional - only needed for MAT file export (ifcb-analysis compatibility)</li>
-<li>Uses iRfcb package for IFCB data handling</li>
-<li>Session cache preserves work when switching samples</li>
-<li>File index cache reduces startup time by avoiding redundant folder scans</li>
-<li>Security: Input validation, XSS prevention, path traversal protection</li>
+<h3 id="pre-releases-0-1-0">Pre-releases<a class="anchor" aria-label="anchor" href="#pre-releases-0-1-0"></a></h3>
+<ul><li>
+<strong>v0.1.0-beta.2</strong> (2026-02-04): File index cache, cross-platform folder browser, annotation mode sorting, and notification improvements.</li>
+<li>
+<strong>v0.1.0-beta.1</strong> (2026-01-29): First beta version.</li>
 </ul></div>
 <div class="section level3">
-<h3 id="development-development-version">Development<a class="anchor" aria-label="anchor" href="#development-development-version"></a></h3>
-<p>This application was developed through human-AI collaboration: - <strong>Anders Torstensson</strong>: Project vision, requirements, testing, and guidance - <strong>Claude Code (Anthropic)</strong>: Implementation, code generation, and iterative refinement</p>
-</div>
+<h3 id="technical-notes-0-1-0">Technical Notes<a class="anchor" aria-label="anchor" href="#technical-notes-0-1-0"></a></h3>
+<ul><li>SQLite is the default annotation storage — works out of the box with RSQLite</li>
+<li>Python with scipy is optional — only needed for MAT file export</li>
+<li>Uses iRfcb package for IFCB data handling</li>
+<li>Session cache preserves work when switching samples</li>
+<li>Input validation, XSS prevention, and path traversal protection</li>
+</ul></div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
