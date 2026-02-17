@@ -97,11 +97,13 @@ server <- function(input, output, session) {
       roi_folder = startup_wd,
       output_folder = startup_wd,
       png_output_folder = startup_wd,
+      db_folder = get_default_db_dir(),
       use_threshold = TRUE,
       pixels_per_micron = 3.4,  # IFCB default resolution
       auto_sync = TRUE,  # Automatically sync folders on startup
       class2use_path = NULL,  # Path to class2use file for auto-loading
-      python_venv_path = NULL  # NULL = use ./venv in working directory
+      python_venv_path = NULL,  # NULL = use ./venv in working directory
+      save_format = "sqlite"  # "sqlite" (default), "mat", or "both"
     )
     
     if (file.exists(settings_file)) {
@@ -151,10 +153,12 @@ server <- function(input, output, session) {
     roi_folder = saved_settings$roi_folder,
     output_folder = saved_settings$output_folder,
     png_output_folder = saved_settings$png_output_folder,
+    db_folder = saved_settings$db_folder,
     use_threshold = saved_settings$use_threshold,
     pixels_per_micron = saved_settings$pixels_per_micron,
     auto_sync = saved_settings$auto_sync,
-    python_venv_path = saved_settings$python_venv_path
+    python_venv_path = saved_settings$python_venv_path,
+    save_format = saved_settings$save_format
   )
   
   # Initialize class dropdown with default class list on startup
@@ -214,11 +218,10 @@ server <- function(input, output, session) {
       title = "Settings",
       size = "l",
       easyClose = TRUE,
-      
-      fileInput("class2use_file", "Class List File (.mat or .txt)",
-                accept = c(".mat", ".txt")),
-      
-      # Classification Folder (CSV and MAT)
+
+      # ── Folder Paths ──────────────────────────────────────────────
+      h5("Folder Paths"),
+
       div(
         style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
         div(style = "flex: 1;",
@@ -227,8 +230,7 @@ server <- function(input, output, session) {
         shinyDirButton("browse_csv_folder", "Browse", "Select Classification Folder",
                        class = "btn-outline-secondary", style = "margin-bottom: 15px;")
       ),
-      
-      # ROI Folder
+
       div(
         style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
         div(style = "flex: 1;",
@@ -237,18 +239,16 @@ server <- function(input, output, session) {
         shinyDirButton("browse_roi_folder", "Browse", "Select ROI Data Folder",
                        class = "btn-outline-secondary", style = "margin-bottom: 15px;")
       ),
-      
-      # Output Folder
+
       div(
         style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
         div(style = "flex: 1;",
-            textInput("cfg_output_folder", "Output Folder (MAT & CSV)",
+            textInput("cfg_output_folder", "Output Folder (MAT/statistics)",
                       value = config$output_folder, width = "100%")),
         shinyDirButton("browse_output_folder", "Browse", "Select Output Folder",
                        class = "btn-outline-secondary", style = "margin-bottom: 15px;")
       ),
-      
-      # PNG Output Folder
+
       div(
         style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
         div(style = "flex: 1;",
@@ -257,39 +257,34 @@ server <- function(input, output, session) {
         shinyDirButton("browse_png_folder", "Browse", "Select PNG Output Folder",
                        class = "btn-outline-secondary", style = "margin-bottom: 15px;")
       ),
-      
-      hr(),
-      
-      # Sync options
+
+      div(
+        style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 5px;",
+        div(style = "flex: 1;",
+            textInput("cfg_db_folder", "Database Folder (SQLite)",
+                      value = config$db_folder, width = "100%")),
+        shinyDirButton("browse_db_folder", "Browse", "Select Database Folder",
+                       class = "btn-outline-secondary", style = "margin-bottom: 15px;")
+      ),
+      tags$small(class = "text-muted", style = "display: block; margin-bottom: 15px;",
+                 "Must be a local drive. SQLite databases are",
+                 tags$a(href = "https://www.sqlite.org/useovernet.html", target = "_blank",
+                        "not safe on network filesystems"),
+                 "due to unreliable file locking."),
+
       checkboxInput("cfg_auto_sync", "Sync folders automatically on startup",
                     value = config$auto_sync),
       tags$small(class = "text-muted",
                  "When disabled, the app loads from cache on startup. Use the sync button to update manually."),
-      
+
       hr(),
-      
-      # Classifier options
-      h5("Classifier Options"),
-      checkboxInput("cfg_use_threshold", "Apply classification threshold",
-                    value = config$use_threshold),
-      tags$small(class = "text-muted",
-                 "When enabled, classifications below the confidence threshold are marked as 'unclassified'"),
-      
-      hr(),
-      
-      # Image resolution setting
-      h5("Image Resolution"),
-      div(
-        style = "display: flex; gap: 10px; align-items: center;",
-        numericInput("cfg_pixels_per_micron", "Pixels per micron",
-                     value = config$pixels_per_micron, min = 0.1, max = 20, step = 0.1,
-                     width = "150px"),
-        tags$small(class = "text-muted", "IFCB default: 3.4 px/µm")
-      ),
-      
-      hr(),
-      
-      # Class list editor button
+
+      # ── Class List ────────────────────────────────────────────────
+      h5("Class List"),
+
+      fileInput("class2use_file", "Load class list file (.mat or .txt)",
+                accept = c(".mat", ".txt")),
+
       div(
         style = "display: flex; align-items: center; gap: 10px;",
         actionButton("open_class_editor", "Edit Class List",
@@ -297,7 +292,70 @@ server <- function(input, output, session) {
         tags$span(class = "text-muted", style = "font-size: 12px;",
                   textOutput("class_count_text", inline = TRUE))
       ),
-      
+
+      hr(),
+
+      # ── Annotation Storage ────────────────────────────────────────
+      h5("Annotation Storage"),
+
+      selectInput("cfg_save_format", "Storage Format",
+                  choices = c(
+                    "SQLite (recommended)" = "sqlite",
+                    "MAT file (MATLAB compatible)" = "mat",
+                    "Both SQLite and MAT" = "both"
+                  ),
+                  selected = config$save_format),
+      tags$small(class = "text-muted",
+                 "SQLite works out of the box. MAT files require Python and are only needed for ifcb-analysis compatibility."),
+
+      hr(),
+
+      # ── Import / Export ────────────────────────────────────────────
+      h5("Import / Export"),
+
+      div(
+        style = "display: flex; gap: 10px; margin-bottom: 8px;",
+        actionButton("import_mat_to_db_btn", "Import .mat \u2192 SQLite",
+                     icon = icon("database"), class = "btn-outline-secondary btn-sm"),
+        actionButton("export_db_to_mat_btn", "Export SQLite \u2192 .mat",
+                     icon = icon("file-export"), class = "btn-outline-secondary btn-sm"),
+        actionButton("export_db_to_png_btn", "Export SQLite \u2192 PNG",
+                     icon = icon("image"), class = "btn-outline-secondary btn-sm")
+      ),
+      tags$small(class = "text-muted",
+                 "Bulk import/export all annotated samples between storage formats.",
+                 "PNG export extracts images into class-name subfolders."),
+
+      div(
+        style = "margin-top: 8px;",
+        textInput("cfg_skip_class_png", "Skip class in PNG export",
+                  value = if (!is.null(rv$class2use) && length(rv$class2use) > 0) rv$class2use[1] else "",
+                  width = "250px"),
+        tags$small(class = "text-muted",
+                   "Images with this class are excluded from PNG export.",
+                   "Pre-filled with the first class in your class list.",
+                   "Leave empty to export all classes.")
+      ),
+
+      hr(),
+
+      # ── IFCB Options ──────────────────────────────────────────────
+      h5("IFCB Options"),
+
+      checkboxInput("cfg_use_threshold", "Apply classification threshold",
+                    value = config$use_threshold),
+      tags$small(class = "text-muted",
+                 "Only applies to ifcb-analysis MATLAB classifier output (*_class*.mat).",
+                 "When enabled, classifications below the confidence threshold are marked as 'unclassified'."),
+
+      div(
+        style = "display: flex; gap: 10px; align-items: center; margin-top: 10px;",
+        numericInput("cfg_pixels_per_micron", "Pixels per micron",
+                     value = config$pixels_per_micron, min = 0.1, max = 20, step = 0.1,
+                     width = "150px"),
+        tags$small(class = "text-muted", "Scale calibration for the measuring tool. IFCB default: 3.4 px/\u00b5m.")
+      ),
+
       footer = tagList(
         modalButton("Cancel"),
         actionButton("save_settings", "Save Settings", class = "btn-primary")
@@ -313,6 +371,8 @@ server <- function(input, output, session) {
                  roots = make_dynamic_roots("cfg_roi_folder"), session = session)
   shinyDirChoose(input, "browse_output_folder",
                  roots = make_dynamic_roots("cfg_output_folder"), session = session)
+  shinyDirChoose(input, "browse_db_folder",
+                 roots = make_dynamic_roots("cfg_db_folder"), session = session)
   shinyDirChoose(input, "browse_png_folder",
                  roots = make_dynamic_roots("cfg_png_output_folder"), session = session)
   
@@ -344,6 +404,15 @@ server <- function(input, output, session) {
     }
   })
   
+  observeEvent(input$browse_db_folder, {
+    if (!is.integer(input$browse_db_folder)) {
+      folder <- parseDirPath(get_browse_volumes(input$cfg_db_folder), input$browse_db_folder)
+      if (length(folder) > 0) {
+        updateTextInput(session, "cfg_db_folder", value = as.character(folder))
+      }
+    }
+  })
+
   observeEvent(input$browse_png_folder, {
     if (!is.integer(input$browse_png_folder)) {
       folder <- parseDirPath(get_browse_volumes(input$cfg_png_output_folder), input$browse_png_folder)
@@ -614,10 +683,12 @@ server <- function(input, output, session) {
     config$roi_folder <- input$cfg_roi_folder
     config$output_folder <- input$cfg_output_folder
     config$png_output_folder <- input$cfg_png_output_folder
+    config$db_folder <- input$cfg_db_folder
     config$use_threshold <- input$cfg_use_threshold
     config$pixels_per_micron <- input$cfg_pixels_per_micron
     config$auto_sync <- input$cfg_auto_sync
-    
+    config$save_format <- input$cfg_save_format
+
     # Persist settings to file for next session
     # python_venv_path is kept from config (set via run_app() or previous save)
     persist_settings(list(
@@ -625,9 +696,11 @@ server <- function(input, output, session) {
       roi_folder = input$cfg_roi_folder,
       output_folder = input$cfg_output_folder,
       png_output_folder = input$cfg_png_output_folder,
+      db_folder = input$cfg_db_folder,
       use_threshold = input$cfg_use_threshold,
       pixels_per_micron = input$cfg_pixels_per_micron,
       auto_sync = input$cfg_auto_sync,
+      save_format = input$cfg_save_format,
       class2use_path = rv$class2use_path,
       python_venv_path = config$python_venv_path
     ))
@@ -644,7 +717,105 @@ server <- function(input, output, session) {
       rescan_trigger(rescan_trigger() + 1)
     }
   })
-  
+
+  # Import .mat -> SQLite bulk handler
+  observeEvent(input$import_mat_to_db_btn, {
+    if (is.null(config$output_folder) || config$output_folder == "") {
+      showNotification("Output folder is not configured. Set it in Settings first.",
+                       type = "error")
+      return()
+    }
+    db_path <- get_db_path(config$db_folder)
+    annotator <- if (!is.null(input$annotator_name) && nzchar(input$annotator_name)) {
+      input$annotator_name
+    } else {
+      "imported"
+    }
+
+    withProgress(message = "Importing .mat files to SQLite...", {
+      result <- import_all_mat_to_db(config$output_folder, db_path, annotator)
+    })
+
+    showNotification(
+      sprintf("Import complete: %d imported, %d failed, %d skipped (already in DB).",
+              result$success, result$failed, result$skipped),
+      type = if (result$failed > 0) "warning" else "message",
+      duration = 8
+    )
+
+    # Trigger file index rescan to update sample list
+    if (result$success > 0) {
+      rescan_trigger(rescan_trigger() + 1)
+    }
+  })
+
+  # Export SQLite -> .mat bulk handler
+  observeEvent(input$export_db_to_mat_btn, {
+    if (is.null(config$output_folder) || config$output_folder == "") {
+      showNotification("Output folder is not configured. Set it in Settings first.",
+                       type = "error")
+      return()
+    }
+    if (!python_available) {
+      showNotification("Python is not available. Export to .mat requires Python with scipy.",
+                       type = "error")
+      return()
+    }
+
+    db_path <- get_db_path(config$db_folder)
+
+    withProgress(message = "Exporting SQLite to .mat files...", {
+      result <- export_all_db_to_mat(db_path, config$output_folder)
+    })
+
+    showNotification(
+      sprintf("Export complete: %d exported, %d failed.", result$success, result$failed),
+      type = if (result$failed > 0) "warning" else "message",
+      duration = 8
+    )
+  })
+
+  # Export SQLite -> PNG bulk handler
+  observeEvent(input$export_db_to_png_btn, {
+    if (is.null(config$png_output_folder) || config$png_output_folder == "") {
+      showNotification("PNG Output Folder is not configured. Set it in Settings first.",
+                       type = "error")
+      return()
+    }
+    if (is.null(config$output_folder) || config$output_folder == "") {
+      showNotification("Output folder is not configured. Set it in Settings first.",
+                       type = "error")
+      return()
+    }
+
+    db_path <- get_db_path(config$db_folder)
+    current_roi_map <- roi_path_map()
+
+    if (length(current_roi_map) == 0) {
+      showNotification("No ROI file index available. Click Sync first.",
+                       type = "error")
+      return()
+    }
+
+    skip <- if (!is.null(input$cfg_skip_class_png) && nzchar(input$cfg_skip_class_png)) {
+      input$cfg_skip_class_png
+    } else {
+      NULL
+    }
+
+    withProgress(message = "Exporting PNGs from SQLite...", {
+      result <- export_all_db_to_png(db_path, config$png_output_folder,
+                                     current_roi_map, skip_class = skip)
+    })
+
+    showNotification(
+      sprintf("PNG export complete: %d exported, %d failed, %d skipped (ROI not found).",
+              result$success, result$failed, result$skipped),
+      type = if (result$failed > 0) "warning" else "message",
+      duration = 8
+    )
+  })
+
   # ============================================================================
   # UI Outputs - Warnings and Indicators
   # ============================================================================
@@ -673,15 +844,17 @@ server <- function(input, output, session) {
   })
   
   output$python_warning <- renderUI({
-    if (!python_available) {
+    needs_python <- config$save_format %in% c("mat", "both")
+    if (!python_available && needs_python) {
       div(
         class = "alert alert-warning",
         style = "margin-top: 10px; padding: 8px; font-size: 12px;",
         "Python not available. Saving .mat files will not work. ",
-        "This is only required if you use the ",
+        "Switch to SQLite storage format in Settings, or install Python: ",
+        "run ifcb_py_install() in R console. ",
+        "MAT files are only needed for ",
         tags$a(href = "https://github.com/hsosik/ifcb-analysis", target = "_blank", "ifcb-analysis"),
-        " MATLAB toolbox (Sosik & Olson, 2007). ",
-        "Run ifcb_py_install() in R console to enable."
+        " compatibility."
       )
     }
   })
@@ -859,7 +1032,7 @@ server <- function(input, output, session) {
   # Switch from validation mode to annotation mode
   observeEvent(input$switch_to_annotation, {
     req(rv$current_sample, rv$has_both_modes)
-    
+
     sample_name <- rv$current_sample
     roi_path <- roi_path_map()[[sample_name]]
     if (is.null(roi_path)) {
@@ -867,12 +1040,21 @@ server <- function(input, output, session) {
       return()
     }
     adc_path <- sub("\\.roi$", ".adc", roi_path)
+
+    # Try SQLite first, then .mat
+    db_path <- get_db_path(config$db_folder)
     annotation_mat_path <- file.path(config$output_folder, paste0(sample_name, ".mat"))
-    
-    if (file.exists(annotation_mat_path)) {
+    has_db <- sample_name %in% list_annotated_samples_db(db_path)
+    has_mat <- file.exists(annotation_mat_path)
+
+    if (has_db || has_mat) {
       roi_dims <- read_roi_dimensions(adc_path)
-      classifications <- load_from_mat(annotation_mat_path, sample_name, rv$class2use, roi_dims)
-      
+      if (has_db) {
+        classifications <- load_from_db(db_path, sample_name, roi_dims)
+      } else {
+        classifications <- load_from_mat(annotation_mat_path, sample_name, rv$class2use, roi_dims)
+      }
+
       rv$original_classifications <- classifications
       rv$classifications <- classifications
       rv$is_annotation_mode <- TRUE
@@ -880,7 +1062,7 @@ server <- function(input, output, session) {
       rv$selected_images <- character()
       rv$current_page <- 1
       rv$changes_log <- create_empty_changes_log()
-      
+
       # Update class filter dropdown
       available_classes <- sort(unique(classifications$class_name))
       unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
@@ -890,7 +1072,7 @@ server <- function(input, output, session) {
       updateSelectInput(session, "class_filter",
                         choices = c("All" = "all", setNames(available_classes, display_names)),
                         selected = "all")
-      
+
       showNotification("Switched to Manual annotation mode", type = "message")
     } else {
       showNotification("No manual annotation file found", type = "warning")
@@ -966,6 +1148,7 @@ server <- function(input, output, session) {
         roi_folder = config$roi_folder,
         output_folder = config$output_folder,
         png_output_folder = config$png_output_folder,
+        db_folder = config$db_folder,
         use_threshold = config$use_threshold,
         class2use_path = persistent_path
       ))
@@ -1374,8 +1557,11 @@ server <- function(input, output, session) {
           png_output_folder = config$png_output_folder,
           roi_folder = config$roi_folder,
           class2use_path = rv$class2use_path,
+          class2use = rv$class2use,
           annotator = input$annotator_name,
-          adc_folder = adc_folder_for_save
+          adc_folder = adc_folder_for_save,
+          save_format = config$save_format,
+          db_folder = config$db_folder
         )
         # Only update annotated samples list if changes were actually saved
         if (isTRUE(saved)) {
@@ -1416,30 +1602,39 @@ server <- function(input, output, session) {
     
     tryCatch({
       annotation_mat_path <- file.path(config$output_folder, paste0(sample_name, ".mat"))
-      has_existing_annotation <- file.exists(annotation_mat_path)
+      db_path <- get_db_path(config$db_folder)
+      has_db_annotation <- sample_name %in% list_annotated_samples_db(db_path)
+      has_mat_annotation <- file.exists(annotation_mat_path)
+      has_existing_annotation <- has_db_annotation || has_mat_annotation
       has_classification <- has_csv || has_classifier_mat
-      
+
       # Track if sample has both modes available
       rv$has_both_modes <- has_existing_annotation && has_classification
       rv$using_manual_mode <- has_existing_annotation  # Default to manual if available
-      
+
       # Variable to hold mode message for notification (shown after filtering)
       mode_message <- NULL
-      
+
       # Priority: Manual annotation > Classification > New annotation
+      # Within manual annotations: SQLite first (faster), then .mat fallback
       if (has_existing_annotation) {
         # ANNOTATION MODE - from existing manual annotation (priority when both exist)
         if (!file.exists(adc_path)) {
           showNotification(paste("ADC file not found:", adc_path), type = "error")
           return(FALSE)
         }
-        
+
         roi_dims <- read_roi_dimensions(adc_path)
-        classifications <- load_from_mat(annotation_mat_path, sample_name, rv$class2use, roi_dims)
+
+        if (has_db_annotation) {
+          classifications <- load_from_db(db_path, sample_name, roi_dims)
+        } else {
+          classifications <- load_from_mat(annotation_mat_path, sample_name, rv$class2use, roi_dims)
+        }
         rv$is_annotation_mode <- TRUE
-        
+
         mode_message <- if (rv$has_both_modes) "Manual mode (switch available)" else "Resumed"
-        
+
       } else if (has_csv) {
         # VALIDATION MODE - from CSV
         classifications <- load_from_csv(csv_path)
@@ -2044,63 +2239,54 @@ server <- function(input, output, session) {
     }
     
     tryCatch({
-      output_folder <- config$output_folder
-      stats_folder <- file.path(config$output_folder, "validation_statistics")
-      png_output_folder <- config$png_output_folder
-      
-      if (!dir.exists(output_folder)) dir.create(output_folder, recursive = TRUE)
-      if (!dir.exists(stats_folder)) dir.create(stats_folder, recursive = TRUE)
-      if (!dir.exists(png_output_folder)) dir.create(png_output_folder, recursive = TRUE)
-      
-      temp_annotate_folder <- tempfile(pattern = "ifcb_annotate_")
-      dir.create(temp_annotate_folder, recursive = TRUE)
-      
-      withProgress(message = "Copying images...", {
-        copy_images_to_class_folders(
-          classifications = rv$classifications,
-          src_folder = file.path(rv$temp_png_folder, rv$current_sample),
-          temp_folder = temp_annotate_folder,
-          output_folder = png_output_folder
-        )
-      })
-      
       roi_path <- roi_path_map()[[rv$current_sample]]
       adc_folder <- if (!is.null(roi_path)) dirname(roi_path) else NULL
       if (is.null(adc_folder)) {
         showNotification("Cannot find ROI data folder for this sample", type = "error")
         return()
       }
-      
-      withProgress(message = "Saving MAT file...", {
-        result <- ifcb_annotate_samples(
-          png_folder = temp_annotate_folder,
+
+      save_fmt <- config$save_format
+      progress_msg <- switch(save_fmt,
+        sqlite = "Saving to database...",
+        mat = "Saving MAT file...",
+        both = "Saving annotations...",
+        "Saving..."
+      )
+
+      withProgress(message = progress_msg, {
+        result <- save_sample_annotations(
+          sample_name = rv$current_sample,
+          classifications = rv$classifications,
+          original_classifications = rv$original_classifications,
+          changes_log = rv$changes_log,
+          temp_png_folder = rv$temp_png_folder,
+          output_folder = config$output_folder,
+          png_output_folder = config$png_output_folder,
+          roi_folder = config$roi_folder,
+          class2use_path = rv$class2use_path,
+          class2use = rv$class2use,
+          annotator = annotator,
           adc_folder = adc_folder,
-          class2use_file = rv$class2use_path,
-          output_folder = output_folder,
-          sample_names = rv$current_sample,
-          remove_trailing_numbers = FALSE
+          save_format = save_fmt,
+          db_folder = config$db_folder
         )
       })
-      
-      save_validation_statistics(
-        sample_name = rv$current_sample,
-        classifications = rv$classifications,
-        original_classifications = rv$original_classifications,
-        stats_folder = stats_folder,
-        annotator = annotator
-      )
-      
-      unlink(temp_annotate_folder, recursive = TRUE)
-      
+
+      if (!isTRUE(result)) {
+        showNotification("Save returned no changes", type = "warning")
+        return()
+      }
+
       # Update annotated samples list to reflect new manual annotation
       current_annotated <- annotated_samples()
       if (!rv$current_sample %in% current_annotated) {
         annotated_samples(c(current_annotated, rv$current_sample))
         update_current_sample_status(rv$current_sample)
       }
-      
+
       showNotification(paste("Saved to", config$output_folder), type = "message")
-      
+
     }, error = function(e) {
       showNotification(paste("Error saving:", e$message), type = "error")
     })
@@ -2384,7 +2570,9 @@ server <- function(input, output, session) {
               png_output_folder = png_output_folder,
               roi_folder = roi_folder,
               class2use_path = class2use_path,
-              annotator = annotator
+              annotator = annotator,
+              save_format = isolate(config$save_format),
+              db_folder = isolate(config$db_folder)
             )
           }, error = function(e) {
             message("Failed to auto-save ", sample_name, " on session end: ", e$message)

@@ -55,6 +55,27 @@ load_from_csv <- function(csv_path) {
   classifications
 }
 
+#' Load classifications from SQLite database
+#'
+#' Reads annotations for a sample from the SQLite database and returns a data
+#' frame in the same format as \code{\link{load_from_mat}}.
+#'
+#' @param db_path Path to the SQLite database file
+#' @param sample_name Sample name (e.g., "D20230101T120000_IFCB134")
+#' @param roi_dimensions Data frame from \code{\link{read_roi_dimensions}}
+#' @return Data frame with columns: file_name, class_name, score, width, height,
+#'   roi_area. Returns NULL if the sample has no annotations in the database.
+#' @export
+#' @examples
+#' \dontrun{
+#' dims <- read_roi_dimensions("/data/raw/2023/D20230101/D20230101T120000_IFCB134.adc")
+#' db_path <- get_db_path("/data/manual")
+#' classifications <- load_from_db(db_path, "D20230101T120000_IFCB134", dims)
+#' }
+load_from_db <- function(db_path, sample_name, roi_dimensions) {
+  load_annotations_db(db_path, sample_name, roi_dimensions)
+}
+
 #' Load classifications from existing MAT annotation file
 #'
 #' Reads a MATLAB annotation file (created by ClassiPyR or ifcb-analysis)
@@ -83,13 +104,23 @@ load_from_mat <- function(mat_path, sample_name, class2use, roi_dimensions) {
   # Read classlist from MAT file (column 2 contains class indices)
   classlist <- ifcb_get_mat_variable(mat_path, variable_name = "classlist")
 
+  # Prefer the class list embedded in the .mat file for accurate index mapping
+  mat_class2use <- tryCatch(
+    as.character(ifcb_get_mat_variable(mat_path,
+                                       variable_name = "class2use_manual")),
+    error = function(e) NULL
+  )
+  if (!is.null(mat_class2use) && length(mat_class2use) > 0) {
+    class2use <- mat_class2use
+  }
+
   # Map class indices to class names
   roi_numbers <- classlist[, 1]
   class_indices <- classlist[, 2]
 
-  # Get class names from indices (handle 0 or NA as "unclassified")
+  # Get class names from indices (handle NaN, 0, or NA as "unclassified")
   class_names <- sapply(class_indices, function(idx) {
-    if (is.na(idx) || idx < 1 || idx > length(class2use)) {
+    if (is.na(idx) || is.nan(idx) || idx < 1 || idx > length(class2use)) {
       return("unclassified")
     }
     return(class2use[idx])

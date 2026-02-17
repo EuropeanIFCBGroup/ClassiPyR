@@ -49,6 +49,7 @@ reference:
   - load_from_classifier_mat
   - load_from_csv
   - load_from_mat
+  - load_from_db
   - create_new_classifications
   - filter_to_extracted
 - title: Sample Saving
@@ -57,6 +58,21 @@ reference:
   - save_sample_annotations
   - save_validation_statistics
   - copy_images_to_class_folders
+- title: Database Backend
+  desc: SQLite database functions for annotation storage
+  contents:
+  - get_default_db_dir
+  - get_db_path
+  - save_annotations_db
+  - load_annotations_db
+  - list_annotated_samples_db
+  - update_annotator
+  - import_mat_to_db
+  - import_all_mat_to_db
+  - export_db_to_mat
+  - export_all_db_to_mat
+  - export_db_to_png
+  - export_all_db_to_png
 - title: File Index Cache
   desc: Functions for managing the file index cache for faster startup
   contents:

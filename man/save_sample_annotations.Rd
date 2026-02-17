@@ -2,7 +2,7 @@
 % Please edit documentation in R/sample_saving.R
 \name{save_sample_annotations}
 \alias{save_sample_annotations}
-\title{Save sample annotations to MAT and statistics files}
+\title{Save sample annotations}
 \usage{
 save_sample_annotations(
   sample_name,
@@ -14,8 +14,11 @@ save_sample_annotations(
   png_output_folder,
   roi_folder,
   class2use_path,
+  class2use = NULL,
   annotator = "Unknown",
-  adc_folder = NULL
+  adc_folder = NULL,
+  save_format = "sqlite",
+  db_folder = get_default_db_dir()
 )
 }
 \arguments{
@@ -29,7 +32,7 @@ save_sample_annotations(
 
 \item{temp_png_folder}{Path to temporary folder with extracted PNG images}
 
-\item{output_folder}{Output folder path for MAT files}
+\item{output_folder}{Output folder path for MAT files and statistics}
 
 \item{png_output_folder}{PNG output folder path (organized by class)}
 
@@ -37,24 +40,34 @@ save_sample_annotations(
 
 \item{class2use_path}{Path to class2use file}
 
+\item{class2use}{Character vector of class names. When NULL (default), loaded
+from \code{class2use_path}.}
+
 \item{annotator}{Annotator name for statistics}
 
 \item{adc_folder}{Direct path to the ADC folder. When provided, this is used
 instead of constructing the path via \code{\link{get_sample_paths}}.
 This supports non-standard folder structures.}
+
+\item{save_format}{One of \code{"sqlite"} (default), \code{"mat"}, or
+\code{"both"}. Controls which backend(s) are written.}
+
+\item{db_folder}{Path to the database folder for SQLite storage. Defaults to
+\code{\link{get_default_db_dir}()}. Should be a local filesystem path,
+not a network drive.}
 }
 \value{
 TRUE on success, FALSE on failure
 }
 \description{
-Saves the current annotations for a sample, including:
-- MAT file compatible with ifcb-analysis (requires Python)
-- Validation statistics CSV files
-- PNG images organized by class
+Saves the current annotations for a sample. By default annotations are
+stored in a local SQLite database (\code{annotations.sqlite} in the database
+folder). Optionally, a MATLAB-compatible \code{.mat} file can also be
+written (requires Python + scipy).
 }
 \examples{
 \dontrun{
-# Save annotations for a sample
+# Save annotations for a sample (default: SQLite)
 success <- save_sample_annotations(
   sample_name = "D20230101T120000_IFCB134",
   classifications = current_classifications,

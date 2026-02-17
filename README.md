@@ -1,7 +1,6 @@
 # ClassiPyR <a href="https://europeanifcbgroup.github.io/ClassiPyR/"><img src="man/figures/logo.png" align="right" height="138" alt="ClassiPyR website" /></a>
 
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![R-CMD-check](https://github.com/EuropeanIFCBGroup/ClassiPyR/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/EuropeanIFCBGroup/ClassiPyR/actions/workflows/R-CMD-check.yaml)
 [![codecov](https://codecov.io/gh/EuropeanIFCBGroup/ClassiPyR/branch/main/graph/badge.svg)](https://app.codecov.io/gh/EuropeanIFCBGroup/ClassiPyR)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18414999.svg)](https://doi.org/10.5281/zenodo.18414999)
@@ -18,28 +17,41 @@ A Shiny application for manual (human) image classification and validation of Im
 
 - **Dual Mode**: Validate existing classifications or annotate from scratch
 - **Multiple Formats**: Load from CSV or MATLAB classifier output
+- **SQLite Storage**: Annotations stored in a local SQLite database by default - no Python needed
 - **Efficient Workflow**: Drag-select, batch relabeling, class filtering
-- **MATLAB Compatible**: Export for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox
+- **MATLAB Compatible**: Optional `.mat` export for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox
 - **CNN Training Ready**: Organized PNG output by class
 - **Measure Tool**: Built-in ruler for image measurements
-- **Cross-Platform**: Web-based folder browser works on all platforms
+- **Cross-Platform**: Works on all platforms with no external dependencies
 
 ## Installation
 
+Install the latest release from GitHub using the `remotes` package:
+
 ```r
-install.packages("remotes")
-remotes::install_github("EuropeanIFCBGroup/ClassiPyR")
+# Install remotes
+if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
+
+# Install ClassiPyR
+remotes::install_github("EuropeanIFCBGroup/ClassiPyR",
+                        ref = remotes::github_release())
 ```
 
 `ClassiPyR` depends on [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb) for IFCB data handling, which is installed automatically.
 
-### Python Setup
+### Python Setup (optional)
 
-Python is required for saving annotations as MATLAB .mat files. If you only need to read existing .mat files or work with CSV files, this step is optional.
+Python is **not required** for the default workflow. Annotations are stored in a local SQLite database that works out of the box.
+
+Python is only needed if you want to export annotations as MATLAB `.mat` files for use with [ifcb-analysis](https://github.com/hsosik/ifcb-analysis). To set up using `iRfcb`:
 
 ```r
 library(iRfcb)
+
+# Define a path were the venv will be installed
 venv_path = "/path/to/your/venv"
+
+# Install the venv
 ifcb_py_install(venv_path)
 ```
 
