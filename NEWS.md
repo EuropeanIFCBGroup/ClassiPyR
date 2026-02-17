@@ -1,21 +1,13 @@
-# ClassiPyR (development version)
+# ClassiPyR 0.1.0
+
+Initial release of ClassiPyR, a Shiny application for manual classification and validation of Imaging FlowCytobot (IFCB) plankton images.
 
 ## Features
-
-### SQLite Database Backend
-- Annotations are now stored in a local SQLite database (`annotations.sqlite`) by default
-- Works out of the box with no Python dependency - only R packages (RSQLite, DBI) are needed
-- MATLAB `.mat` file export is still available as an opt-in for ifcb-analysis compatibility
-- Storage format configurable in Settings: "SQLite" (default), "MAT file", or "Both"
-- Existing `.mat` annotations continue to work and can be loaded as before
-- `import_mat_to_db()` utility for bulk migration of existing `.mat` files to SQLite
-- Sample discovery scans both `.mat` files and the SQLite database
-- When loading a sample, SQLite is checked first (faster), with `.mat` fallback
 
 ### Sample Management
 - Load samples from ROI files with automatic year/month filtering
 - Support for validation mode (existing classifications) and annotation mode (new samples)
-- Resume previous annotations from saved MAT files
+- Resume previous annotations from saved files
 - Navigate between samples with previous/next/random buttons
 - Filter samples by classification status (all/classified/annotated/unannotated)
 - Samples with both manual annotations AND auto-classifications can switch between modes
@@ -29,15 +21,6 @@
   - ✓ = Has auto-classification
   - ✎✓ = Has both (can switch between modes)
   - * = Unannotated
-
-### File Index Cache
-- Disk-based file index cache for faster app startup on subsequent launches
-- Avoids expensive recursive directory scans when folder contents haven't changed
-- Sync button in sidebar to manually refresh the file index
-- Cache age indicator shows when folders were last scanned
-- `rescan_file_index()` function for headless use (e.g. cron jobs)
-- Cache stored in platform-appropriate config directory alongside settings
-- Auto-sync option (enabled by default) to control whether app scans on startup
 
 ### Image Gallery
 - Paginated image display (50/100/200/500 images per page)
@@ -63,23 +46,35 @@
 - Export class list as .mat or .txt
 - Visual warnings for classes in classifications not in class2use list
 
+### Annotation Storage
+- SQLite database backend (default) — no Python dependency required
+- Optional MATLAB `.mat` file export for ifcb-analysis compatibility (requires Python/scipy)
+- Configurable storage format in Settings: "SQLite", "MAT file", or "Both"
+- `import_mat_to_db()` and `export_db_to_mat()` for migration between formats
+- Sample discovery scans both `.mat` files and the SQLite database
+- When loading a sample, SQLite is checked first (faster), with `.mat` fallback
+- Separate database folder setting (defaults to output folder)
+
 ### Output
-- Save annotations to SQLite database (default, no Python needed)
-- Optional: save annotations as MATLAB-compatible .mat files (using iRfcb, requires Python)
-- Configurable storage format: SQLite only, MAT only, or both
-- Save validation statistics as CSV (in `validation_statistics/` subfolder)
+- Save validation statistics as CSV
 - Organize output PNGs by class folder (for CNN training)
 - Auto-save when navigating between samples
 - Support for non-standard folder structures via direct ADC path resolution
-- Graceful handling of empty (0-byte) ADC files
+
+### File Index Cache
+- Disk-based file index cache for faster app startup on subsequent launches
+- Avoids expensive recursive directory scans when folder contents haven't changed
+- Sync button in sidebar to manually refresh the file index
+- Cache age indicator shows when folders were last scanned
+- `rescan_file_index()` function for headless use (e.g. cron jobs)
+- Auto-sync option (enabled by default) to control whether app scans on startup
 
 ### Settings & Persistence
 - Configurable folder paths via settings modal
 - Cross-platform web-based folder browser (shinyFiles)
-- Settings persisted between sessions (`.classipyr_settings.json`)
+- Settings persisted between sessions
 - Class list file path remembered and auto-loaded on startup
 - Annotator name tracking for statistics
-- Cache invalidation when folder paths change in settings
 
 ### User Interface
 - Clean, modern interface using bslib (Flatly theme)
@@ -87,15 +82,14 @@
 - Validation Statistics tab shows appropriate content based on mode
 - Switch between annotation/validation modes for dual-mode samples
 
+## Pre-releases
+
+- **v0.1.0-beta.2** (2026-02-04): File index cache, cross-platform folder browser, annotation mode sorting, and notification improvements.
+- **v0.1.0-beta.1** (2026-01-29): First beta version.
+
 ## Technical Notes
-- SQLite is the default annotation storage - works out of the box with RSQLite (no external dependencies)
-- Python with scipy is optional - only needed for MAT file export (ifcb-analysis compatibility)
+- SQLite is the default annotation storage — works out of the box with RSQLite
+- Python with scipy is optional — only needed for MAT file export
 - Uses iRfcb package for IFCB data handling
 - Session cache preserves work when switching samples
-- File index cache reduces startup time by avoiding redundant folder scans
-- Security: Input validation, XSS prevention, path traversal protection
-
-## Development
-This application was developed through human-AI collaboration:
-- **Anders Torstensson**: Project vision, requirements, testing, and guidance
-- **Claude Code (Anthropic)**: Implementation, code generation, and iterative refinement
+- Input validation, XSS prevention, and path traversal protection
