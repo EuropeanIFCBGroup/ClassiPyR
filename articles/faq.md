@@ -30,16 +30,11 @@ separate folders.
 
 **Q: I see “Python not available” warning**
 
-A: This warning affects saving .mat files. Python is required for:
+A: This warning only appears when your storage format includes `.mat`
+files. Python is **not needed** for the default SQLite storage.
 
-- Saving annotations as .mat files for
-  [ifcb-analysis](https://github.com/hsosik/ifcb-analysis)
-
-Reading .mat files (annotations, classifier output, class lists) does
-not require Python. If you do not need to save .mat files, you can
-ignore this warning.
-
-To enable .mat support:
+If you see this warning and don’t need `.mat` files, switch to SQLite in
+Settings \> Annotation Storage. Otherwise, to enable `.mat` support:
 
 ``` r
 library(iRfcb)
@@ -47,6 +42,13 @@ ifcb_py_install()  # Creates venv in current working directory
 ```
 
 Then restart the app.
+
+**Q: Do I need Python to use ClassiPyR?**
+
+A: No. The default storage format is SQLite, which works out of the box
+with no Python dependency. Python is only needed if you want to export
+`.mat` files for
+[ifcb-analysis](https://github.com/hsosik/ifcb-analysis) compatibility.
 
 **Q: Where is the Python virtual environment created?**
 
@@ -85,7 +87,7 @@ overriding any previously saved path.
 A: Make sure you have remotes installed and try:
 
 ``` r
-install.packages("remotes")
+if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
 remotes::install_github("EuropeanIFCBGroup/ClassiPyR")
 ```
 
@@ -208,7 +210,8 @@ automatically on load.
 A: Check that:
 
 1.  Output folder is writable
-2.  Python is available (required for saving .mat files)
+2.  If using MAT format: Python is available (not needed for default
+    SQLite storage)
 3.  Click “Save Annotations” before closing
 
 ------------------------------------------------------------------------
@@ -267,16 +270,94 @@ periods (`.`), and spaces are preserved.
 
 **Q: Where are my annotations saved?**
 
-A: In the Output Folder you configured:
+A: Annotations are split across two locations:
 
-- MAT annotation files are saved directly in the output folder (one per
-  sample)
-- `validation_statistics/` subfolder contains CSV statistics
-- PNGs are in the PNG Output Folder, organized by class name
+- **SQLite database** (default): stored in the **Database Folder** (a
+  local directory)
+- **MAT files and statistics**: stored in the **Output Folder** (can be
+  on a network drive)
+
+&nbsp;
+
+    db_folder/                           ← local drive (Database Folder)
+    └── annotations.sqlite              ← single database for ALL samples
+
+    output_folder/                       ← can be a network drive (Output Folder)
+    ├── D20230101T120000_IFCB134.mat    ← only if storage format includes "MAT"
+    ├── D20230202T080000_IFCB134.mat
+    └── validation_statistics/
+        ├── ..._validation_stats.csv
+        └── ..._validation_detailed.csv
+
+By default, the database is stored in a persistent local directory
+(`tools::R_user_dir("ClassiPyR", "data")`). Back up `annotations.sqlite`
+to preserve your work.
+
+**Q: Where is the default database location?**
+
+A: The default Database Folder is a platform-specific local directory:
+
+- **Linux**: `~/.local/share/R/ClassiPyR/`
+- **macOS**:
+  `~/Library/Application Support/org.R-project.R/R/ClassiPyR/`
+- **Windows**: `%LOCALAPPDATA%/R/data/R/ClassiPyR/`
+
+You can find the exact path with:
+
+``` r
+ClassiPyR::get_default_db_dir()
+```
+
+You can change it in Settings \> Database Folder, but it should always
+be a local drive.
+
+**Q: Can I put the database on a network drive?**
+
+A: No. SQLite databases are [not safe on network
+filesystems](https://www.sqlite.org/useovernet.html) (NFS, SMB/CIFS)
+because network file locking is unreliable, which can lead to database
+corruption. Always keep the Database Folder on a local drive. The Output
+Folder (for MAT files and statistics) can safely be on a network drive.
+
+**Q: How do I transfer my annotations to another computer?**
+
+A: Since the SQLite database is stored locally, you cannot simply share
+it over a network drive. Instead, use `.mat` files as the interchange
+format:
+
+1.  **Export** from the source computer (requires Python with scipy):
+
+``` r
+library(ClassiPyR)
+db_path <- get_db_path(get_default_db_dir())
+# Export all annotations to .mat files in a shared output folder
+result <- export_all_db_to_mat(db_path, "/shared/network/manual")
+cat(result$success, "exported\n")
+```
+
+Or use the **Export SQLite → .mat** button in Settings.
+
+2.  **Import** on the target computer:
+
+``` r
+library(ClassiPyR)
+class2use <- load_class_list("/shared/network/class2use.mat")
+db_path <- get_db_path(get_default_db_dir())
+# Import .mat files from the shared folder into the local database
+result <- import_all_mat_to_db("/shared/network/manual", db_path, class2use)
+cat(result$success, "imported,", result$skipped, "skipped\n")
+```
+
+Or use the **Import .mat → SQLite** button in Settings. Already-imported
+samples are skipped automatically.
+
+You can also simply copy the `annotations.sqlite` file directly between
+machines if you prefer.
 
 **Q: Can I import annotations back to MATLAB?**
 
-A: Yes, the MAT files are compatible with the
+A: Yes, if you save with the “MAT file” or “Both” storage format, the
+MAT files are compatible with the
 [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox (Sosik
 & Olson, 2007). Use the list in `startMC`, or load the list in MATLAB
 using:
@@ -286,7 +367,76 @@ load('sample_name.mat');
 % classlist contains [roi_number, class_index]
 ```
 
-Note: Python with `scipy` must be installed to save .mat files.
+Note: Python with `scipy` must be installed to save .mat files. Change
+the storage format in Settings \> Annotation Storage.
+
+**Q: Can I migrate existing .mat annotations to the SQLite database?**
+
+A: Yes. The easiest way is the **Import .mat → SQLite** button in
+Settings \> Annotation Storage, which bulk-imports all `.mat` files in
+your output folder.
+
+You can also import programmatically — a single file:
+
+``` r
+library(ClassiPyR)
+class2use <- load_class_list("/path/to/class2use.mat")
+import_mat_to_db(
+  mat_path = "/data/manual/D20230101T120000_IFCB134.mat",
+  db_path = get_db_path(get_default_db_dir()),
+  sample_name = "D20230101T120000_IFCB134",
+  class2use = class2use
+)
+```
+
+Or bulk-import all `.mat` files in a folder:
+
+``` r
+result <- import_all_mat_to_db("/data/manual", get_db_path(get_default_db_dir()), class2use)
+cat(result$success, "imported,", result$failed, "failed,", result$skipped, "skipped\n")
+```
+
+**Q: Can I export SQLite annotations back to .mat files?**
+
+A: Yes. Use the **Export SQLite → .mat** button in Settings \>
+Annotation Storage to export all annotated samples at once. This
+requires Python with scipy.
+
+You can also export programmatically:
+
+``` r
+# Single sample
+export_db_to_mat(get_db_path(get_default_db_dir()), "D20230101T120000_IFCB134", "/data/manual")
+
+# All samples
+result <- export_all_db_to_mat(get_db_path(get_default_db_dir()), "/data/manual")
+cat(result$success, "exported,", result$failed, "failed\n")
+```
+
+**Q: Can I change the annotator name for existing annotations?**
+
+A: Yes. Use
+[`update_annotator()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/update_annotator.md)
+from the R console:
+
+``` r
+library(ClassiPyR)
+db_path <- get_db_path(get_default_db_dir())
+
+# Update a single sample
+update_annotator(db_path, "D20230101T120000_IFCB134", "Jane")
+
+# Update several samples at once
+update_annotator(db_path, c("sample_A", "sample_B"), "Jane")
+
+# Update all annotated samples (e.g. after a bulk import)
+all_samples <- list_annotated_samples_db(db_path)
+update_annotator(db_path, all_samples, "Jane")
+```
+
+The function returns a named vector showing how many annotation rows
+were updated per sample (0 means the sample was not found in the
+database).
 
 **Q: What’s in the statistics CSV?**
 
@@ -431,14 +581,14 @@ A: In the same config directory as your settings:
 
 ## Error Messages
 
-| Error                      | Solution                                                                                                                              |
-|----------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
-| “ROI file not found”       | Check ROI Data Folder path; ensure `.roi` files use IFCB naming and click Sync                                                        |
-| “ADC file not found”       | ADC file must be alongside ROI file                                                                                                   |
-| “Python not available”     | Affects saving .mat files. Run [`iRfcb::ifcb_py_install()`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html) |
-| “Error loading class list” | Check file format (.mat or .txt)                                                                                                      |
-| “No samples found”         | Check ROI Data Folder configuration                                                                                                   |
-| App fails to start         | Try `run_app(reset_settings = TRUE)` to clear saved settings                                                                          |
+| Error                      | Solution                                                                                                                                                                |
+|----------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| “ROI file not found”       | Check ROI Data Folder path; ensure `.roi` files use IFCB naming and click Sync                                                                                          |
+| “ADC file not found”       | ADC file must be alongside ROI file                                                                                                                                     |
+| “Python not available”     | Only affects `.mat` export. Switch to SQLite in Settings, or run [`iRfcb::ifcb_py_install()`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html) |
+| “Error loading class list” | Check file format (.mat or .txt)                                                                                                                                        |
+| “No samples found”         | Check ROI Data Folder configuration                                                                                                                                     |
+| App fails to start         | Try `run_app(reset_settings = TRUE)` to clear saved settings                                                                                                            |
 
 ------------------------------------------------------------------------
 

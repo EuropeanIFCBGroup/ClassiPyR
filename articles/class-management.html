@@ -75,7 +75,7 @@
       <img src="../logo.svg" class="logo" alt=""><h1>Class List Management</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.1.0-beta.2/vignettes/class-management.Rmd" class="external-link"><code>vignettes/class-management.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/vignettes/class-management.Rmd" class="external-link"><code>vignettes/class-management.Rmd</code></a></small>
       <div class="d-none name"><code>class-management.Rmd</code></div>
     </div>
 
@@ -88,10 +88,11 @@ maintaining consistent annotations.</p>
 <h2 id="why-class-indices-matter-ifcb-analysis-users">Why Class Indices Matter (ifcb-analysis Users)<a class="anchor" aria-label="anchor" href="#why-class-indices-matter-ifcb-analysis-users"></a>
 </h2>
 <blockquote>
-<p><strong>Note</strong>: This section is primarily relevant if you use
-the <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a>
-MATLAB toolbox (Sosik &amp; Olson, 2007). If you only work with CSV
-exports, class indices are less critical.</p>
+<p><strong>Note</strong>: This section is primarily relevant if you
+export <code>.mat</code> files for use with the <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a> MATLAB
+toolbox (Sosik &amp; Olson, 2007). If you use the default SQLite storage
+or work with CSV exports, class indices are less critical because class
+names are stored directly.</p>
 </blockquote>
 <p>IFCB .mat annotations use <strong>numerical indices</strong> to
 reference classes:</p>

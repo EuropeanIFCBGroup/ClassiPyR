@@ -48,7 +48,7 @@ the cache up to date without manually clicking the rescan button."><meta propert
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.svg" class="logo" alt=""><h1>Rescan folders and rebuild the file index cache</h1>
-      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.1.0-beta.2/R/utils.R" class="external-link"><code>R/utils.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/R/utils.R" class="external-link"><code>R/utils.R</code></a></small>
       <div class="d-none name"><code>rescan_file_index.Rd</code></div>
     </div>
 
@@ -65,7 +65,8 @@ the cache up to date without manually clicking the rescan button.</p>
 <span>  roi_folder <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  csv_folder <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  output_folder <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span>  verbose <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  db_folder <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -82,11 +83,17 @@ the cache up to date without manually clicking the rescan button.</p>
 
 
 <dt id="arg-output-folder">output_folder<a class="anchor" aria-label="anchor" href="#arg-output-folder"></a></dt>
-<dd><p>Path to output folder for annotations. If NULL, read from saved settings.</p></dd>
+<dd><p>Path to output folder for MAT annotations. If NULL, read from saved settings.</p></dd>
 
 
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
 <dd><p>If TRUE, print progress messages. Default TRUE.</p></dd>
+
+
+<dt id="arg-db-folder">db_folder<a class="anchor" aria-label="anchor" href="#arg-db-folder"></a></dt>
+<dd><p>Path to the database folder for SQLite annotations. If NULL,
+read from saved settings; if not found in settings, defaults to
+<code><a href="get_default_db_dir.html">get_default_db_dir()</a></code>.</p></dd>
 
 </dl></div>
     <div class="section level2">

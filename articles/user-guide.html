@@ -75,7 +75,7 @@
       <img src="../logo.svg" class="logo" alt=""><h1>User Guide</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.1.0-beta.2/vignettes/user-guide.Rmd" class="external-link"><code>vignettes/user-guide.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/vignettes/user-guide.Rmd" class="external-link"><code>vignettes/user-guide.Rmd</code></a></small>
       <div class="d-none name"><code>user-guide.Rmd</code></div>
     </div>
 
@@ -349,8 +349,9 @@ unclassified predictions below confidence threshold.</p>
 <div class="section level3">
 <h3 id="existing-annotations">Existing Annotations<a class="anchor" aria-label="anchor" href="#existing-annotations"></a>
 </h3>
-<p>Previously saved annotations (in output folder) are automatically
-detected and can be resumed.</p>
+<p>Previously saved annotations (in SQLite database or <code>.mat</code>
+files in the output folder) are automatically detected and can be
+resumed. When both exist, the SQLite version is loaded (faster).</p>
 <hr>
 </div>
 </div>
@@ -420,9 +421,37 @@ which provides the fastest possible startup.</p>
 <div class="section level2">
 <h2 id="output-files">Output Files<a class="anchor" aria-label="anchor" href="#output-files"></a>
 </h2>
-<p>When you save, the app creates:</p>
+<p>When you save, the app creates files based on your chosen storage
+format (configurable in Settings).</p>
 <div class="section level3">
-<h3 id="annotation-mat-file">Annotation MAT File<a class="anchor" aria-label="anchor" href="#annotation-mat-file"></a>
+<h3 id="sqlite-database-default">SQLite Database (default)<a class="anchor" aria-label="anchor" href="#sqlite-database-default"></a>
+</h3>
+<p><code>db_folder/annotations.sqlite</code></p>
+<p>A single SQLite database file containing annotations for all samples.
+This is the default storage backend:</p>
+<ul>
+<li>No Python dependency required</li>
+<li>Fast read/write performance</li>
+<li>Single file for all samples — easy to back up and manage</li>
+<li>Contains <code>annotations</code> table (one row per ROI) and
+<code>class_lists</code> table (preserves class indices for
+<code>.mat</code> export)</li>
+</ul>
+<p>The database is stored in a separate <strong>Database Folder</strong>
+(configurable in Settings), which defaults to a local user-level
+directory (<code>tools::R_user_dir("ClassiPyR", "data")</code>). This
+separation ensures the SQLite database stays on a local filesystem even
+when the Output Folder is on a network drive.</p>
+<blockquote>
+<p><strong>Note</strong>: The SQLite database <strong>must</strong> be
+on a local drive. <a href="https://www.sqlite.org/useovernet.html" class="external-link">SQLite file locking is
+unreliable on network filesystems</a> (NFS/SMB), which can lead to
+database corruption. For multi-user workflows, each annotator should use
+their own local Database Folder.</p>
+</blockquote>
+</div>
+<div class="section level3">
+<h3 id="annotation-mat-file-optional">Annotation MAT File (optional)<a class="anchor" aria-label="anchor" href="#annotation-mat-file-optional"></a>
 </h3>
 <p><code>output/[sample_name].mat</code></p>
 <p>MATLAB-compatible format with:</p>
@@ -433,8 +462,9 @@ which provides the fastest possible startup.</p>
 toolbox</li>
 </ul>
 <blockquote>
-<p><strong>Note</strong>: Saving MAT files requires Python with
-scipy.</p>
+<p><strong>Note</strong>: Saving MAT files requires Python with scipy.
+Enable in Settings &gt; Annotation Storage by selecting “MAT file” or
+“Both”.</p>
 </blockquote>
 </div>
 <div class="section level3">
@@ -465,6 +495,10 @@ classifiers.</p>
 <h3 id="folder-paths">Folder Paths<a class="anchor" aria-label="anchor" href="#folder-paths"></a>
 </h3>
 <table class="table">
+<colgroup>
+<col width="40%">
+<col width="59%">
+</colgroup>
 <thead><tr class="header">
 <th>Setting</th>
 <th>Description</th>
@@ -480,9 +514,13 @@ classifiers.</p>
 </tr>
 <tr class="odd">
 <td>Output Folder</td>
-<td>Where MAT and CSV output goes</td>
+<td>Where MAT files and statistics go (can be on a network drive)</td>
 </tr>
 <tr class="even">
+<td>Database Folder</td>
+<td>Where the SQLite database is stored (must be a local drive)</td>
+</tr>
+<tr class="odd">
 <td>PNG Output Folder</td>
 <td>Where organized images go</td>
 </tr>
@@ -492,6 +530,53 @@ classifiers.</p>
 works on all platforms (Linux, macOS, Windows). Changing folder paths in
 Settings automatically invalidates the file index cache, triggering a
 fresh scan.</p>
+</div>
+<div class="section level3">
+<h3 id="annotation-storage">Annotation Storage<a class="anchor" aria-label="anchor" href="#annotation-storage"></a>
+</h3>
+<table class="table">
+<colgroup>
+<col width="38%">
+<col width="61%">
+</colgroup>
+<thead><tr class="header">
+<th>Format</th>
+<th>Description</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>SQLite (recommended)</td>
+<td>Default. Stores annotations in <code>annotations.sqlite</code> in
+the Database Folder. No Python needed.</td>
+</tr>
+<tr class="even">
+<td>MAT file</td>
+<td>MATLAB-compatible <code>.mat</code> files for <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a>.
+Requires Python with scipy.</td>
+</tr>
+<tr class="odd">
+<td>Both</td>
+<td>Writes to both SQLite and <code>.mat</code> for maximum
+compatibility.</td>
+</tr>
+</tbody>
+</table>
+<p>Below the format selector, two buttons allow bulk conversion between
+formats:</p>
+<ul>
+<li>
+<strong>Import .mat → SQLite</strong>: Imports all <code>.mat</code>
+annotation files from the output folder into the SQLite database.
+Already-imported samples are skipped.</li>
+<li>
+<strong>Export SQLite → .mat</strong>: Exports all annotated samples
+from the database to <code>.mat</code> files. Requires Python with
+scipy.</li>
+<li>
+<strong>Export SQLite → PNG</strong>: Extracts annotated images from
+ROI files into class-name subfolders in the PNG Output Folder. Useful
+for building training datasets for CNN classifiers.</li>
+</ul>
 </div>
 <div class="section level3">
 <h3 id="auto-sync-1">Auto-Sync<a class="anchor" aria-label="anchor" href="#auto-sync-1"></a>
@@ -613,16 +698,20 @@ between sessions. Settings can be reset by specifying
 <div class="section level2">
 <h2 id="dependencies">Dependencies<a class="anchor" aria-label="anchor" href="#dependencies"></a>
 </h2>
-<p><code>ClassiPyR</code> relies on <strong><a href="https://github.com/EuropeanIFCBGroup/iRfcb" class="external-link"><code>iRfcb</code></a></strong>
-for all IFCB data operations:</p>
+<p><code>ClassiPyR</code> relies on:</p>
 <ul>
-<li>Extracting images from ROI files</li>
-<li>Reading ADC metadata (dimensions, timestamps)</li>
-<li>Reading and writing MATLAB .mat files</li>
-<li>Class list handling</li>
+<li>
+<strong><a href="https://github.com/EuropeanIFCBGroup/iRfcb" class="external-link"><code>iRfcb</code></a></strong>
+for IFCB data operations (extracting images, reading ADC metadata,
+reading/writing <code>.mat</code> files, class list handling)</li>
+<li>
+<strong><a href="https://CRAN.R-project.org/package=RSQLite" class="external-link"><code>RSQLite</code></a></strong>
+and <strong><a href="https://CRAN.R-project.org/package=DBI" class="external-link"><code>DBI</code></a></strong>
+for the SQLite annotation database</li>
 </ul>
-<p><code>iRfcb</code> is installed automatically as a dependency when
-you install <code>ClassiPyR</code>.</p>
+<p>All R dependencies are installed automatically when you install
+<code>ClassiPyR</code>. Python is only needed for <code>.mat</code> file
+export.</p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

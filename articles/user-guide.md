@@ -199,8 +199,9 @@ predictions below confidence threshold.
 
 ### Existing Annotations
 
-Previously saved annotations (in output folder) are automatically
-detected and can be resumed.
+Previously saved annotations (in SQLite database or `.mat` files in the
+output folder) are automatically detected and can be resumed. When both
+exist, the SQLite version is loaded (faster).
 
 ------------------------------------------------------------------------
 
@@ -264,9 +265,35 @@ ClassiPyR::rescan_file_index(
 
 ## Output Files
 
-When you save, the app creates:
+When you save, the app creates files based on your chosen storage format
+(configurable in Settings).
 
-### Annotation MAT File
+### SQLite Database (default)
+
+`db_folder/annotations.sqlite`
+
+A single SQLite database file containing annotations for all samples.
+This is the default storage backend:
+
+- No Python dependency required
+- Fast read/write performance
+- Single file for all samples — easy to back up and manage
+- Contains `annotations` table (one row per ROI) and `class_lists` table
+  (preserves class indices for `.mat` export)
+
+The database is stored in a separate **Database Folder** (configurable
+in Settings), which defaults to a local user-level directory
+(`tools::R_user_dir("ClassiPyR", "data")`). This separation ensures the
+SQLite database stays on a local filesystem even when the Output Folder
+is on a network drive.
+
+> **Note**: The SQLite database **must** be on a local drive. [SQLite
+> file locking is unreliable on network
+> filesystems](https://www.sqlite.org/useovernet.html) (NFS/SMB), which
+> can lead to database corruption. For multi-user workflows, each
+> annotator should use their own local Database Folder.
+
+### Annotation MAT File (optional)
 
 `output/[sample_name].mat`
 
@@ -276,7 +303,8 @@ MATLAB-compatible format with:
 - Compatible with
   [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox
 
-> **Note**: Saving MAT files requires Python with scipy.
+> **Note**: Saving MAT files requires Python with scipy. Enable in
+> Settings \> Annotation Storage by selecting “MAT file” or “Both”.
 
 ### Statistics Files
 
@@ -301,17 +329,38 @@ classifiers.
 
 ### Folder Paths
 
-| Setting               | Description                       |
-|-----------------------|-----------------------------------|
-| Classification Folder | Source of CSV/MAT classifications |
-| ROI Data Folder       | IFCB raw files (ROI/ADC/HDR)      |
-| Output Folder         | Where MAT and CSV output goes     |
-| PNG Output Folder     | Where organized images go         |
+| Setting               | Description                                                   |
+|-----------------------|---------------------------------------------------------------|
+| Classification Folder | Source of CSV/MAT classifications                             |
+| ROI Data Folder       | IFCB raw files (ROI/ADC/HDR)                                  |
+| Output Folder         | Where MAT files and statistics go (can be on a network drive) |
+| Database Folder       | Where the SQLite database is stored (must be a local drive)   |
+| PNG Output Folder     | Where organized images go                                     |
 
 Folder paths are configured using a web-based folder browser that works
 on all platforms (Linux, macOS, Windows). Changing folder paths in
 Settings automatically invalidates the file index cache, triggering a
 fresh scan.
+
+### Annotation Storage
+
+| Format               | Description                                                                                                              |
+|----------------------|--------------------------------------------------------------------------------------------------------------------------|
+| SQLite (recommended) | Default. Stores annotations in `annotations.sqlite` in the Database Folder. No Python needed.                            |
+| MAT file             | MATLAB-compatible `.mat` files for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis). Requires Python with scipy. |
+| Both                 | Writes to both SQLite and `.mat` for maximum compatibility.                                                              |
+
+Below the format selector, two buttons allow bulk conversion between
+formats:
+
+- **Import .mat → SQLite**: Imports all `.mat` annotation files from the
+  output folder into the SQLite database. Already-imported samples are
+  skipped.
+- **Export SQLite → .mat**: Exports all annotated samples from the
+  database to `.mat` files. Requires Python with scipy.
+- **Export SQLite → PNG**: Extracts annotated images from ROI files into
+  class-name subfolders in the PNG Output Folder. Useful for building
+  training datasets for CNN classifiers.
 
 ### Auto-Sync
 
@@ -404,14 +453,14 @@ sessions. Settings can be reset by specifying
 
 ## Dependencies
 
-`ClassiPyR` relies on
-**[`iRfcb`](https://github.com/EuropeanIFCBGroup/iRfcb)** for all IFCB
-data operations:
+`ClassiPyR` relies on:
 
-- Extracting images from ROI files
-- Reading ADC metadata (dimensions, timestamps)
-- Reading and writing MATLAB .mat files
-- Class list handling
+- **[`iRfcb`](https://github.com/EuropeanIFCBGroup/iRfcb)** for IFCB
+  data operations (extracting images, reading ADC metadata,
+  reading/writing `.mat` files, class list handling)
+- **[`RSQLite`](https://CRAN.R-project.org/package=RSQLite)** and
+  **[`DBI`](https://CRAN.R-project.org/package=DBI)** for the SQLite
+  annotation database
 
-`iRfcb` is installed automatically as a dependency when you install
-`ClassiPyR`.
+All R dependencies are installed automatically when you install
+`ClassiPyR`. Python is only needed for `.mat` file export.

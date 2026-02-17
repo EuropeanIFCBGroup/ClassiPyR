@@ -76,7 +76,7 @@
 <a class="anchor" aria-label="anchor" href="#classipyr-"></a>
 </h1>
 </div>
-<p><a href="https://lifecycle.r-lib.org/articles/stages.html#experimental" class="external-link"><img src="https://img.shields.io/badge/lifecycle-experimental-orange.svg" alt="Lifecycle: experimental"></a> <a href="https://opensource.org/licenses/MIT" class="external-link"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a> <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/actions/workflows/R-CMD-check.yaml" class="external-link"><img src="https://github.com/EuropeanIFCBGroup/ClassiPyR/actions/workflows/R-CMD-check.yaml/badge.svg" alt="R-CMD-check"></a> <a href="https://app.codecov.io/gh/EuropeanIFCBGroup/ClassiPyR" class="external-link"><img src="https://codecov.io/gh/EuropeanIFCBGroup/ClassiPyR/branch/main/graph/badge.svg" alt="codecov"></a> <a href="https://doi.org/10.5281/zenodo.18414999" class="external-link"><img src="https://zenodo.org/badge/DOI/10.5281/zenodo.18414999.svg" alt="DOI"></a></p>
+<p><a href="https://lifecycle.r-lib.org/articles/stages.html#experimental" class="external-link"><img src="https://img.shields.io/badge/lifecycle-experimental-orange.svg" alt="Lifecycle: experimental"></a> <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/actions/workflows/R-CMD-check.yaml" class="external-link"><img src="https://github.com/EuropeanIFCBGroup/ClassiPyR/actions/workflows/R-CMD-check.yaml/badge.svg" alt="R-CMD-check"></a> <a href="https://app.codecov.io/gh/EuropeanIFCBGroup/ClassiPyR" class="external-link"><img src="https://codecov.io/gh/EuropeanIFCBGroup/ClassiPyR/branch/main/graph/badge.svg" alt="codecov"></a> <a href="https://doi.org/10.5281/zenodo.18414999" class="external-link"><img src="https://zenodo.org/badge/DOI/10.5281/zenodo.18414999.svg" alt="DOI"></a></p>
 <p>A Shiny application for manual (human) image classification and validation of Imaging FlowCytobot (IFCB) plankton images. Built for researchers who need to validate automated classifications or create training datasets for machine learning classifiers.</p>
 <p><strong>Full documentation:</strong> <a href="https://europeanifcbgroup.github.io/ClassiPyR/">europeanifcbgroup.github.io/ClassiPyR</a></p>
 <div class="section level2">
@@ -93,31 +93,43 @@
 <li>
 <strong>Multiple Formats</strong>: Load from CSV or MATLAB classifier output</li>
 <li>
+<strong>SQLite Storage</strong>: Annotations stored in a local SQLite database by default - no Python needed</li>
+<li>
 <strong>Efficient Workflow</strong>: Drag-select, batch relabeling, class filtering</li>
 <li>
-<strong>MATLAB Compatible</strong>: Export for <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a> toolbox</li>
+<strong>MATLAB Compatible</strong>: Optional <code>.mat</code> export for <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a> toolbox</li>
 <li>
 <strong>CNN Training Ready</strong>: Organized PNG output by class</li>
 <li>
 <strong>Measure Tool</strong>: Built-in ruler for image measurements</li>
 <li>
-<strong>Cross-Platform</strong>: Web-based folder browser works on all platforms</li>
+<strong>Cross-Platform</strong>: Works on all platforms with no external dependencies</li>
 </ul>
 </div>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
+<p>Install the latest release from GitHub using the <code>remotes</code> package:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"remotes"</span><span class="op">)</span></span>
-<span><span class="fu">remotes</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"EuropeanIFCBGroup/ClassiPyR"</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="co"># Install remotes</span></span>
+<span><span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"remotes"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"remotes"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Install ClassiPyR</span></span>
+<span><span class="fu">remotes</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"EuropeanIFCBGroup/ClassiPyR"</span>,</span>
+<span>                        ref <span class="op">=</span> <span class="fu">remotes</span><span class="fu">::</span><span class="fu">github_release</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p><code>ClassiPyR</code> depends on <a href="https://github.com/EuropeanIFCBGroup/iRfcb" class="external-link">iRfcb</a> for IFCB data handling, which is installed automatically.</p>
 <div class="section level3">
-<h3 id="python-setup">Python Setup<a class="anchor" aria-label="anchor" href="#python-setup"></a>
+<h3 id="python-setup-optional">Python Setup (optional)<a class="anchor" aria-label="anchor" href="#python-setup-optional"></a>
 </h3>
-<p>Python is required for saving annotations as MATLAB .mat files. If you only need to read existing .mat files or work with CSV files, this step is optional.</p>
+<p>Python is <strong>not required</strong> for the default workflow. Annotations are stored in a local SQLite database that works out of the box.</p>
+<p>Python is only needed if you want to export annotations as MATLAB <code>.mat</code> files for use with <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a>. To set up using <code>iRfcb</code>:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://europeanifcbgroup.github.io/iRfcb/" class="external-link">iRfcb</a></span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Define a path were the venv will be installed</span></span>
 <span><span class="va">venv_path</span> <span class="op">=</span> <span class="st">"/path/to/your/venv"</span></span>
+<span></span>
+<span><span class="co"># Install the venv</span></span>
 <span><span class="fu"><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">ifcb_py_install</a></span><span class="op">(</span><span class="va">venv_path</span><span class="op">)</span></span></code></pre></div>
 </div>
 </div>

@@ -13,7 +13,8 @@ rescan_file_index(
   roi_folder = NULL,
   csv_folder = NULL,
   output_folder = NULL,
-  verbose = TRUE
+  verbose = TRUE,
+  db_folder = NULL
 )
 ```
 
@@ -30,12 +31,18 @@ rescan_file_index(
 
 - output_folder:
 
-  Path to output folder for annotations. If NULL, read from saved
+  Path to output folder for MAT annotations. If NULL, read from saved
   settings.
 
 - verbose:
 
   If TRUE, print progress messages. Default TRUE.
+
+- db_folder:
+
+  Path to the database folder for SQLite annotations. If NULL, read from
+  saved settings; if not found in settings, defaults to
+  [`get_default_db_dir()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_default_db_dir.md).
 
 ## Value
 

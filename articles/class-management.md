@@ -7,10 +7,12 @@ consistent annotations.
 
 ## Why Class Indices Matter (ifcb-analysis Users)
 
-> **Note**: This section is primarily relevant if you use the
+> **Note**: This section is primarily relevant if you export `.mat`
+> files for use with the
 > [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) MATLAB
-> toolbox (Sosik & Olson, 2007). If you only work with CSV exports,
-> class indices are less critical.
+> toolbox (Sosik & Olson, 2007). If you use the default SQLite storage
+> or work with CSV exports, class indices are less critical because
+> class names are stored directly.
 
 IFCB .mat annotations use **numerical indices** to reference classes:
 

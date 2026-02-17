@@ -4,6 +4,24 @@
 
 ### Features
 
+#### SQLite Database Backend
+
+- Annotations are now stored in a local SQLite database
+  (`annotations.sqlite`) by default
+- Works out of the box with no Python dependency - only R packages
+  (RSQLite, DBI) are needed
+- MATLAB `.mat` file export is still available as an opt-in for
+  ifcb-analysis compatibility
+- Storage format configurable in Settings: “SQLite” (default), “MAT
+  file”, or “Both”
+- Existing `.mat` annotations continue to work and can be loaded as
+  before
+- [`import_mat_to_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/import_mat_to_db.md)
+  utility for bulk migration of existing `.mat` files to SQLite
+- Sample discovery scans both `.mat` files and the SQLite database
+- When loading a sample, SQLite is checked first (faster), with `.mat`
+  fallback
+
 #### Sample Management
 
 - Load samples from ROI files with automatic year/month filtering
@@ -72,7 +90,10 @@
 
 #### Output
 
-- Save annotations as MATLAB-compatible .mat files (using iRfcb)
+- Save annotations to SQLite database (default, no Python needed)
+- Optional: save annotations as MATLAB-compatible .mat files (using
+  iRfcb, requires Python)
+- Configurable storage format: SQLite only, MAT only, or both
 - Save validation statistics as CSV (in `validation_statistics/`
   subfolder)
 - Organize output PNGs by class folder (for CNN training)
@@ -99,8 +120,10 @@
 
 ### Technical Notes
 
-- Requires Python with scipy for MAT file writing (optional - only for
-  ifcb-analysis compatibility)
+- SQLite is the default annotation storage - works out of the box with
+  RSQLite (no external dependencies)
+- Python with scipy is optional - only needed for MAT file export
+  (ifcb-analysis compatibility)
 - Uses iRfcb package for IFCB data handling
 - Session cache preserves work when switching samples
 - File index cache reduces startup time by avoiding redundant folder

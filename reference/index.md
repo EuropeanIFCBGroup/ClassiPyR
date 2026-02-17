@@ -25,6 +25,8 @@ Functions for loading classifications and samples
   : Load classifications from CSV file (validation mode)
 - [`load_from_mat()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_from_mat.md)
   : Load classifications from existing MAT annotation file
+- [`load_from_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_from_db.md)
+  : Load classifications from SQLite database
 - [`create_new_classifications()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/create_new_classifications.md)
   : Create new classifications for annotation mode
 - [`filter_to_extracted()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/filter_to_extracted.md)
@@ -35,11 +37,41 @@ Functions for loading classifications and samples
 Functions for saving annotations and exporting images
 
 - [`save_sample_annotations()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/save_sample_annotations.md)
-  : Save sample annotations to MAT and statistics files
+  : Save sample annotations
 - [`save_validation_statistics()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/save_validation_statistics.md)
   : Save validation statistics to CSV files
 - [`copy_images_to_class_folders()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/copy_images_to_class_folders.md)
   : Copy images to class-organized folders
+
+## Database Backend
+
+SQLite database functions for annotation storage
+
+- [`get_default_db_dir()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_default_db_dir.md)
+  : Get default database directory
+- [`get_db_path()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_db_path.md)
+  : Get path to the annotations SQLite database
+- [`save_annotations_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/save_annotations_db.md)
+  : Save annotations to the SQLite database
+- [`load_annotations_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_annotations_db.md)
+  : Load annotations from the SQLite database
+- [`list_annotated_samples_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/list_annotated_samples_db.md)
+  : List samples with annotations in the database
+- [`update_annotator()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/update_annotator.md)
+  : Update the annotator name for one or more samples
+- [`import_mat_to_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/import_mat_to_db.md)
+  : Import a .mat annotation file into the SQLite database
+- [`import_all_mat_to_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/import_all_mat_to_db.md)
+  : Bulk import .mat annotation files into the SQLite database
+- [`export_db_to_mat()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/export_db_to_mat.md)
+  : Export annotations from SQLite to a .mat file
+- [`export_all_db_to_mat()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/export_all_db_to_mat.md)
+  : Bulk export all annotated samples from SQLite to .mat files
+- [`export_db_to_png()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/export_db_to_png.md)
+  : Export annotated images from SQLite to class-organized PNG folders
+- [`export_all_db_to_png()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/export_all_db_to_png.md)
+  : Bulk export all annotated samples from SQLite to class-organized
+  PNGs
 
 ## File Index Cache
 

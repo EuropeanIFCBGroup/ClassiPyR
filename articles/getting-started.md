@@ -16,13 +16,15 @@ Make sure you have:
 
 ### Python Requirements
 
-Python is required for saving annotations as MATLAB .mat files for use
-with [ifcb-analysis](https://github.com/hsosik/ifcb-analysis). Reading
-existing .mat files (annotations, classifier output, class lists) does
-not require Python.
+Python is **not required** for the default workflow. ClassiPyR stores
+annotations in a local SQLite database that works out of the box with no
+external dependencies.
 
-If you only need to read .mat files or work with CSV classification
-files, Python is not required.
+Python is only needed if you want to export annotations as MATLAB `.mat`
+files for use with
+[ifcb-analysis](https://github.com/hsosik/ifcb-analysis). Reading
+existing `.mat` files (annotations, classifier output, class lists) also
+does not require Python.
 
 ### CSV Classification Format
 
@@ -39,9 +41,10 @@ be included. See the [User
 Guide](https://europeanifcbgroup.github.io/ClassiPyR/articles/user-guide.md)
 for more details.
 
-### Python Setup
+### Python Setup (optional)
 
-To set up Python:
+Only needed if you plan to export `.mat` files. Skip this step if using
+the default SQLite storage.
 
 ``` r
 library(iRfcb)
@@ -72,12 +75,20 @@ enlarge.*
 
 Configure your folders using the built-in folder browser:
 
-| Setting               | Description                            | Example             |
-|-----------------------|----------------------------------------|---------------------|
-| Classification Folder | Where your CSV/MAT classifications are | `/ifcb/classified/` |
-| ROI Data Folder       | Where your IFCB raw files are          | `/ifcb/raw/`        |
-| Output Folder         | Where annotations will be saved        | `/ifcb/manual/`     |
-| PNG Output Folder     | Where images will be organized         | `/ifcb/png/`        |
+| Setting               | Description                                         | Example             |
+|-----------------------|-----------------------------------------------------|---------------------|
+| Classification Folder | Where your CSV/MAT classifications are              | `/ifcb/classified/` |
+| ROI Data Folder       | Where your IFCB raw files are                       | `/ifcb/raw/`        |
+| Output Folder         | Where MAT files and statistics go                   | `/ifcb/manual/`     |
+| Database Folder       | Where the SQLite database is stored (must be local) | auto-detected       |
+| PNG Output Folder     | Where images will be organized by class             | `/ifcb/png/`        |
+
+> **Network drives**: The Output Folder can safely reside on a network
+> share (e.g., for MAT files and statistics). However, the Database
+> Folder must be on a **local** drive because [SQLite is not safe on
+> network filesystems](https://www.sqlite.org/useovernet.html). The
+> default database location is a local user-level directory that works
+> out of the box.
 
 Click **Save Settings**. The app will scan your folders and build a file
 index cache for fast loading.
@@ -219,10 +230,19 @@ The images will move to their new class group.
 
 Click **Save Annotations** to save:
 
-- MAT file for MATLAB compatibility (requires Python; for use with
-  [ifcb-analysis](https://github.com/hsosik/ifcb-analysis))
+- **SQLite database** (default) - annotations are written to
+  `annotations.sqlite` in your Output Folder. This single file stores
+  annotations for all samples. No Python needed.
 - Statistics CSV with accuracy metrics
 - PNGs organized by class
+
+You can change the storage format in **Settings \> Annotation Storage**:
+
+- **SQLite** (recommended) - works out of the box
+- **MAT file** - for
+  [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) compatibility
+  (requires Python)
+- **Both** - writes to both SQLite and `.mat`
 
 ### Auto-save
 

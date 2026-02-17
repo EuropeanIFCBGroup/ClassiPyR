@@ -75,7 +75,7 @@
       <img src="../logo.svg" class="logo" alt=""><h1>FAQ &amp; Troubleshooting</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.1.0-beta.2/vignettes/faq.Rmd" class="external-link"><code>vignettes/faq.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/vignettes/faq.Rmd" class="external-link"><code>vignettes/faq.Rmd</code></a></small>
       <div class="d-none name"><code>faq.Rmd</code></div>
     </div>
 
@@ -108,20 +108,21 @@ to separate folders.</p>
 <h2 id="installation-issues">Installation Issues<a class="anchor" aria-label="anchor" href="#installation-issues"></a>
 </h2>
 <p><strong>Q: I see “Python not available” warning</strong></p>
-<p>A: This warning affects saving .mat files. Python is required
-for:</p>
-<ul>
-<li>Saving annotations as .mat files for <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a>
-</li>
-</ul>
-<p>Reading .mat files (annotations, classifier output, class lists) does
-not require Python. If you do not need to save .mat files, you can
-ignore this warning.</p>
-<p>To enable .mat support:</p>
+<p>A: This warning only appears when your storage format includes
+<code>.mat</code> files. Python is <strong>not needed</strong> for the
+default SQLite storage.</p>
+<p>If you see this warning and don’t need <code>.mat</code> files,
+switch to SQLite in Settings &gt; Annotation Storage. Otherwise, to
+enable <code>.mat</code> support:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://europeanifcbgroup.github.io/iRfcb/" class="external-link">iRfcb</a></span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">ifcb_py_install</a></span><span class="op">(</span><span class="op">)</span>  <span class="co"># Creates venv in current working directory</span></span></code></pre></div>
 <p>Then restart the app.</p>
+<p><strong>Q: Do I need Python to use ClassiPyR?</strong></p>
+<p>A: No. The default storage format is SQLite, which works out of the
+box with no Python dependency. Python is only needed if you want to
+export <code>.mat</code> files for <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a>
+compatibility.</p>
 <p><strong>Q: Where is the Python virtual environment
 created?</strong></p>
 <p>A: By default, <code><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">ifcb_py_install()</a></code> creates a
@@ -152,7 +153,7 @@ Settings dialog, overriding any previously saved path.</p>
 <p><strong>Q: Package installation fails</strong></p>
 <p>A: Make sure you have remotes installed and try:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"remotes"</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"remotes"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"remotes"</span><span class="op">)</span></span>
 <span><span class="fu">remotes</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"EuropeanIFCBGroup/ClassiPyR"</span><span class="op">)</span></span></code></pre></div>
 <p><strong>Q: “Could not find app directory” error</strong></p>
 <p>A: Try reinstalling the package:</p>
@@ -258,7 +259,8 @@ out automatically on load.</p>
 <p>A: Check that:</p>
 <ol style="list-style-type: decimal">
 <li>Output folder is writable</li>
-<li>Python is available (required for saving .mat files)</li>
+<li>If using MAT format: Python is available (not needed for default
+SQLite storage)</li>
 <li>Click “Save Annotations” before closing</li>
 </ol>
 <hr>
@@ -340,23 +342,149 @@ preserved.</p>
 <h2 id="output">Output<a class="anchor" aria-label="anchor" href="#output"></a>
 </h2>
 <p><strong>Q: Where are my annotations saved?</strong></p>
-<p>A: In the Output Folder you configured:</p>
+<p>A: Annotations are split across two locations:</p>
 <ul>
-<li>MAT annotation files are saved directly in the output folder (one
-per sample)</li>
 <li>
-<code>validation_statistics/</code> subfolder contains CSV
-statistics</li>
-<li>PNGs are in the PNG Output Folder, organized by class name</li>
+<strong>SQLite database</strong> (default): stored in the
+<strong>Database Folder</strong> (a local directory)</li>
+<li>
+<strong>MAT files and statistics</strong>: stored in the
+<strong>Output Folder</strong> (can be on a network drive)</li>
 </ul>
+<pre><code>db_folder/                           ← local drive (Database Folder)
+└── annotations.sqlite              ← single database for ALL samples
+
+output_folder/                       ← can be a network drive (Output Folder)
+├── D20230101T120000_IFCB134.mat    ← only if storage format includes "MAT"
+├── D20230202T080000_IFCB134.mat
+└── validation_statistics/
+    ├── ..._validation_stats.csv
+    └── ..._validation_detailed.csv</code></pre>
+<p>By default, the database is stored in a persistent local directory
+(<code>tools::R_user_dir("ClassiPyR", "data")</code>). Back up
+<code>annotations.sqlite</code> to preserve your work.</p>
+<p><strong>Q: Where is the default database location?</strong></p>
+<p>A: The default Database Folder is a platform-specific local
+directory:</p>
+<ul>
+<li>
+<strong>Linux</strong>:
+<code>~/.local/share/R/ClassiPyR/</code>
+</li>
+<li>
+<strong>macOS</strong>:
+<code>~/Library/Application Support/org.R-project.R/R/ClassiPyR/</code>
+</li>
+<li>
+<strong>Windows</strong>:
+<code>%LOCALAPPDATA%/R/data/R/ClassiPyR/</code>
+</li>
+</ul>
+<p>You can find the exact path with:</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu">ClassiPyR</span><span class="fu">::</span><span class="fu"><a href="../reference/get_default_db_dir.html">get_default_db_dir</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<p>You can change it in Settings &gt; Database Folder, but it should
+always be a local drive.</p>
+<p><strong>Q: Can I put the database on a network drive?</strong></p>
+<p>A: No. SQLite databases are <a href="https://www.sqlite.org/useovernet.html" class="external-link">not safe on network
+filesystems</a> (NFS, SMB/CIFS) because network file locking is
+unreliable, which can lead to database corruption. Always keep the
+Database Folder on a local drive. The Output Folder (for MAT files and
+statistics) can safely be on a network drive.</p>
+<p><strong>Q: How do I transfer my annotations to another
+computer?</strong></p>
+<p>A: Since the SQLite database is stored locally, you cannot simply
+share it over a network drive. Instead, use <code>.mat</code> files as
+the interchange format:</p>
+<ol style="list-style-type: decimal">
+<li>
+<strong>Export</strong> from the source computer (requires Python
+with scipy):</li>
+</ol>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://EuropeanIFCBGroup.github.io/ClassiPyR/" class="external-link">ClassiPyR</a></span><span class="op">)</span></span>
+<span><span class="va">db_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_db_path.html">get_db_path</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_default_db_dir.html">get_default_db_dir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co"># Export all annotations to .mat files in a shared output folder</span></span>
+<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/export_all_db_to_mat.html">export_all_db_to_mat</a></span><span class="op">(</span><span class="va">db_path</span>, <span class="st">"/shared/network/manual"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="va">result</span><span class="op">$</span><span class="va">success</span>, <span class="st">"exported\n"</span><span class="op">)</span></span></code></pre></div>
+<p>Or use the <strong>Export SQLite → .mat</strong> button in
+Settings.</p>
+<ol start="2" style="list-style-type: decimal">
+<li>
+<strong>Import</strong> on the target computer:</li>
+</ol>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://EuropeanIFCBGroup.github.io/ClassiPyR/" class="external-link">ClassiPyR</a></span><span class="op">)</span></span>
+<span><span class="va">class2use</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_class_list.html">load_class_list</a></span><span class="op">(</span><span class="st">"/shared/network/class2use.mat"</span><span class="op">)</span></span>
+<span><span class="va">db_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_db_path.html">get_db_path</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_default_db_dir.html">get_default_db_dir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co"># Import .mat files from the shared folder into the local database</span></span>
+<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/import_all_mat_to_db.html">import_all_mat_to_db</a></span><span class="op">(</span><span class="st">"/shared/network/manual"</span>, <span class="va">db_path</span>, <span class="va">class2use</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="va">result</span><span class="op">$</span><span class="va">success</span>, <span class="st">"imported,"</span>, <span class="va">result</span><span class="op">$</span><span class="va">skipped</span>, <span class="st">"skipped\n"</span><span class="op">)</span></span></code></pre></div>
+<p>Or use the <strong>Import .mat → SQLite</strong> button in Settings.
+Already-imported samples are skipped automatically.</p>
+<p>You can also simply copy the <code>annotations.sqlite</code> file
+directly between machines if you prefer.</p>
 <p><strong>Q: Can I import annotations back to MATLAB?</strong></p>
-<p>A: Yes, the MAT files are compatible with the <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a> toolbox
+<p>A: Yes, if you save with the “MAT file” or “Both” storage format, the
+MAT files are compatible with the <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a> toolbox
 (Sosik &amp; Olson, 2007). Use the list in <code>startMC</code>, or load
 the list in MATLAB using:</p>
-<div class="sourceCode" id="cb10"><pre class="sourceCode matlab"><code class="sourceCode matlab"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="va">load</span>(<span class="ss">'sample_name.mat'</span>)<span class="op">;</span></span>
-<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a><span class="co">% classlist contains [roi_number, class_index]</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode matlab"><code class="sourceCode matlab"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="va">load</span>(<span class="ss">'sample_name.mat'</span>)<span class="op">;</span></span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a><span class="co">% classlist contains [roi_number, class_index]</span></span></code></pre></div>
 <p>Note: Python with <code>scipy</code> must be installed to save .mat
-files.</p>
+files. Change the storage format in Settings &gt; Annotation
+Storage.</p>
+<p><strong>Q: Can I migrate existing .mat annotations to the SQLite
+database?</strong></p>
+<p>A: Yes. The easiest way is the <strong>Import .mat → SQLite</strong>
+button in Settings &gt; Annotation Storage, which bulk-imports all
+<code>.mat</code> files in your output folder.</p>
+<p>You can also import programmatically — a single file:</p>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://EuropeanIFCBGroup.github.io/ClassiPyR/" class="external-link">ClassiPyR</a></span><span class="op">)</span></span>
+<span><span class="va">class2use</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/load_class_list.html">load_class_list</a></span><span class="op">(</span><span class="st">"/path/to/class2use.mat"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/import_mat_to_db.html">import_mat_to_db</a></span><span class="op">(</span></span>
+<span>  mat_path <span class="op">=</span> <span class="st">"/data/manual/D20230101T120000_IFCB134.mat"</span>,</span>
+<span>  db_path <span class="op">=</span> <span class="fu"><a href="../reference/get_db_path.html">get_db_path</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_default_db_dir.html">get_default_db_dir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  sample_name <span class="op">=</span> <span class="st">"D20230101T120000_IFCB134"</span>,</span>
+<span>  class2use <span class="op">=</span> <span class="va">class2use</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>Or bulk-import all <code>.mat</code> files in a folder:</p>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/import_all_mat_to_db.html">import_all_mat_to_db</a></span><span class="op">(</span><span class="st">"/data/manual"</span>, <span class="fu"><a href="../reference/get_db_path.html">get_db_path</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_default_db_dir.html">get_default_db_dir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span>, <span class="va">class2use</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="va">result</span><span class="op">$</span><span class="va">success</span>, <span class="st">"imported,"</span>, <span class="va">result</span><span class="op">$</span><span class="va">failed</span>, <span class="st">"failed,"</span>, <span class="va">result</span><span class="op">$</span><span class="va">skipped</span>, <span class="st">"skipped\n"</span><span class="op">)</span></span></code></pre></div>
+<p><strong>Q: Can I export SQLite annotations back to .mat
+files?</strong></p>
+<p>A: Yes. Use the <strong>Export SQLite → .mat</strong> button in
+Settings &gt; Annotation Storage to export all annotated samples at
+once. This requires Python with scipy.</p>
+<p>You can also export programmatically:</p>
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># Single sample</span></span>
+<span><span class="fu"><a href="../reference/export_db_to_mat.html">export_db_to_mat</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_db_path.html">get_db_path</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_default_db_dir.html">get_default_db_dir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span>, <span class="st">"D20230101T120000_IFCB134"</span>, <span class="st">"/data/manual"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># All samples</span></span>
+<span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/export_all_db_to_mat.html">export_all_db_to_mat</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_db_path.html">get_db_path</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_default_db_dir.html">get_default_db_dir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span>, <span class="st">"/data/manual"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="va">result</span><span class="op">$</span><span class="va">success</span>, <span class="st">"exported,"</span>, <span class="va">result</span><span class="op">$</span><span class="va">failed</span>, <span class="st">"failed\n"</span><span class="op">)</span></span></code></pre></div>
+<p><strong>Q: Can I change the annotator name for existing
+annotations?</strong></p>
+<p>A: Yes. Use <code><a href="../reference/update_annotator.html">update_annotator()</a></code> from the R console:</p>
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://EuropeanIFCBGroup.github.io/ClassiPyR/" class="external-link">ClassiPyR</a></span><span class="op">)</span></span>
+<span><span class="va">db_path</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_db_path.html">get_db_path</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_default_db_dir.html">get_default_db_dir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Update a single sample</span></span>
+<span><span class="fu"><a href="../reference/update_annotator.html">update_annotator</a></span><span class="op">(</span><span class="va">db_path</span>, <span class="st">"D20230101T120000_IFCB134"</span>, <span class="st">"Jane"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Update several samples at once</span></span>
+<span><span class="fu"><a href="../reference/update_annotator.html">update_annotator</a></span><span class="op">(</span><span class="va">db_path</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"sample_A"</span>, <span class="st">"sample_B"</span><span class="op">)</span>, <span class="st">"Jane"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Update all annotated samples (e.g. after a bulk import)</span></span>
+<span><span class="va">all_samples</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/list_annotated_samples_db.html">list_annotated_samples_db</a></span><span class="op">(</span><span class="va">db_path</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/update_annotator.html">update_annotator</a></span><span class="op">(</span><span class="va">db_path</span>, <span class="va">all_samples</span>, <span class="st">"Jane"</span><span class="op">)</span></span></code></pre></div>
+<p>The function returns a named vector showing how many annotation rows
+were updated per sample (0 means the sample was not found in the
+database).</p>
 <p><strong>Q: What’s in the statistics CSV?</strong></p>
 <p>A: Two files per sample:</p>
 <ol style="list-style-type: decimal">
@@ -403,7 +531,7 @@ automatically restored when you restart the app.</p>
 <p><strong>Q: How do I reset all settings to defaults?</strong></p>
 <p>A: Use the <code>reset_settings</code> argument when launching the
 app:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/run_app.html">run_app</a></span><span class="op">(</span>reset_settings <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
 <p>This deletes the saved <code>settings.json</code> file and starts the
 app with default values. All folder paths, the class list reference, and
@@ -417,7 +545,7 @@ re-upload it. This is useful if:</p>
 <li>You want a clean slate after changing your data layout</li>
 </ul>
 <p>You can also combine it with other arguments:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Reset settings and specify a new Python environment</span></span>
 <span><span class="fu"><a href="../reference/run_app.html">run_app</a></span><span class="op">(</span>reset_settings <span class="op">=</span> <span class="cn">TRUE</span>, venv_path <span class="op">=</span> <span class="st">"/path/to/your/venv"</span><span class="op">)</span></span></code></pre></div>
 <p><strong>Q: What’s the yellow warning on some classes?</strong></p>
@@ -464,11 +592,11 @@ files.</p>
 app?</strong></p>
 <p>A: Yes. Use <code><a href="../reference/rescan_file_index.html">rescan_file_index()</a></code> from the R console or a
 scheduled script:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">ClassiPyR</span><span class="fu">::</span><span class="fu"><a href="../reference/rescan_file_index.html">rescan_file_index</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p>This reads folder paths from your saved settings and rebuilds the
 cache. You can also pass paths explicitly:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">ClassiPyR</span><span class="fu">::</span><span class="fu"><a href="../reference/rescan_file_index.html">rescan_file_index</a></span><span class="op">(</span></span>
 <span>  roi_folder <span class="op">=</span> <span class="st">"/data/ifcb/raw"</span>,</span>
 <span>  csv_folder <span class="op">=</span> <span class="st">"/data/ifcb/classified"</span>,</span>
@@ -516,8 +644,8 @@ naming and click Sync</td>
 </tr>
 <tr class="odd">
 <td>“Python not available”</td>
-<td>Affects saving .mat files. Run
-<code><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">iRfcb::ifcb_py_install()</a></code>
+<td>Only affects <code>.mat</code> export. Switch to SQLite in Settings,
+or run <code><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">iRfcb::ifcb_py_install()</a></code>
 </td>
 </tr>
 <tr class="even">

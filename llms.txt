@@ -2,8 +2,6 @@
 
 [![Lifecycle:
 experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
-[![License:
-MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![R-CMD-check](https://github.com/EuropeanIFCBGroup/ClassiPyR/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/EuropeanIFCBGroup/ClassiPyR/actions/workflows/R-CMD-check.yaml)
 [![codecov](https://codecov.io/gh/EuropeanIFCBGroup/ClassiPyR/branch/main/graph/badge.svg)](https://app.codecov.io/gh/EuropeanIFCBGroup/ClassiPyR)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18414999.svg)](https://doi.org/10.5281/zenodo.18414999)
@@ -33,33 +31,50 @@ development.
 - **Dual Mode**: Validate existing classifications or annotate from
   scratch
 - **Multiple Formats**: Load from CSV or MATLAB classifier output
+- **SQLite Storage**: Annotations stored in a local SQLite database by
+  default - no Python needed
 - **Efficient Workflow**: Drag-select, batch relabeling, class filtering
-- **MATLAB Compatible**: Export for
+- **MATLAB Compatible**: Optional `.mat` export for
   [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox
 - **CNN Training Ready**: Organized PNG output by class
 - **Measure Tool**: Built-in ruler for image measurements
-- **Cross-Platform**: Web-based folder browser works on all platforms
+- **Cross-Platform**: Works on all platforms with no external
+  dependencies
 
 ## Installation
 
+Install the latest release from GitHub using the `remotes` package:
+
 ``` r
-install.packages("remotes")
-remotes::install_github("EuropeanIFCBGroup/ClassiPyR")
+# Install remotes
+if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
+
+# Install ClassiPyR
+remotes::install_github("EuropeanIFCBGroup/ClassiPyR",
+                        ref = remotes::github_release())
 ```
 
 `ClassiPyR` depends on
 [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb) for IFCB data
 handling, which is installed automatically.
 
-### Python Setup
+### Python Setup (optional)
 
-Python is required for saving annotations as MATLAB .mat files. If you
-only need to read existing .mat files or work with CSV files, this step
-is optional.
+Python is **not required** for the default workflow. Annotations are
+stored in a local SQLite database that works out of the box.
+
+Python is only needed if you want to export annotations as MATLAB `.mat`
+files for use with
+[ifcb-analysis](https://github.com/hsosik/ifcb-analysis). To set up
+using `iRfcb`:
 
 ``` r
 library(iRfcb)
+
+# Define a path were the venv will be installed
 venv_path = "/path/to/your/venv"
+
+# Install the venv
 ifcb_py_install(venv_path)
 ```
 
@@ -140,6 +155,8 @@ Functions for loading classifications and samples
   : Load classifications from CSV file (validation mode)
 - [`load_from_mat()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_from_mat.md)
   : Load classifications from existing MAT annotation file
+- [`load_from_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_from_db.md)
+  : Load classifications from SQLite database
 - [`create_new_classifications()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/create_new_classifications.md)
   : Create new classifications for annotation mode
 - [`filter_to_extracted()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/filter_to_extracted.md)
@@ -150,11 +167,41 @@ Functions for loading classifications and samples
 Functions for saving annotations and exporting images
 
 - [`save_sample_annotations()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/save_sample_annotations.md)
-  : Save sample annotations to MAT and statistics files
+  : Save sample annotations
 - [`save_validation_statistics()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/save_validation_statistics.md)
   : Save validation statistics to CSV files
 - [`copy_images_to_class_folders()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/copy_images_to_class_folders.md)
   : Copy images to class-organized folders
+
+## Database Backend
+
+SQLite database functions for annotation storage
+
+- [`get_default_db_dir()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_default_db_dir.md)
+  : Get default database directory
+- [`get_db_path()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_db_path.md)
+  : Get path to the annotations SQLite database
+- [`save_annotations_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/save_annotations_db.md)
+  : Save annotations to the SQLite database
+- [`load_annotations_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_annotations_db.md)
+  : Load annotations from the SQLite database
+- [`list_annotated_samples_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/list_annotated_samples_db.md)
+  : List samples with annotations in the database
+- [`update_annotator()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/update_annotator.md)
+  : Update the annotator name for one or more samples
+- [`import_mat_to_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/import_mat_to_db.md)
+  : Import a .mat annotation file into the SQLite database
+- [`import_all_mat_to_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/import_all_mat_to_db.md)
+  : Bulk import .mat annotation files into the SQLite database
+- [`export_db_to_mat()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/export_db_to_mat.md)
+  : Export annotations from SQLite to a .mat file
+- [`export_all_db_to_mat()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/export_all_db_to_mat.md)
+  : Bulk export all annotated samples from SQLite to .mat files
+- [`export_db_to_png()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/export_db_to_png.md)
+  : Export annotated images from SQLite to class-organized PNG folders
+- [`export_all_db_to_png()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/export_all_db_to_png.md)
+  : Bulk export all annotated samples from SQLite to class-organized
+  PNGs
 
 ## File Index Cache
 

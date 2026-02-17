@@ -75,7 +75,7 @@
       <img src="../logo.svg" class="logo" alt=""><h1>Getting Started</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.1.0-beta.2/vignettes/getting-started.Rmd" class="external-link"><code>vignettes/getting-started.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/vignettes/getting-started.Rmd" class="external-link"><code>vignettes/getting-started.Rmd</code></a></small>
       <div class="d-none name"><code>getting-started.Rmd</code></div>
     </div>
 
@@ -98,12 +98,13 @@ see below)</li>
 <div class="section level3">
 <h3 id="python-requirements">Python Requirements<a class="anchor" aria-label="anchor" href="#python-requirements"></a>
 </h3>
-<p>Python is required for saving annotations as MATLAB .mat files for
-use with <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a>.
-Reading existing .mat files (annotations, classifier output, class
-lists) does not require Python.</p>
-<p>If you only need to read .mat files or work with CSV classification
-files, Python is not required.</p>
+<p>Python is <strong>not required</strong> for the default workflow.
+ClassiPyR stores annotations in a local SQLite database that works out
+of the box with no external dependencies.</p>
+<p>Python is only needed if you want to export annotations as MATLAB
+<code>.mat</code> files for use with <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a>.
+Reading existing <code>.mat</code> files (annotations, classifier
+output, class lists) also does not require Python.</p>
 </div>
 <div class="section level3">
 <h3 id="csv-classification-format">CSV Classification Format<a class="anchor" aria-label="anchor" href="#csv-classification-format"></a>
@@ -119,9 +120,10 @@ and 1) can also be included. See the <a href="user-guide.html">User
 Guide</a> for more details.</p>
 </div>
 <div class="section level3">
-<h3 id="python-setup">Python Setup<a class="anchor" aria-label="anchor" href="#python-setup"></a>
+<h3 id="python-setup-optional">Python Setup (optional)<a class="anchor" aria-label="anchor" href="#python-setup-optional"></a>
 </h3>
-<p>To set up Python:</p>
+<p>Only needed if you plan to export <code>.mat</code> files. Skip this
+step if using the default SQLite storage.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://europeanifcbgroup.github.io/iRfcb/" class="external-link">iRfcb</a></span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">ifcb_py_install</a></span><span class="op">(</span>envname <span class="op">=</span> <span class="st">"./venv"</span><span class="op">)</span>  <span class="co"># Creates venv in current working directory</span></span></code></pre></div>
@@ -171,16 +173,28 @@ enlarge.</em>
 </tr>
 <tr class="odd">
 <td>Output Folder</td>
-<td>Where annotations will be saved</td>
+<td>Where MAT files and statistics go</td>
 <td><code>/ifcb/manual/</code></td>
 </tr>
 <tr class="even">
+<td>Database Folder</td>
+<td>Where the SQLite database is stored (must be local)</td>
+<td>auto-detected</td>
+</tr>
+<tr class="odd">
 <td>PNG Output Folder</td>
-<td>Where images will be organized</td>
+<td>Where images will be organized by class</td>
 <td><code>/ifcb/png/</code></td>
 </tr>
 </tbody>
 </table>
+<blockquote>
+<p><strong>Network drives</strong>: The Output Folder can safely reside
+on a network share (e.g., for MAT files and statistics). However, the
+Database Folder must be on a <strong>local</strong> drive because <a href="https://www.sqlite.org/useovernet.html" class="external-link">SQLite is not safe on
+network filesystems</a>. The default database location is a local
+user-level directory that works out of the box.</p>
+</blockquote>
 <p>Click <strong>Save Settings</strong>. The app will scan your folders
 and build a file index cache for fast loading.</p>
 <blockquote>
@@ -351,9 +365,25 @@ assigned a new class. Click to enlarge.</em>
 </h2>
 <p>Click <strong>Save Annotations</strong> to save:</p>
 <ul>
-<li>MAT file for MATLAB compatibility (requires Python; for use with <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a>)</li>
+<li>
+<strong>SQLite database</strong> (default) - annotations are written
+to <code>annotations.sqlite</code> in your Output Folder. This single
+file stores annotations for all samples. No Python needed.</li>
 <li>Statistics CSV with accuracy metrics</li>
 <li>PNGs organized by class</li>
+</ul>
+<p>You can change the storage format in <strong>Settings &gt; Annotation
+Storage</strong>:</p>
+<ul>
+<li>
+<strong>SQLite</strong> (recommended) - works out of the box</li>
+<li>
+<strong>MAT file</strong> - for <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a>
+compatibility (requires Python)</li>
+<li>
+<strong>Both</strong> - writes to both SQLite and
+<code>.mat</code>
+</li>
 </ul>
 <div class="section level3">
 <h3 id="auto-save">Auto-save<a class="anchor" aria-label="anchor" href="#auto-save"></a>
