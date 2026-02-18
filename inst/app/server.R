@@ -254,8 +254,7 @@ server <- function(input, output, session) {
       checkboxInput("cfg_export_statistics", "Export validation statistics",
                     value = config$export_statistics),
       tags$small(class = "text-muted", style = "display: block; margin-bottom: 15px;",
-                 "Write per-sample CSV files with classification accuracy to the output folder.",
-                 "Disable when annotating from scratch."),
+                 "Write per-sample CSV files with classification accuracy to the output folder."),
 
       div(
         style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
@@ -759,7 +758,7 @@ server <- function(input, output, session) {
     }
   })
 
-  # Export SQLite -> .mat bulk handler
+  # Export SQLite -> .mat bulk handler: show confirmation dialog first
   observeEvent(input$export_db_to_mat_btn, {
     if (is.null(config$output_folder) || config$output_folder == "") {
       showNotification("Output folder is not configured. Set it in Settings first.",
@@ -771,6 +770,27 @@ server <- function(input, output, session) {
                        type = "error")
       return()
     }
+
+    showModal(modalDialog(
+      title = "Confirm .mat export",
+      p("This will export all annotated samples from the SQLite database as",
+        tags$strong(".mat files"), "into:"),
+      tags$code(config$output_folder),
+      tags$br(), tags$br(),
+      p(tags$strong("Existing .mat files in this folder will be overwritten"),
+        "and cannot be recovered. Make sure you have a backup if needed."),
+      p("Do you want to continue?"),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("confirm_export_mat_btn", "Export", class = "btn-danger")
+      ),
+      easyClose = TRUE
+    ))
+  })
+
+  # Confirmed: run the actual export
+  observeEvent(input$confirm_export_mat_btn, {
+    removeModal()
 
     db_path <- get_db_path(config$db_folder)
 
