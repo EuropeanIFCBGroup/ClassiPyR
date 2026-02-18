@@ -30,6 +30,10 @@ NULL
 #' @param db_folder Path to the database folder for SQLite storage. Defaults to
 #'   \code{\link{get_default_db_dir}()}. Should be a local filesystem path,
 #'   not a network drive.
+#' @param export_statistics Logical. When \code{TRUE} (default), validation
+#'   statistics CSV files are written to a \code{validation_statistics/}
+#'   subfolder inside \code{output_folder}. Set to \code{FALSE} to skip this
+#'   export, e.g. when annotating from scratch.
 #' @return TRUE on success, FALSE on failure
 #' @export
 #' @examples
@@ -61,7 +65,8 @@ save_sample_annotations <- function(sample_name,
                                      annotator = "Unknown",
                                      adc_folder = NULL,
                                      save_format = "sqlite",
-                                     db_folder = get_default_db_dir()) {
+                                     db_folder = get_default_db_dir(),
+                                     export_statistics = TRUE) {
 
   if (is.null(sample_name) || is.null(classifications) || is.null(class2use_path)) {
     return(FALSE)
@@ -74,13 +79,8 @@ save_sample_annotations <- function(sample_name,
 
   tryCatch({
     # Create output folders if needed
-    stats_folder <- file.path(output_folder, "validation_statistics")
-
     if (!dir.exists(output_folder)) {
       dir.create(output_folder, recursive = TRUE)
-    }
-    if (!dir.exists(stats_folder)) {
-      dir.create(stats_folder, recursive = TRUE)
     }
     if (!dir.exists(png_output_folder)) {
       dir.create(png_output_folder, recursive = TRUE)
@@ -126,14 +126,20 @@ save_sample_annotations <- function(sample_name,
       )
     }
 
-    # Save statistics
-    save_validation_statistics(
-      sample_name = sample_name,
-      classifications = classifications,
-      original_classifications = original_classifications,
-      stats_folder = stats_folder,
-      annotator = annotator
-    )
+    # Save statistics (optional)
+    if (isTRUE(export_statistics)) {
+      stats_folder <- file.path(output_folder, "validation_statistics")
+      if (!dir.exists(stats_folder)) {
+        dir.create(stats_folder, recursive = TRUE)
+      }
+      save_validation_statistics(
+        sample_name = sample_name,
+        classifications = classifications,
+        original_classifications = original_classifications,
+        stats_folder = stats_folder,
+        annotator = annotator
+      )
+    }
 
     # Clean up temp folder
     unlink(temp_annotate_folder, recursive = TRUE)

@@ -18,7 +18,8 @@ save_sample_annotations(
   annotator = "Unknown",
   adc_folder = NULL,
   save_format = "sqlite",
-  db_folder = get_default_db_dir()
+  db_folder = get_default_db_dir(),
+  export_statistics = TRUE
 )
 }
 \arguments{
@@ -55,6 +56,11 @@ This supports non-standard folder structures.}
 \item{db_folder}{Path to the database folder for SQLite storage. Defaults to
 \code{\link{get_default_db_dir}()}. Should be a local filesystem path,
 not a network drive.}
+
+\item{export_statistics}{Logical. When \code{TRUE} (default), validation
+statistics CSV files are written to a \code{validation_statistics/}
+subfolder inside \code{output_folder}. Set to \code{FALSE} to skip this
+export, e.g. when annotating from scratch.}
 }
 \value{
 TRUE on success, FALSE on failure
