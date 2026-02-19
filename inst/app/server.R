@@ -103,7 +103,8 @@ server <- function(input, output, session) {
       auto_sync = TRUE,  # Automatically sync folders on startup
       class2use_path = NULL,  # Path to class2use file for auto-loading
       python_venv_path = NULL,  # NULL = use ./venv in working directory
-      save_format = "sqlite"  # "sqlite" (default), "mat", or "both"
+      save_format = "sqlite",  # "sqlite" (default), "mat", or "both"
+      export_statistics = TRUE  # Write validation statistics CSV files
     )
     
     if (file.exists(settings_file)) {
@@ -158,7 +159,8 @@ server <- function(input, output, session) {
     pixels_per_micron = saved_settings$pixels_per_micron,
     auto_sync = saved_settings$auto_sync,
     python_venv_path = saved_settings$python_venv_path,
-    save_format = saved_settings$save_format
+    save_format = saved_settings$save_format,
+    export_statistics = saved_settings$export_statistics
   )
   
   # Initialize class dropdown with default class list on startup
@@ -241,13 +243,18 @@ server <- function(input, output, session) {
       ),
 
       div(
-        style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
+        style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 5px;",
         div(style = "flex: 1;",
             textInput("cfg_output_folder", "Output Folder (MAT/statistics)",
                       value = config$output_folder, width = "100%")),
         shinyDirButton("browse_output_folder", "Browse", "Select Output Folder",
                        class = "btn-outline-secondary", style = "margin-bottom: 15px;")
       ),
+
+      checkboxInput("cfg_export_statistics", "Export validation statistics",
+                    value = config$export_statistics),
+      tags$small(class = "text-muted", style = "display: block; margin-bottom: 15px;",
+                 "Write per-sample CSV files with classification accuracy to the output folder."),
 
       div(
         style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
@@ -688,6 +695,7 @@ server <- function(input, output, session) {
     config$pixels_per_micron <- input$cfg_pixels_per_micron
     config$auto_sync <- input$cfg_auto_sync
     config$save_format <- input$cfg_save_format
+    config$export_statistics <- input$cfg_export_statistics
 
     # Persist settings to file for next session
     # python_venv_path is kept from config (set via run_app() or previous save)
@@ -701,6 +709,7 @@ server <- function(input, output, session) {
       pixels_per_micron = input$cfg_pixels_per_micron,
       auto_sync = input$cfg_auto_sync,
       save_format = input$cfg_save_format,
+      export_statistics = input$cfg_export_statistics,
       class2use_path = rv$class2use_path,
       python_venv_path = config$python_venv_path
     ))
@@ -749,7 +758,7 @@ server <- function(input, output, session) {
     }
   })
 
-  # Export SQLite -> .mat bulk handler
+  # Export SQLite -> .mat bulk handler: show confirmation dialog first
   observeEvent(input$export_db_to_mat_btn, {
     if (is.null(config$output_folder) || config$output_folder == "") {
       showNotification("Output folder is not configured. Set it in Settings first.",
@@ -761,6 +770,27 @@ server <- function(input, output, session) {
                        type = "error")
       return()
     }
+
+    showModal(modalDialog(
+      title = "Confirm .mat export",
+      p("This will export all annotated samples from the SQLite database as",
+        tags$strong(".mat files"), "into:"),
+      tags$code(config$output_folder),
+      tags$br(), tags$br(),
+      p(tags$strong("Existing .mat files in this folder will be overwritten"),
+        "and cannot be recovered. Make sure you have a backup if needed."),
+      p("Do you want to continue?"),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("confirm_export_mat_btn", "Export", class = "btn-danger")
+      ),
+      easyClose = TRUE
+    ))
+  })
+
+  # Confirmed: run the actual export
+  observeEvent(input$confirm_export_mat_btn, {
+    removeModal()
 
     db_path <- get_db_path(config$db_folder)
 
@@ -1561,7 +1591,8 @@ server <- function(input, output, session) {
           annotator = input$annotator_name,
           adc_folder = adc_folder_for_save,
           save_format = config$save_format,
-          db_folder = config$db_folder
+          db_folder = config$db_folder,
+          export_statistics = config$export_statistics
         )
         # Only update annotated samples list if changes were actually saved
         if (isTRUE(saved)) {
@@ -2269,7 +2300,8 @@ server <- function(input, output, session) {
           annotator = annotator,
           adc_folder = adc_folder,
           save_format = save_fmt,
-          db_folder = config$db_folder
+          db_folder = config$db_folder,
+          export_statistics = config$export_statistics
         )
       })
 
@@ -2578,7 +2610,8 @@ server <- function(input, output, session) {
               class2use_path = class2use_path,
               annotator = annotator,
               save_format = isolate(config$save_format),
-              db_folder = isolate(config$db_folder)
+              db_folder = isolate(config$db_folder),
+              export_statistics = isolate(config$export_statistics)
             )
           }, error = function(e) {
             message("Failed to auto-save ", sample_name, " on session end: ", e$message)
