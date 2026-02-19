@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">ClassiPyR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,9 +42,17 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.svg" class="logo" alt=""><h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.1.0/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.1.1" id="classipyr-011">ClassiPyR 0.1.1<a class="anchor" aria-label="anchor" href="#classipyr-011"></a></h2>
+<div class="section level3">
+<h3 id="new-features-0-1-1">New features<a class="anchor" aria-label="anchor" href="#new-features-0-1-1"></a></h3>
+<ul><li>Added <strong>“Export validation statistics”</strong> checkbox in Settings (below the output folder path). When unchecked, per-sample CSV files are not written to the <code>validation_statistics/</code> subfolder. Useful when annotating from scratch where validation statistics are not relevant (<a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/9" class="external-link">#9</a>).</li>
+<li>Added a <strong>confirmation dialog</strong> before bulk export of SQLite annotations to <code>.mat</code> files. The dialog explains that existing <code>.mat</code> files in the output folder will be overwritten, preventing accidental data loss (<a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/10" class="external-link">#10</a>).</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.0" id="classipyr-010">ClassiPyR 0.1.0<a class="anchor" aria-label="anchor" href="#classipyr-010"></a></h2>
 <p>Initial release of ClassiPyR, a Shiny application for manual classification and validation of Imaging FlowCytobot (IFCB) plankton images.</p>

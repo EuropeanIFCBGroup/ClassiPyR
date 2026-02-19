@@ -22,7 +22,8 @@ save_sample_annotations(
   annotator = "Unknown",
   adc_folder = NULL,
   save_format = "sqlite",
-  db_folder = get_default_db_dir()
+  db_folder = get_default_db_dir(),
+  export_statistics = TRUE
 )
 ```
 
@@ -91,6 +92,13 @@ save_sample_annotations(
   Path to the database folder for SQLite storage. Defaults to
   [`get_default_db_dir()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_default_db_dir.md).
   Should be a local filesystem path, not a network drive.
+
+- export_statistics:
+
+  Logical. When `TRUE` (default), validation statistics CSV files are
+  written to a `validation_statistics/` subfolder inside
+  `output_folder`. Set to `FALSE` to skip this export, e.g. when
+  annotating from scratch.
 
 ## Value
 

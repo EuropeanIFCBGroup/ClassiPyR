@@ -1,5 +1,20 @@
 # Changelog
 
+## ClassiPyR 0.1.1
+
+### New features
+
+- Added **“Export validation statistics”** checkbox in Settings (below
+  the output folder path). When unchecked, per-sample CSV files are not
+  written to the `validation_statistics/` subfolder. Useful when
+  annotating from scratch where validation statistics are not relevant
+  ([\#9](https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/9)).
+- Added a **confirmation dialog** before bulk export of SQLite
+  annotations to `.mat` files. The dialog explains that existing `.mat`
+  files in the output folder will be overwritten, preventing accidental
+  data loss
+  ([\#10](https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/10)).
+
 ## ClassiPyR 0.1.0
 
 Initial release of ClassiPyR, a Shiny application for manual

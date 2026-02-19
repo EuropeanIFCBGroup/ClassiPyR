@@ -13,7 +13,7 @@ written (requires Python + scipy)."><meta property="og:image" content="https://e
 
     <a class="navbar-brand me-2" href="../index.html">ClassiPyR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -48,7 +48,7 @@ written (requires Python + scipy)."><meta property="og:image" content="https://e
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.svg" class="logo" alt=""><h1>Save sample annotations</h1>
-      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.1.0/R/sample_saving.R" class="external-link"><code>R/sample_saving.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/R/sample_saving.R" class="external-link"><code>R/sample_saving.R</code></a></small>
       <div class="d-none name"><code>save_sample_annotations.Rd</code></div>
     </div>
 
@@ -75,7 +75,8 @@ written (requires Python + scipy).</p>
 <span>  annotator <span class="op">=</span> <span class="st">"Unknown"</span>,</span>
 <span>  adc_folder <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  save_format <span class="op">=</span> <span class="st">"sqlite"</span>,</span>
-<span>  db_folder <span class="op">=</span> <span class="fu"><a href="get_default_db_dir.html">get_default_db_dir</a></span><span class="op">(</span><span class="op">)</span></span>
+<span>  db_folder <span class="op">=</span> <span class="fu"><a href="get_default_db_dir.html">get_default_db_dir</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  export_statistics <span class="op">=</span> <span class="cn">TRUE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -143,6 +144,13 @@ This supports non-standard folder structures.</p></dd>
 <dd><p>Path to the database folder for SQLite storage. Defaults to
 <code><a href="get_default_db_dir.html">get_default_db_dir()</a></code>. Should be a local filesystem path,
 not a network drive.</p></dd>
+
+
+<dt id="arg-export-statistics">export_statistics<a class="anchor" aria-label="anchor" href="#arg-export-statistics"></a></dt>
+<dd><p>Logical. When <code>TRUE</code> (default), validation
+statistics CSV files are written to a <code>validation_statistics/</code>
+subfolder inside <code>output_folder</code>. Set to <code>FALSE</code> to skip this
+export, e.g. when annotating from scratch.</p></dd>
 
 </dl></div>
     <div class="section level2">
