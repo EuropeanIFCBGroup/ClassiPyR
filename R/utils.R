@@ -136,7 +136,7 @@ load_file_index <- function() {
 #' If folder paths are not provided, they are read from saved settings.
 #'
 #' @param roi_folder Path to ROI data folder. If NULL, read from saved settings.
-#' @param csv_folder Path to classification folder (CSV/MAT). If NULL, read from saved settings.
+#' @param csv_folder Path to classification folder (CSV/H5/MAT). If NULL, read from saved settings.
 #' @param output_folder Path to output folder for MAT annotations. If NULL, read from saved settings.
 #' @param verbose If TRUE, print progress messages. Default TRUE.
 #' @param db_folder Path to the database folder for SQLite annotations. If NULL,
@@ -221,6 +221,7 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
   # Scan classification files
   classified <- character()
   mat_file_map <- list()
+  h5_file_map <- list()
   csv_map <- list()
 
   if (csv_valid) {
@@ -248,9 +249,21 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
       }
     }
 
+    h5_files <- list.files(csv_folder, pattern = "_class.*\\.h5$",
+                           recursive = TRUE, full.names = TRUE)
+
+    for (h5_file in h5_files) {
+      h5_basename <- basename(h5_file)
+      sample_from_h5 <- sub("_class.*\\.h5$", "", h5_basename)
+      if (sample_from_h5 %in% sample_names) {
+        h5_file_map[[sample_from_h5]] <- h5_file
+      }
+    }
+
     mat_samples <- names(mat_file_map)
+    h5_samples <- names(h5_file_map)
     csv_matched <- csv_sample_names[csv_sample_names %in% sample_names]
-    classified <- unique(c(csv_matched, mat_samples))
+    classified <- unique(c(csv_matched, h5_samples, mat_samples))
     if (verbose) message("  Found ", length(classified), " classified samples")
   }
 
@@ -286,6 +299,7 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
     roi_path_map = roi_map,
     csv_path_map = csv_map,
     classifier_mat_files = mat_file_map,
+    classifier_h5_files = h5_file_map,
     timestamp = as.character(Sys.time())
   )
 

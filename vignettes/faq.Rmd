@@ -132,14 +132,18 @@ A: The app scans the ROI Data Folder recursively, so any subfolder layout works 
 A: For CSV files:
 
 - Must have columns named `file_name` and `class_name` (exact names required)
-- Optionally include a `score` column (confidence value between 0 and 1)
+- Optionally include `score` and `class_name_auto` columns
 - The CSV file must be named after the sample (e.g., `D20230101T120000_IFCB134.csv`)
 - File should be in the Classification Folder (indexed via file cache; click Sync to refresh)
+
+For H5 files:
+
+- Must match pattern `*_class*.h5`
+- Requires the `hdf5r` package (`install.packages("hdf5r")`)
 
 For MAT files:
 
 - Must match pattern `*_class*.mat`
-- Must contain `roinum` and `TBclass` variables
 - Must contain `roinum` and `TBclass` variables
 
 ---
@@ -158,14 +162,16 @@ D20230101T120000_IFCB134_00001.png,Diatom
 D20230101T120000_IFCB134_00002.png,Ciliate
 ```
 
-With optional `score` column (confidence values between 0 and 1):
+With optional `score` and `class_name_auto` columns:
 
 ```
-file_name,class_name,score
-D20230101T120000_IFCB134_00001.png,Diatom,0.95
-D20230101T120000_IFCB134_00002.png,Ciliate,0.87
-D20230101T120000_IFCB134_00003.png,Dinoflagellate,0.72
+file_name,class_name,class_name_auto,score
+D20230101T120000_IFCB134_00001.png,unclassified,Diatom,0.45
+D20230101T120000_IFCB134_00002.png,Ciliate,Ciliate,0.87
+D20230101T120000_IFCB134_00003.png,Dinoflagellate,Dinoflagellate,0.72
 ```
+
+The `class_name_auto` column contains the raw prediction without threshold. When "Apply classification threshold" is disabled in Settings, ClassiPyR uses `class_name_auto` instead of `class_name`.
 
 **Q: My CNN classifier outputs different column names**
 

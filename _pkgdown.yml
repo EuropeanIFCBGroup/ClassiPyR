@@ -48,6 +48,7 @@ reference:
   - load_class_list
   - load_from_classifier_mat
   - load_from_csv
+  - load_from_h5
   - load_from_mat
   - load_from_db
   - create_new_classifications

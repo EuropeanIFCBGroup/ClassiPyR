@@ -15,9 +15,12 @@ NULL
 #'   \item{class_name}{Predicted class name (e.g., `Diatom`).}
 #' }
 #'
-#' An optional column may also be included:
+#' Optional columns may also be included:
 #' \describe{
 #'   \item{score}{Classification confidence value between 0 and 1.}
+#'   \item{class_name_auto}{Raw (unthresholded) class prediction. When
+#'     \code{use_threshold = FALSE} and this column exists, its values are
+#'     used as \code{class_name}.}
 #' }
 #'
 #' The CSV file must be named after the sample it describes
@@ -25,6 +28,9 @@ NULL
 #' Folder configured in the app (subfolders are searched recursively).
 #'
 #' @param csv_path Path to classification CSV file
+#' @param use_threshold Logical, whether to use the threshold-filtered
+#'   \code{class_name} column (default \code{TRUE}) or the raw
+#'   \code{class_name_auto} column when available.
 #' @return Data frame with classifications. Expected columns: `file_name`,
 #'   `class_name`, and optionally `score`.
 #' @export
@@ -34,8 +40,14 @@ NULL
 #' classifications <- load_from_csv("/path/to/D20230101T120000_IFCB134.csv")
 #' head(classifications)
 #' }
-load_from_csv <- function(csv_path) {
+load_from_csv <- function(csv_path, use_threshold = TRUE) {
   classifications <- utils::read.csv(csv_path, stringsAsFactors = FALSE)
+
+  # When threshold is off and class_name_auto exists, use raw predictions
+
+  if (!use_threshold && "class_name_auto" %in% names(classifications)) {
+    classifications$class_name <- classifications$class_name_auto
+  }
 
   # Strip trailing 3-digit suffix from class names (e.g., "Diatom_001" -> "Diatom")
   # This matches iRfcb behavior where class folders may include numeric suffixes
@@ -53,6 +65,80 @@ load_from_csv <- function(csv_path) {
   }
 
   classifications
+}
+
+#' Load classifications from HDF5 classifier output file
+#'
+#' Reads an HDF5 classifier output file (from iRfcb 0.8.0+) and extracts
+#' class predictions. Requires the \pkg{hdf5r} package.
+#'
+#' @param h5_path Path to classifier H5 file (matching pattern *_class*.h5)
+#' @param sample_name Sample name (e.g., "D20220522T000439_IFCB134")
+#' @param roi_dimensions Data frame from \code{\link{read_roi_dimensions}}
+#' @param use_threshold Logical, whether to use the threshold-filtered
+#'   \code{class_name} dataset (default \code{TRUE}) or the raw
+#'   \code{class_name_auto} dataset.
+#' @return Data frame with columns: file_name, class_name, score, width, height,
+#'   roi_area
+#' @export
+#' @examples
+#' \dontrun{
+#' dims <- read_roi_dimensions("/data/raw/2022/D20220522/D20220522T000439_IFCB134.adc")
+#' classifications <- load_from_h5(
+#'   h5_path = "/data/classified/D20220522T000439_IFCB134_class.h5",
+#'   sample_name = "D20220522T000439_IFCB134",
+#'   roi_dimensions = dims,
+#'   use_threshold = TRUE
+#' )
+#' head(classifications)
+#' }
+load_from_h5 <- function(h5_path, sample_name, roi_dimensions, use_threshold = TRUE) {
+  if (!requireNamespace("hdf5r", quietly = TRUE)) {
+    stop("Package 'hdf5r' is required to read H5 classification files. ",
+         "Install it with: install.packages('hdf5r')")
+  }
+
+  h5 <- hdf5r::H5File$new(h5_path, "r")
+  on.exit(h5$close_all(), add = TRUE)
+
+  roi_numbers <- h5[["roi_numbers"]]$read()
+
+  if (use_threshold) {
+    class_names <- h5[["class_name"]]$read()
+  } else {
+    class_names <- h5[["class_name_auto"]]$read()
+  }
+
+  class_names[is.na(class_names)] <- "unclassified"
+
+  # Extract per-ROI max score from output_scores matrix (num_classes x num_rois)
+  output_scores <- h5[["output_scores"]]$read()
+  scores <- apply(output_scores, 2, max)
+
+  # Match ROI dimensions
+  roi_data <- lapply(roi_numbers, function(rn) {
+    idx <- which(roi_dimensions$roi_number == rn)
+    if (length(idx) > 0) {
+      list(width = roi_dimensions$width[idx],
+           height = roi_dimensions$height[idx],
+           area = roi_dimensions$area[idx])
+    } else {
+      list(width = NA_real_, height = NA_real_, area = NA_real_)
+    }
+  })
+
+  classifications <- data.frame(
+    file_name = sprintf("%s_%05d.png", sample_name, roi_numbers),
+    class_name = class_names,
+    score = scores,
+    width = vapply(roi_data, `[[`, numeric(1), "width"),
+    height = vapply(roi_data, `[[`, numeric(1), "height"),
+    roi_area = vapply(roi_data, `[[`, numeric(1), "area"),
+    stringsAsFactors = FALSE
+  )
+
+  # Sort by area (descending)
+  classifications[order(-classifications$roi_area), ]
 }
 
 #' Load classifications from SQLite database

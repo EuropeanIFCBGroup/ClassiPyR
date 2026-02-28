@@ -173,10 +173,11 @@ server <- function(input, output, session) {
   
   # Store all sample names and their classification status
   all_samples <- reactiveVal(character())
-  classified_samples <- reactiveVal(character())  # Auto-classified (CSV or classifier MAT)
+  classified_samples <- reactiveVal(character())  # Auto-classified (CSV, H5, or classifier MAT)
   annotated_samples <- reactiveVal(character())   # Manually annotated (has .mat in output folder)
-  # Store mapping of sample names to classifier MAT file paths
+  # Store mapping of sample names to classifier MAT/H5 file paths
   classifier_mat_files <- reactiveVal(list())
+  classifier_h5_files <- reactiveVal(list())
   # Path maps: sample_name -> full file path (discovered during scan)
   roi_path_map <- reactiveVal(list())
   csv_path_map <- reactiveVal(list())
@@ -225,13 +226,18 @@ server <- function(input, output, session) {
       h5("Folder Paths"),
 
       div(
-        style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
+        style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 5px;",
         div(style = "flex: 1;",
-            textInput("cfg_csv_folder", "Classification Folder (CSV/MAT)",
+            textInput("cfg_csv_folder", "Classification Folder (CSV/H5/MAT)",
                       value = config$csv_folder, width = "100%")),
         shinyDirButton("browse_csv_folder", "Browse", "Select Classification Folder",
                        class = "btn-outline-secondary", style = "margin-bottom: 15px;")
       ),
+
+      checkboxInput("cfg_use_threshold", "Apply classification threshold",
+                    value = config$use_threshold),
+      tags$small(class = "text-muted", style = "display: block; margin-bottom: 15px;",
+                 "When enabled, classifications below the confidence threshold are marked as 'unclassified'."),
 
       div(
         style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
@@ -348,12 +354,6 @@ server <- function(input, output, session) {
 
       # ── IFCB Options ──────────────────────────────────────────────
       h5("IFCB Options"),
-
-      checkboxInput("cfg_use_threshold", "Apply classification threshold",
-                    value = config$use_threshold),
-      tags$small(class = "text-muted",
-                 "Only applies to ifcb-analysis MATLAB classifier output (*_class*.mat).",
-                 "When enabled, classifications below the confidence threshold are marked as 'unclassified'."),
 
       div(
         style = "display: flex; gap: 10px; align-items: center; margin-top: 10px;",
@@ -1016,13 +1016,21 @@ server <- function(input, output, session) {
     }
     adc_path <- sub("\\.roi$", ".adc", roi_path)
 
-    # Find classification source (CSV or classifier MAT)
+    # Find classification source (CSV > H5 > MAT)
     csv_path <- find_csv_file(sample_name)
+    classifier_h5_path <- find_classifier_h5(sample_name)
     classifier_mat_path <- classifier_mat_files()[[sample_name]]
 
     if (!is.null(csv_path)) {
-      classifications <- load_from_csv(csv_path)
+      classifications <- load_from_csv(csv_path, use_threshold = config$use_threshold)
       showNotification("Switched to Validation mode (CSV)", type = "message")
+    } else if (!is.null(classifier_h5_path)) {
+      roi_dims <- read_roi_dimensions(adc_path)
+      classifications <- load_from_h5(
+        classifier_h5_path, sample_name, roi_dims,
+        use_threshold = config$use_threshold
+      )
+      showNotification("Switched to Validation mode (H5)", type = "message")
     } else if (!is.null(classifier_mat_path)) {
       roi_dims <- read_roi_dimensions(adc_path)
       classifications <- load_from_classifier_mat(
@@ -1216,7 +1224,8 @@ server <- function(input, output, session) {
     roi_path_map(safe_list(index_data$roi_path_map))
     csv_path_map(safe_list(index_data$csv_path_map))
     classifier_mat_files(safe_list(index_data$classifier_mat_files))
-    
+    classifier_h5_files(safe_list(index_data$classifier_h5_files))
+
     years <- unique(substr(sample_names, 2, 5))
     years <- sort(years)
     first_year <- if (length(years) > 0) years[1] else "all"
@@ -1228,7 +1237,7 @@ server <- function(input, output, session) {
     TRUE
   }
   
-  # Scan for available ROI files and classification files (CSV and MAT)
+  # Scan for available ROI files and classification files (CSV, H5, and MAT)
   # Uses disk cache for fast startup on subsequent launches
   observe({
     rescan_trigger()  # Force dependency on rescan trigger
@@ -1530,7 +1539,7 @@ server <- function(input, output, session) {
   })
   
   # ============================================================================
-  # Helper: Find classification file (CSV or classifier MAT)
+  # Helper: Find classification file (CSV, H5, or classifier MAT)
   # ============================================================================
   
   find_csv_file <- function(sample_name) {
@@ -1547,6 +1556,15 @@ server <- function(input, output, session) {
     mat_map <- classifier_mat_files()
     if (sample_name %in% names(mat_map)) {
       return(mat_map[[sample_name]])
+    }
+    return(NULL)
+  }
+
+  # Find classifier H5 file for a sample
+  find_classifier_h5 <- function(sample_name) {
+    h5_map <- classifier_h5_files()
+    if (sample_name %in% names(h5_map)) {
+      return(h5_map[[sample_name]])
     }
     return(NULL)
   }
@@ -1612,10 +1630,12 @@ server <- function(input, output, session) {
   load_sample_data <- function(sample_name) {
     req(rv$class2use)
     
-    # Find classification files
+    # Find classification files (priority: CSV > H5 > MAT)
     csv_path <- find_csv_file(sample_name)
+    classifier_h5_path <- find_classifier_h5(sample_name)
     classifier_mat_path <- find_classifier_mat(sample_name)
     has_csv <- !is.null(csv_path)
+    has_classifier_h5 <- !is.null(classifier_h5_path)
     has_classifier_mat <- !is.null(classifier_mat_path)
     
     # Use discovered paths from scan (supports any folder structure)
@@ -1637,7 +1657,7 @@ server <- function(input, output, session) {
       has_db_annotation <- sample_name %in% list_annotated_samples_db(db_path)
       has_mat_annotation <- file.exists(annotation_mat_path)
       has_existing_annotation <- has_db_annotation || has_mat_annotation
-      has_classification <- has_csv || has_classifier_mat
+      has_classification <- has_csv || has_classifier_h5 || has_classifier_mat
 
       # Track if sample has both modes available
       rv$has_both_modes <- has_existing_annotation && has_classification
@@ -1668,10 +1688,28 @@ server <- function(input, output, session) {
 
       } else if (has_csv) {
         # VALIDATION MODE - from CSV
-        classifications <- load_from_csv(csv_path)
+        classifications <- load_from_csv(csv_path, use_threshold = config$use_threshold)
         rv$is_annotation_mode <- FALSE
-        mode_message <- "Validation mode (CSV)"
-        
+        threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
+        mode_message <- paste0("Validation mode (CSV, ", threshold_text, ")")
+
+      } else if (has_classifier_h5) {
+        # VALIDATION MODE - from classifier H5 file
+        if (!file.exists(adc_path)) {
+          showNotification(paste("ADC file not found:", adc_path), type = "error")
+          return(FALSE)
+        }
+
+        roi_dims <- read_roi_dimensions(adc_path)
+        classifications <- load_from_h5(
+          classifier_h5_path, sample_name, roi_dims,
+          use_threshold = config$use_threshold
+        )
+        rv$is_annotation_mode <- FALSE
+
+        threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
+        mode_message <- paste0("Validation mode (H5, ", threshold_text, ")")
+
       } else if (has_classifier_mat) {
         # VALIDATION MODE - from classifier MAT file
         if (!file.exists(adc_path)) {

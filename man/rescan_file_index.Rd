@@ -15,7 +15,7 @@ rescan_file_index(
 \arguments{
 \item{roi_folder}{Path to ROI data folder. If NULL, read from saved settings.}
 
-\item{csv_folder}{Path to classification folder (CSV/MAT). If NULL, read from saved settings.}
+\item{csv_folder}{Path to classification folder (CSV/H5/MAT). If NULL, read from saved settings.}
 
 \item{output_folder}{Path to output folder for MAT annotations. If NULL, read from saved settings.}
 

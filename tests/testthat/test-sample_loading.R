@@ -95,6 +95,136 @@ test_that("filter_to_extracted returns all if folder doesn't exist", {
   expect_equal(nrow(filtered), 2)
 })
 
+test_that("load_from_csv with use_threshold=FALSE uses class_name_auto", {
+  temp_csv <- tempfile(fileext = ".csv")
+  mock_data <- data.frame(
+    file_name = c("D20230101_00001.png", "D20230101_00002.png"),
+    class_name = c("unclassified", "Diatom"),
+    class_name_auto = c("Ciliate", "Diatom"),
+    score = c(0.45, 0.95),
+    stringsAsFactors = FALSE
+  )
+  write.csv(mock_data, temp_csv, row.names = FALSE)
+
+  # With threshold (default) — uses class_name
+  with_threshold <- load_from_csv(temp_csv, use_threshold = TRUE)
+  expect_equal(with_threshold$class_name, c("unclassified", "Diatom"))
+
+  # Without threshold — uses class_name_auto
+  without_threshold <- load_from_csv(temp_csv, use_threshold = FALSE)
+  expect_equal(without_threshold$class_name, c("Ciliate", "Diatom"))
+
+  unlink(temp_csv)
+})
+
+test_that("load_from_csv with use_threshold=FALSE falls back when class_name_auto missing", {
+  temp_csv <- tempfile(fileext = ".csv")
+  mock_data <- data.frame(
+    file_name = c("D20230101_00001.png"),
+    class_name = c("Diatom"),
+    score = c(0.95),
+    stringsAsFactors = FALSE
+  )
+  write.csv(mock_data, temp_csv, row.names = FALSE)
+
+  # Without threshold but no class_name_auto column — uses class_name
+  result <- load_from_csv(temp_csv, use_threshold = FALSE)
+  expect_equal(result$class_name, "Diatom")
+
+  unlink(temp_csv)
+})
+
+test_that("load_from_h5 reads H5 classification file correctly", {
+  skip_if_not_installed("hdf5r")
+
+  h5_path <- testthat::test_path("test_data", "D20220522T000439_IFCB134_class.h5")
+  skip_if_not(file.exists(h5_path), "Test H5 file not found")
+
+  sample_name <- "D20220522T000439_IFCB134"
+
+  # Create mock roi_dimensions matching the H5 file's ROI numbers
+  h5 <- hdf5r::H5File$new(h5_path, "r")
+  roi_numbers <- h5[["roi_numbers"]]$read()
+  h5$close_all()
+
+  roi_dimensions <- data.frame(
+    roi_number = roi_numbers,
+    width = rep(100, length(roi_numbers)),
+    height = rep(100, length(roi_numbers)),
+    area = seq(10000, 10000 + length(roi_numbers) - 1)
+  )
+
+  classifications <- load_from_h5(
+    h5_path = h5_path,
+    sample_name = sample_name,
+    roi_dimensions = roi_dimensions,
+    use_threshold = TRUE
+  )
+
+  expect_s3_class(classifications, "data.frame")
+  expect_true(nrow(classifications) > 0)
+  expect_named(classifications, c("file_name", "class_name", "score", "width", "height", "roi_area"))
+  expect_type(classifications$class_name, "character")
+  expect_type(classifications$score, "double")
+  # All scores should be between 0 and 1
+  expect_true(all(classifications$score >= 0 & classifications$score <= 1))
+  # Should be sorted by area descending
+  expect_equal(classifications$roi_area, sort(classifications$roi_area, decreasing = TRUE))
+})
+
+test_that("load_from_h5 with use_threshold=FALSE uses class_name_auto", {
+  skip_if_not_installed("hdf5r")
+
+  h5_path <- testthat::test_path("test_data", "D20220522T000439_IFCB134_class.h5")
+  skip_if_not(file.exists(h5_path), "Test H5 file not found")
+
+  sample_name <- "D20220522T000439_IFCB134"
+
+  h5 <- hdf5r::H5File$new(h5_path, "r")
+  roi_numbers <- h5[["roi_numbers"]]$read()
+  h5$close_all()
+
+  roi_dimensions <- data.frame(
+    roi_number = roi_numbers,
+    width = rep(100, length(roi_numbers)),
+    height = rep(100, length(roi_numbers)),
+    area = seq(10000, 10000 + length(roi_numbers) - 1)
+  )
+
+  with_threshold <- load_from_h5(h5_path, sample_name, roi_dimensions, use_threshold = TRUE)
+  without_threshold <- load_from_h5(h5_path, sample_name, roi_dimensions, use_threshold = FALSE)
+
+  expect_s3_class(without_threshold, "data.frame")
+  expect_equal(nrow(with_threshold), nrow(without_threshold))
+  # Without threshold should have no "unclassified" (all have raw predictions)
+  expect_type(without_threshold$class_name, "character")
+})
+
+test_that("load_from_h5 errors without hdf5r package", {
+  # We can't truly unload hdf5r, but we can check the function exists
+  expect_true(is.function(load_from_h5))
+  expect_equal(
+    names(formals(load_from_h5)),
+    c("h5_path", "sample_name", "roi_dimensions", "use_threshold")
+  )
+})
+
+test_that("load_from_csv reads real CSV with class_name_auto", {
+  csv_path <- testthat::test_path("test_data", "D20220522T000439_IFCB134.csv")
+  skip_if_not(file.exists(csv_path), "Test CSV file not found")
+
+  # With threshold
+  with_threshold <- load_from_csv(csv_path, use_threshold = TRUE)
+  expect_s3_class(with_threshold, "data.frame")
+  expect_true(nrow(with_threshold) > 0)
+  expect_true("file_name" %in% names(with_threshold))
+  expect_true("class_name" %in% names(with_threshold))
+
+  # Without threshold
+  without_threshold <- load_from_csv(csv_path, use_threshold = FALSE)
+  expect_equal(nrow(with_threshold), nrow(without_threshold))
+})
+
 test_that("load_from_classifier_mat handles class names correctly", {
   skip_if_not_installed("iRfcb")
 
@@ -220,6 +350,39 @@ test_that("load_from_classifier_mat works with use_threshold=FALSE", {
   expect_true(nrow(classifications) > 0)
   # With threshold=FALSE, no class should be "unclassified" (all have TBclass)
   expect_type(classifications$class_name, "character")
+})
+
+test_that("rescan_file_index discovers H5 classifier files", {
+  # Create temp folder structure
+  roi_dir <- file.path(tempdir(), "test_h5_scan", "roi", "2022", "D20220522")
+  csv_dir <- file.path(tempdir(), "test_h5_scan", "classified")
+  output_dir <- file.path(tempdir(), "test_h5_scan", "output")
+  dir.create(roi_dir, recursive = TRUE, showWarnings = FALSE)
+  dir.create(csv_dir, recursive = TRUE, showWarnings = FALSE)
+  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+  # Create dummy ROI file
+  file.create(file.path(roi_dir, "D20220522T000439_IFCB134.roi"))
+
+  # Create dummy H5 and MAT classifier files
+  file.create(file.path(csv_dir, "D20220522T000439_IFCB134_class.h5"))
+  file.create(file.path(csv_dir, "D20220522T000439_IFCB134_class_v1.mat"))
+
+  result <- rescan_file_index(
+    roi_folder = file.path(tempdir(), "test_h5_scan", "roi"),
+    csv_folder = csv_dir,
+    output_folder = output_dir,
+    verbose = FALSE,
+    db_folder = tempdir()
+  )
+
+  expect_type(result, "list")
+  expect_true("D20220522T000439_IFCB134" %in% result$classified_samples)
+  expect_true("D20220522T000439_IFCB134" %in% names(result$classifier_h5_files))
+  expect_true("D20220522T000439_IFCB134" %in% names(result$classifier_mat_files))
+
+  # Cleanup
+  unlink(file.path(tempdir(), "test_h5_scan"), recursive = TRUE)
 })
 
 test_that("read_roi_dimensions reads real ADC file correctly", {

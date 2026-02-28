@@ -152,20 +152,23 @@ The default scale is 3.4 pixels per micrometer (standard for IFCB). To adjust:
 
 ## Classification Sources
 
-`ClassiPyR` supports multiple classification input formats.
+`ClassiPyR` supports multiple classification input formats. When multiple formats exist for the same sample, the priority is: CSV > H5 > MAT.
+
+All three formats support a **classification threshold** option (configurable in Settings under the Classification Folder). When enabled, predictions below the confidence threshold are shown as "unclassified"; when disabled, the raw (unthresholded) class prediction is used.
 
 ### CSV Files
 
-Standard classification CSV output. The CSV file must be named after the sample it describes (e.g., `D20230101T120000_IFCB134.csv`).
+Standard classification CSV output from [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb). The CSV file must be named after the sample it describes (e.g., `D20230101T120000_IFCB134.csv`).
 
 Required columns (exact names):
 
 - `file_name`: Image filename including `.png` extension (e.g., `D20230101T120000_IFCB134_00001.png`)
-- `class_name`: Predicted class name
+- `class_name`: Predicted class name (threshold-applied)
 
 Optional columns:
 
 - `score`: Classification confidence (0-1)
+- `class_name_auto`: Raw class prediction without threshold (used when threshold is disabled)
 
 **Minimal example:**
 
@@ -175,28 +178,38 @@ D20230101T120000_IFCB134_00001.png,Diatom
 D20230101T120000_IFCB134_00002.png,Ciliate
 ```
 
-**Example with confidence scores:**
+**Example with confidence scores and raw predictions:**
 
 ```
-file_name,class_name,score
-D20230101T120000_IFCB134_00001.png,Diatom,0.95
-D20230101T120000_IFCB134_00002.png,Ciliate,0.87
-D20230101T120000_IFCB134_00003.png,Dinoflagellate,0.72
+file_name,class_name,class_name_auto,score
+D20230101T120000_IFCB134_00001.png,unclassified,Diatom,0.45
+D20230101T120000_IFCB134_00002.png,Ciliate,Ciliate,0.87
 ```
 
 **Different CNN pipelines**: If your classifier produces different column names, rename them to `file_name` and `class_name` before placing the CSV in the Classification Folder.
 
 Files are looked up from the file index cache (see [File Index Cache](#file-index-cache) below).
 
+### HDF5 Classifier Output
+
+Files matching `*_class*.h5` pattern, produced by [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb) (>= 0.8.0). Contains:
+
+- `roi_numbers`: ROI identifiers
+- `class_name`: Predicted class with threshold applied
+- `class_name_auto`: Predicted class without threshold
+- `output_scores`: Per-class confidence scores
+- `class_labels`: All possible class names
+- `classifier_name`: Name of the classifier model
+
+Requires the optional [`hdf5r`](https://CRAN.R-project.org/package=hdf5r) package. Install with `install.packages("hdf5r")`.
+
 ### MATLAB Classifier Output
 
-Files matching `*_class*.mat` pattern containing:
+Files matching `*_class*.mat` pattern from [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) containing:
 
 - `roinum`: ROI numbers
-- `TBclass_above_threshold`: With threshold
-- `TBclass`: Without threshold
-
-**Threshold option**: Enable in Settings to include unclassified predictions below confidence threshold.
+- `TBclass_above_threshold`: Predicted class with threshold
+- `TBclass`: Predicted class without threshold
 
 ### Existing Annotations
 
@@ -300,7 +313,7 @@ Images organized into class folders for training CNN models or other classifiers
 
 | Setting | Description |
 |---------|-------------|
-| Classification Folder | Source of CSV/MAT classifications |
+| Classification Folder | Source of CSV/H5/MAT classifications |
 | ROI Data Folder | IFCB raw files (ROI/ADC/HDR) |
 | Output Folder | Where MAT files and statistics go (can be on a network drive) |
 | Database Folder | Where the SQLite database is stored (must be a local drive) |
@@ -340,7 +353,7 @@ The path is remembered for future sessions. **Priority order**: `run_app(venv_pa
 
 ### Classifier Options
 
-**Apply classification threshold**: When loading MATLAB classifier output, use `TBclass_above_threshold` (checked) or `TBclass` (unchecked).
+**Apply classification threshold**: When loading classifier output (CSV, H5, or MAT), use the threshold-filtered class predictions (checked) or the raw unthresholded predictions (unchecked).
 
 ---
 
@@ -408,5 +421,9 @@ Settings are loaded automatically when you start the app, so your folder paths, 
 
 - **[`iRfcb`](https://github.com/EuropeanIFCBGroup/iRfcb)** for IFCB data operations (extracting images, reading ADC metadata, reading/writing `.mat` files, class list handling)
 - **[`RSQLite`](https://CRAN.R-project.org/package=RSQLite)** and **[`DBI`](https://CRAN.R-project.org/package=DBI)** for the SQLite annotation database
+
+Optional dependencies:
+
+- **[`hdf5r`](https://CRAN.R-project.org/package=hdf5r)** for reading HDF5 (`.h5`) classifier output files. Install with `install.packages("hdf5r")`.
 
 All R dependencies are installed automatically when you install `ClassiPyR`. Python is only needed for `.mat` file export.

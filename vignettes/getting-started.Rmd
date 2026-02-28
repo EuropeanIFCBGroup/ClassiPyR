@@ -23,7 +23,7 @@ Make sure you have:
 1. The package installed (see [Installation](https://europeanifcbgroup.github.io/ClassiPyR/))
 2. Your IFCB data files (ROI, ADC, HDR)
 3. Optionally: a class list file (.mat or .txt) - you can also create one from scratch in the app
-4. Optionally: existing classifications (CSV or classifier MAT files, see below)
+4. Optionally: existing classifications (CSV, H5, or classifier MAT files, see below)
 
 ### Python Requirements
 
@@ -41,7 +41,7 @@ D20230101T120000_IFCB134_00001.png,Diatom
 D20230101T120000_IFCB134_00002.png,Ciliate
 ```
 
-An optional `score` column (confidence values between 0 and 1) can also be included. See the [User Guide](user-guide.html) for more details.
+An optional `score` column (confidence values between 0 and 1) can also be included. HDF5 (`.h5`) and MATLAB (`.mat`) classifier output files from [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb) are also supported. See the [User Guide](user-guide.html) for more details.
 
 ### Python Setup (optional)
 
@@ -77,7 +77,7 @@ Configure your folders using the built-in folder browser:
 
 | Setting | Description | Example |
 |---------|-------------|---------|
-| Classification Folder | Where your CSV/MAT classifications are | `/ifcb/classified/` |
+| Classification Folder | Where your CSV/H5/MAT classifications are | `/ifcb/classified/` |
 | ROI Data Folder | Where your IFCB raw files are | `/ifcb/raw/` |
 | Output Folder | Where MAT files and statistics go | `/ifcb/manual/` |
 | Database Folder | Where the SQLite database is stored (must be local) | auto-detected |
