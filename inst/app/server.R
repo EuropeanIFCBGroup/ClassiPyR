@@ -333,11 +333,14 @@ server <- function(input, output, session) {
         actionButton("export_db_to_mat_btn", "Export SQLite \u2192 .mat",
                      icon = icon("file-export"), class = "btn-outline-secondary btn-sm"),
         actionButton("export_db_to_png_btn", "Export SQLite \u2192 PNG",
-                     icon = icon("image"), class = "btn-outline-secondary btn-sm")
+                     icon = icon("image"), class = "btn-outline-secondary btn-sm"),
+        actionButton("import_png_to_db_btn", "Import PNG \u2192 SQLite",
+                     icon = icon("folder-open"), class = "btn-outline-secondary btn-sm")
       ),
       tags$small(class = "text-muted",
                  "Bulk import/export all annotated samples between storage formats.",
-                 "PNG export extracts images into class-name subfolders."),
+                 "PNG export extracts images into class-name subfolders.",
+                 "PNG import reads images from class-name subfolders."),
 
       div(
         style = "margin-top: 8px;",
@@ -845,6 +848,232 @@ server <- function(input, output, session) {
       duration = 8
     )
   })
+
+  # ============================================================================
+  # Import PNG -> SQLite (multi-step flow)
+  # ============================================================================
+
+  # Temporary storage for the PNG import flow
+  png_import_state <- reactiveValues(
+    scan_result = NULL,
+    class_mapping = NULL,
+    png_folder = NULL
+  )
+
+  # Step 1: Button click - show folder picker dialog
+  observeEvent(input$import_png_to_db_btn, {
+    showModal(modalDialog(
+      title = "Import PNG \u2192 SQLite",
+      size = "m",
+      easyClose = TRUE,
+      div(
+        style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
+        div(style = "flex: 1;",
+            textInput("cfg_png_import_folder", "PNG Import Folder",
+                      value = config$png_output_folder, width = "100%")),
+        shinyDirButton("browse_png_import_folder", "Browse", "Select PNG Import Folder",
+                       class = "btn-outline-secondary", style = "margin-bottom: 15px;")
+      ),
+      tags$small(class = "text-muted",
+                 "Select a folder containing PNG images organized in class-name subfolders.",
+                 "Folder names follow iRfcb convention (trailing _NNN suffix is stripped)."),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("scan_png_folder_btn", "Scan Folder", class = "btn-primary")
+      )
+    ))
+  })
+
+  # Set up shinyFiles dir chooser for PNG import folder
+  shinyDirChoose(input, "browse_png_import_folder",
+                 roots = make_dynamic_roots("cfg_png_import_folder"), session = session)
+
+  observeEvent(input$browse_png_import_folder, {
+    if (!is.integer(input$browse_png_import_folder)) {
+      folder <- parseDirPath(get_browse_volumes(input$cfg_png_import_folder),
+                             input$browse_png_import_folder)
+      if (length(folder) > 0) {
+        updateTextInput(session, "cfg_png_import_folder", value = as.character(folder))
+      }
+    }
+  })
+
+  # Step 1b: Scan the folder
+  observeEvent(input$scan_png_folder_btn, {
+    png_folder <- input$cfg_png_import_folder
+    if (is.null(png_folder) || !nzchar(png_folder) || !dir.exists(png_folder)) {
+      showNotification("Please select a valid folder.", type = "error")
+      return()
+    }
+
+    withProgress(message = "Scanning PNG folder...", {
+      scan_result <- tryCatch(
+        scan_png_class_folder(png_folder),
+        error = function(e) {
+          showNotification(paste("Scan failed:", e$message), type = "error")
+          NULL
+        }
+      )
+    })
+
+    if (is.null(scan_result) || nrow(scan_result$annotations) == 0) {
+      showNotification("No valid PNG images found in the selected folder.", type = "error")
+      return()
+    }
+
+    png_import_state$scan_result <- scan_result
+    png_import_state$png_folder <- png_folder
+    png_import_state$class_mapping <- NULL
+
+    # Check for class mismatches
+    unmatched <- setdiff(scan_result$classes_found, rv$class2use)
+
+    if (length(unmatched) > 0) {
+      # Step 2: Show class mapping dialog
+      mapping_inputs <- lapply(unmatched, function(cls) {
+        choices <- c("Add as new" = "__add_new__", setNames(rv$class2use, rv$class2use))
+        div(
+          style = "display: flex; gap: 10px; align-items: center; margin-bottom: 5px;",
+          tags$span(style = "flex: 0 0 200px; font-weight: bold;", cls),
+          div(style = "flex: 1;",
+              selectInput(paste0("png_map_", gsub("[^a-zA-Z0-9]", "_", cls)),
+                          label = NULL, choices = choices, width = "100%"))
+        )
+      })
+
+      showModal(modalDialog(
+        title = "Map Unmatched Classes",
+        size = "l",
+        easyClose = FALSE,
+        p(sprintf("Found %d class(es) not in your current class list. Map them to existing classes or add as new:",
+                  length(unmatched))),
+        p(sprintf("Scanned: %d images across %d samples in %d classes.",
+                  nrow(scan_result$annotations),
+                  length(scan_result$sample_names),
+                  length(scan_result$classes_found))),
+        hr(),
+        tagList(mapping_inputs),
+        footer = tagList(
+          modalButton("Cancel"),
+          actionButton("confirm_png_class_mapping_btn", "Continue", class = "btn-primary")
+        )
+      ))
+    } else {
+      # No mismatches - proceed to overwrite check (Step 3)
+      check_png_import_overwrite()
+    }
+  })
+
+  # Step 2b: Process class mapping
+  observeEvent(input$confirm_png_class_mapping_btn, {
+    scan_result <- png_import_state$scan_result
+    if (is.null(scan_result)) return()
+
+    unmatched <- setdiff(scan_result$classes_found, rv$class2use)
+    class_mapping <- character()
+    new_classes <- character()
+
+    for (cls in unmatched) {
+      input_id <- paste0("png_map_", gsub("[^a-zA-Z0-9]", "_", cls))
+      mapped_to <- input[[input_id]]
+      if (!is.null(mapped_to) && mapped_to != "__add_new__") {
+        class_mapping[cls] <- mapped_to
+      } else {
+        new_classes <- c(new_classes, cls)
+      }
+    }
+
+    png_import_state$class_mapping <- if (length(class_mapping) > 0) class_mapping else NULL
+
+    # Add new classes to class2use
+    if (length(new_classes) > 0) {
+      rv$class2use <- c(rv$class2use, new_classes)
+      showNotification(
+        sprintf("Added %d new class(es): %s", length(new_classes),
+                paste(new_classes, collapse = ", ")),
+        type = "message", duration = 5
+      )
+    }
+
+    check_png_import_overwrite()
+  })
+
+  # Step 3: Check for existing samples and show overwrite warning
+  check_png_import_overwrite <- function() {
+    scan_result <- png_import_state$scan_result
+    if (is.null(scan_result)) return()
+
+    db_path <- get_db_path(config$db_folder)
+    existing <- list_annotated_samples_db(db_path)
+    overlapping <- intersect(scan_result$sample_names, existing)
+
+    if (length(overlapping) > 0) {
+      showModal(modalDialog(
+        title = "Overwrite Existing Samples?",
+        size = "m",
+        easyClose = FALSE,
+        p(sprintf("%d of %d samples already have annotations in the database and will be overwritten:",
+                  length(overlapping), length(scan_result$sample_names))),
+        div(
+          style = "max-height: 200px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 4px;",
+          tags$ul(lapply(overlapping, tags$li))
+        ),
+        footer = tagList(
+          modalButton("Cancel"),
+          actionButton("confirm_png_overwrite_btn", "Overwrite & Import",
+                       class = "btn-warning")
+        )
+      ))
+    } else {
+      # No overlap - proceed directly
+      execute_png_import()
+    }
+  }
+
+  observeEvent(input$confirm_png_overwrite_btn, {
+    execute_png_import()
+  })
+
+  # Step 4: Execute the import
+  execute_png_import <- function() {
+    removeModal()
+
+    scan_result <- png_import_state$scan_result
+    png_folder <- png_import_state$png_folder
+    if (is.null(scan_result) || is.null(png_folder)) return()
+
+    db_path <- get_db_path(config$db_folder)
+    annotator <- if (!is.null(input$annotator_name) && nzchar(input$annotator_name)) {
+      input$annotator_name
+    } else {
+      "imported"
+    }
+
+    withProgress(message = "Importing PNG annotations to SQLite...", {
+      result <- import_png_folder_to_db(
+        png_folder, db_path, rv$class2use,
+        class_mapping = png_import_state$class_mapping,
+        annotator = annotator
+      )
+    })
+
+    showNotification(
+      sprintf("PNG import complete: %d samples imported, %d failed.",
+              result$success, result$failed),
+      type = if (result$failed > 0) "warning" else "message",
+      duration = 8
+    )
+
+    # Trigger rescan to refresh sample list
+    if (result$success > 0) {
+      rescan_trigger(rescan_trigger() + 1)
+    }
+
+    # Clean up state
+    png_import_state$scan_result <- NULL
+    png_import_state$class_mapping <- NULL
+    png_import_state$png_folder <- NULL
+  }
 
   # ============================================================================
   # UI Outputs - Warnings and Indicators

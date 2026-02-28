@@ -380,6 +380,27 @@ result <- export_all_db_to_mat(get_db_path(get_default_db_dir()), "/data/manual"
 cat(result$success, "exported,", result$failed, "failed\n")
 ```
 
+**Q: Can I import images classified in another tool?**
+
+A: Yes. Organize your PNG images into subfolders named after each class (e.g., `Diatom/`, `Ciliate_002/`). Then use **Import PNG → SQLite** in Settings > Import / Export. The app strips trailing `_NNN` suffixes from folder names (following the iRfcb convention) and maps images to class names based on which subfolder they are in.
+
+If your folder class names don't match the app's current class list, a mapping dialog will appear letting you remap them to existing classes or add them as new classes.
+
+Note: ROI files are needed for viewing images and re-exporting. Without ROI files, annotations are stored in the database but images cannot be displayed in the gallery.
+
+You can also import programmatically:
+
+```{r, eval = FALSE}
+library(ClassiPyR)
+result <- import_png_folder_to_db(
+  "/data/png_export",
+  get_db_path(get_default_db_dir()),
+  class2use = c("Diatom", "Ciliate", "Dinoflagellate"),
+  annotator = "Jane"
+)
+cat(result$success, "imported,", result$failed, "failed\n")
+```
+
 **Q: Can I change the annotator name for existing annotations?**
 
 A: Yes. Use `update_annotator()` from the R console:

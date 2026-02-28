@@ -343,6 +343,111 @@ create_new_classifications <- function(sample_name, roi_dimensions) {
   classifications[order(-classifications$roi_area), ]
 }
 
+#' Scan a PNG folder with class subfolders
+#'
+#' Scans a directory containing PNG images organized into class-name
+#' subfolders (e.g. as exported by \code{\link{export_db_to_png}} or other
+#' tools). Folder names follow the iRfcb convention where a trailing 3-digit
+#' suffix is stripped (e.g. \code{Diatom_001} becomes \code{Diatom}).
+#'
+#' @param png_folder Path to the top-level folder containing class subfolders
+#' @return A list with components:
+#'   \describe{
+#'     \item{annotations}{Data frame with columns \code{sample_name},
+#'       \code{roi_number}, \code{file_name}, and \code{class_name}}
+#'     \item{classes_found}{Character vector of unique class names found}
+#'     \item{sample_names}{Character vector of unique sample names found}
+#'   }
+#' @export
+#' @examples
+#' \dontrun{
+#' result <- scan_png_class_folder("/data/png_export")
+#' head(result$annotations)
+#' result$classes_found
+#' result$sample_names
+#' }
+scan_png_class_folder <- function(png_folder) {
+  if (!dir.exists(png_folder)) {
+    stop("PNG folder does not exist: ", png_folder)
+  }
+
+  subdirs <- list.dirs(png_folder, recursive = FALSE, full.names = TRUE)
+
+  if (length(subdirs) == 0) {
+    return(list(
+      annotations = data.frame(
+        sample_name = character(),
+        roi_number = integer(),
+        file_name = character(),
+        class_name = character(),
+        stringsAsFactors = FALSE
+      ),
+      classes_found = character(),
+      sample_names = character()
+    ))
+  }
+
+  all_rows <- list()
+  seen_rois <- list()
+
+  for (subdir in subdirs) {
+    class_name <- sub("_\\d{3}$", "", basename(subdir))
+    png_files <- list.files(subdir, pattern = "\\.png$", full.names = FALSE)
+
+    for (fn in png_files) {
+      # Parse sample_name and roi_number from filename
+      # Expected format: SampleName_NNNNN.png (5-digit ROI number)
+      m <- regmatches(fn, regexec("^(.+)_(\\d{5})\\.png$", fn))[[1]]
+      if (length(m) < 3) {
+        warning("Skipping file with unexpected name format: ", fn)
+        next
+      }
+
+      sample_name <- m[2]
+      roi_number <- as.integer(m[3])
+      roi_key <- paste0(sample_name, "_", roi_number)
+
+      if (!is.null(seen_rois[[roi_key]])) {
+        warning(sprintf("Duplicate ROI %s found in class '%s' (already in '%s'), using first occurrence",
+                        roi_key, class_name, seen_rois[[roi_key]]))
+        next
+      }
+      seen_rois[[roi_key]] <- class_name
+
+      all_rows[[length(all_rows) + 1L]] <- data.frame(
+        sample_name = sample_name,
+        roi_number = roi_number,
+        file_name = fn,
+        class_name = class_name,
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+
+  if (length(all_rows) == 0) {
+    return(list(
+      annotations = data.frame(
+        sample_name = character(),
+        roi_number = integer(),
+        file_name = character(),
+        class_name = character(),
+        stringsAsFactors = FALSE
+      ),
+      classes_found = character(),
+      sample_names = character()
+    ))
+  }
+
+  annotations <- do.call(rbind, all_rows)
+  rownames(annotations) <- NULL
+
+  list(
+    annotations = annotations,
+    classes_found = sort(unique(annotations$class_name)),
+    sample_names = sort(unique(annotations$sample_name))
+  )
+}
+
 #' Filter classifications to only include extracted images
 #'
 #' Filters a classifications data frame to only include ROIs that have

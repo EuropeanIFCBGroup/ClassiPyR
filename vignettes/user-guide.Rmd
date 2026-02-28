@@ -334,6 +334,9 @@ Below the format selector, two buttons allow bulk conversion between formats:
 - **Import .mat → SQLite**: Imports all `.mat` annotation files from the output folder into the SQLite database. Already-imported samples are skipped.
 - **Export SQLite → .mat**: Exports all annotated samples from the database to `.mat` files. Requires Python with scipy.
 - **Export SQLite → PNG**: Extracts annotated images from ROI files into class-name subfolders in the PNG Output Folder. Useful for building training datasets for CNN classifiers.
+- **Import PNG → SQLite**: Imports annotations from a folder of PNG images organized in class-name subfolders. Class names are extracted from folder names (trailing `_NNN` suffixes are stripped). Useful for re-importing corrected exports or importing external classification datasets.
+
+> **Note**: When importing external datasets without corresponding ROI files, the annotations are stored in the database but images cannot be viewed or re-exported through the app. For full round-trip support, ensure ROI files are available in the configured ROI Data Folder.
 
 ### Auto-Sync
 

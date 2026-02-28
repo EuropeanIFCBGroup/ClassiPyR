@@ -601,6 +601,79 @@ export_db_to_png <- function(db_path, sample_name, roi_path, png_folder,
   })
 }
 
+#' Import annotations from a PNG class folder into the SQLite database
+#'
+#' Scans a folder of PNG images organized in class-name subfolders (via
+#' \code{\link{scan_png_class_folder}}) and imports the annotations into the
+#' database. An optional \code{class_mapping} named vector remaps class names
+#' before saving.
+#'
+#' @param png_folder Path to the top-level folder containing class subfolders
+#' @param db_path Path to the SQLite database file
+#' @param class2use Character vector of class names (preserves index order for
+#'   .mat export)
+#' @param class_mapping Optional named character vector mapping scanned class
+#'   names to target class names. Names are the source classes, values are the
+#'   target classes. Classes not in the mapping are kept as-is.
+#' @param annotator Annotator name (defaults to \code{"imported"})
+#' @return Named list with counts: \code{success}, \code{failed}
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path("/data/manual")
+#' class2use <- c("Diatom", "Dinoflagellate", "Ciliate")
+#' result <- import_png_folder_to_db(
+#'   "/data/png_export", db_path, class2use,
+#'   class_mapping = c("OldName" = "NewName"),
+#'   annotator = "Jane"
+#' )
+#' cat(result$success, "imported,", result$failed, "failed\n")
+#' }
+import_png_folder_to_db <- function(png_folder, db_path, class2use,
+                                     class_mapping = NULL,
+                                     annotator = "imported") {
+  scan_result <- scan_png_class_folder(png_folder)
+
+  counts <- list(success = 0L, failed = 0L)
+
+  if (nrow(scan_result$annotations) == 0) {
+    return(counts)
+  }
+
+  annotations <- scan_result$annotations
+
+  # Apply class mapping if provided
+  if (!is.null(class_mapping) && length(class_mapping) > 0) {
+    mapped <- class_mapping[annotations$class_name]
+    has_mapping <- !is.na(mapped)
+    annotations$class_name[has_mapping] <- mapped[has_mapping]
+  }
+
+  # Group by sample_name and save each sample
+
+  sample_names <- unique(annotations$sample_name)
+
+  for (sn in sample_names) {
+    sample_rows <- annotations[annotations$sample_name == sn, ]
+
+    classifications <- data.frame(
+      file_name = sample_rows$file_name,
+      class_name = sample_rows$class_name,
+      stringsAsFactors = FALSE
+    )
+
+    ok <- save_annotations_db(db_path, sn, classifications, class2use,
+                              annotator)
+    if (isTRUE(ok)) {
+      counts$success <- counts$success + 1L
+    } else {
+      counts$failed <- counts$failed + 1L
+    }
+  }
+
+  counts
+}
+
 #' Bulk export all annotated samples from SQLite to class-organized PNGs
 #'
 #' Exports every annotated sample in the database to PNG images organized

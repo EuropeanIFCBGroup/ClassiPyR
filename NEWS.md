@@ -1,3 +1,12 @@
+# ClassiPyR (development version)
+
+## New features
+
+- Added **Import PNG → SQLite** button in Settings > Import / Export. Imports annotations from a folder of PNG images organized in class-name subfolders (e.g. exported by ClassiPyR or other tools). Folder names follow the iRfcb convention where trailing `_NNN` suffixes are stripped.
+- When importing PNG folders with class names not in the current class list, a **class mapping dialog** lets users remap unmatched classes to existing ones or add them as new classes.
+- Overwrite warning dialog shown when imported samples already exist in the database.
+- New exported functions: `scan_png_class_folder()` for scanning PNG class folder structures, and `import_png_folder_to_db()` for programmatic bulk import.
+
 # ClassiPyR 0.1.1
 
 ## New features

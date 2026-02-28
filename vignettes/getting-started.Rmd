@@ -24,6 +24,7 @@ Make sure you have:
 2. Your IFCB data files (ROI, ADC, HDR)
 3. Optionally: a class list file (.mat or .txt) - you can also create one from scratch in the app
 4. Optionally: existing classifications (CSV, H5, or classifier MAT files, see below)
+5. Optionally: existing PNG-organized datasets can be imported via Settings > Import PNG → SQLite
 
 ### Python Requirements
 
