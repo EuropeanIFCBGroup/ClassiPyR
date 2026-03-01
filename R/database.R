@@ -723,3 +723,254 @@ export_all_db_to_png <- function(db_path, png_folder, roi_path_map,
 
   counts
 }
+
+#' List all classes with counts in the annotations database
+#'
+#' Queries the database for distinct class names and their annotation counts.
+#' Useful for populating class review mode dropdowns. Optional filters restrict
+#' results to annotations matching a given year, month, or instrument.
+#'
+#' @param db_path Path to the SQLite database file
+#' @param year Optional year filter (e.g. \code{"2023"}). When not \code{"all"}
+#'   or \code{NULL}, restricts to sample names starting with \code{DYYYY}.
+#' @param month Optional month filter (e.g. \code{"03"}). When not \code{"all"}
+#'   or \code{NULL}, restricts to sample names with that month at positions 6-7.
+#' @param instrument Optional instrument filter (e.g. \code{"IFCB134"}). When
+#'   not \code{"all"} or \code{NULL}, restricts to sample names ending with
+#'   \code{_INSTRUMENT}.
+#' @return Data frame with columns \code{class_name} and \code{count}, ordered
+#'   alphabetically by class name. Returns an empty data frame if the database
+#'   does not exist or has no annotations.
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path("/data/manual")
+#' classes <- list_classes_db(db_path)
+#' classes_2023 <- list_classes_db(db_path, year = "2023")
+#' }
+list_classes_db <- function(db_path, year = NULL, month = NULL,
+                            instrument = NULL) {
+  empty <- data.frame(class_name = character(), count = integer(),
+                      stringsAsFactors = FALSE)
+
+  if (!file.exists(db_path)) {
+    return(empty)
+  }
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+
+  tables <- dbGetQuery(con, "SELECT name FROM sqlite_master WHERE type='table'")
+  if (!"annotations" %in% tables$name) {
+    return(empty)
+  }
+
+  where <- build_sample_filter_clause(year, month, instrument)
+
+  sql <- paste0(
+    "SELECT class_name, COUNT(*) AS count FROM annotations",
+    where$clause,
+    " GROUP BY class_name ORDER BY class_name"
+  )
+
+  if (length(where$params) > 0) {
+    dbGetQuery(con, sql, params = where$params)
+  } else {
+    dbGetQuery(con, sql)
+  }
+}
+
+#' Load all annotations for a specific class from the database
+#'
+#' Returns every annotation matching \code{class_name}, with a computed
+#' \code{file_name} column for gallery display. Optional filters restrict
+#' results by year, month, or instrument.
+#'
+#' @param db_path Path to the SQLite database file
+#' @param class_name Class name to load
+#' @param year Optional year filter (e.g. \code{"2023"})
+#' @param month Optional month filter (e.g. \code{"03"})
+#' @param instrument Optional instrument filter (e.g. \code{"IFCB134"})
+#' @return Data frame with columns \code{sample_name}, \code{roi_number},
+#'   \code{class_name}, and \code{file_name}. Returns \code{NULL} if no
+#'   annotations match.
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path("/data/manual")
+#' diatoms <- load_class_annotations_db(db_path, "Diatom")
+#' diatoms_2023 <- load_class_annotations_db(db_path, "Diatom", year = "2023")
+#' }
+load_class_annotations_db <- function(db_path, class_name, year = NULL,
+                                      month = NULL, instrument = NULL) {
+  if (!file.exists(db_path)) {
+    return(NULL)
+  }
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+
+  where <- build_sample_filter_clause(year, month, instrument)
+  params <- c(list(class_name), where$params)
+
+  rows <- dbGetQuery(con, paste0(
+    "SELECT sample_name, roi_number, class_name FROM annotations WHERE class_name = ?",
+    if (nzchar(where$clause)) gsub("^ WHERE ", " AND ", where$clause),
+    " ORDER BY sample_name, roi_number"
+  ), params = params)
+
+  if (nrow(rows) == 0) {
+    return(NULL)
+  }
+
+  rows$file_name <- sprintf("%s_%05d.png", rows$sample_name, rows$roi_number)
+  rows
+}
+
+#' Save class review changes to the database
+#'
+#' Performs row-level UPDATEs for reclassified images identified during class
+#' review mode. Only the changed rows are updated; other annotations for the
+#' same samples are left untouched.
+#'
+#' @param db_path Path to the SQLite database file
+#' @param changes_df Data frame with columns \code{sample_name},
+#'   \code{roi_number}, and \code{new_class_name}
+#' @param annotator Annotator name
+#' @return Integer count of rows updated
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path("/data/manual")
+#' changes <- data.frame(
+#'   sample_name = "D20230101T120000_IFCB134",
+#'   roi_number = 5L,
+#'   new_class_name = "Ciliate"
+#' )
+#' save_class_review_changes_db(db_path, changes, "Jane")
+#' }
+save_class_review_changes_db <- function(db_path, changes_df, annotator) {
+  if (is.null(changes_df) || nrow(changes_df) == 0) {
+    return(0L)
+  }
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+
+  init_db_schema(con)
+
+  timestamp <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+  updated <- 0L
+
+  tryCatch({
+    dbExecute(con, "BEGIN TRANSACTION")
+
+    for (i in seq_len(nrow(changes_df))) {
+      n <- dbExecute(con,
+        "UPDATE annotations SET class_name = ?, annotator = ?, timestamp = ?, is_manual = 1 WHERE sample_name = ? AND roi_number = ?",
+        params = list(
+          changes_df$new_class_name[i],
+          annotator,
+          timestamp,
+          changes_df$sample_name[i],
+          changes_df$roi_number[i]
+        )
+      )
+      updated <- updated + as.integer(n)
+    }
+
+    dbExecute(con, "COMMIT")
+    updated
+  }, error = function(e) {
+    tryCatch(dbExecute(con, "ROLLBACK"), error = function(e2) NULL)
+    warning("Failed to save class review changes: ", e$message)
+    0L
+  })
+}
+
+#' List distinct years, months, and instruments from annotations
+#'
+#' Extracts metadata from sample names in the annotations table for use as
+#' filter options. Sample names follow the IFCB naming convention
+#' \code{DYYYYMMDDTHHMMSS_INSTRUMENT}.
+#'
+#' @param db_path Path to the SQLite database file
+#' @return A list with character vectors: \code{years}, \code{months}, and
+#'   \code{instruments}. Returns empty vectors if the database does not exist
+#'   or has no annotations.
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path("/data/manual")
+#' meta <- list_annotation_metadata_db(db_path)
+#' meta$years       # e.g. c("2022", "2023")
+#' meta$months      # e.g. c("01", "06", "12")
+#' meta$instruments # e.g. c("IFCB134", "IFCB135")
+#' }
+list_annotation_metadata_db <- function(db_path) {
+  empty <- list(years = character(), months = character(),
+                instruments = character())
+
+  if (!file.exists(db_path)) {
+    return(empty)
+  }
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+
+  tables <- dbGetQuery(con, "SELECT name FROM sqlite_master WHERE type='table'")
+  if (!"annotations" %in% tables$name) {
+    return(empty)
+  }
+
+  samples <- dbGetQuery(con,
+    "SELECT DISTINCT sample_name FROM annotations"
+  )$sample_name
+
+  if (length(samples) == 0) {
+    return(empty)
+  }
+
+  years <- sort(unique(substr(samples, 2, 5)))
+  months <- sort(unique(substr(samples, 6, 7)))
+  instruments <- sort(unique(sub(".*_", "", samples)))
+
+  list(years = years, months = months, instruments = instruments)
+}
+
+# Build WHERE clause fragments for sample_name filtering
+#
+# @param year Year string or "all"/NULL
+# @param month Month string or "all"/NULL
+# @param instrument Instrument string or "all"/NULL
+# @return List with `clause` (SQL fragment starting with " WHERE " or "") and
+#   `params` (list of bind values)
+# @keywords internal
+build_sample_filter_clause <- function(year = NULL, month = NULL,
+                                       instrument = NULL) {
+  conditions <- character()
+  params <- list()
+
+  if (!is.null(year) && year != "all") {
+    conditions <- c(conditions, "sample_name LIKE ?")
+    params <- c(params, list(paste0("D", year, "%")))
+  }
+
+  if (!is.null(month) && month != "all") {
+    conditions <- c(conditions, "sample_name LIKE ?")
+    params <- c(params, list(paste0("D____", month, "%")))
+  }
+
+  if (!is.null(instrument) && instrument != "all") {
+    conditions <- c(conditions, "sample_name LIKE ?")
+    params <- c(params, list(paste0("%_", instrument)))
+  }
+
+  clause <- if (length(conditions) > 0) {
+    paste0(" WHERE ", paste(conditions, collapse = " AND "))
+  } else {
+    ""
+  }
+
+  list(clause = clause, params = params)
+}

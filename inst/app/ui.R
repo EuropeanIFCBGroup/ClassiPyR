@@ -284,6 +284,9 @@ ui <- page_sidebar(
       .navbar-mode-validation {
         background-color: #28a745 !important;  /* Green for validation */
       }
+      .navbar-mode-class-review {
+        background-color: #6f42c1 !important;  /* Purple for class review */
+      }
 
       /* Override navbar title color for visibility */
       .navbar .navbar-brand, .navbar .navbar-brand span {
@@ -305,6 +308,11 @@ ui <- page_sidebar(
       .selectize-input .item.unmatched-class {
         color: #856404 !important;
         background-color: #fff3cd !important;
+      }
+
+      /* Taller dropdown for class review select */
+      #class_review_select + .selectize-control .selectize-dropdown-content {
+        max-height: 350px !important;
       }
 
       /* Loading overlay styles */
@@ -373,7 +381,7 @@ ui <- page_sidebar(
   ),
 
   sidebar = sidebar(
-    width = 320,
+    width = 360,
 
     # Annotator and settings at top
     div(
@@ -390,70 +398,119 @@ ui <- page_sidebar(
 
     hr(),
 
-    # Sample selection
-    h4("Sample Selection"),
+    # Mode toggle: Sample Mode vs Class Review
+    radioButtons("app_mode", NULL,
+                 choices = c("Sample Mode" = "sample",
+                             "Class Review" = "class_review"),
+                 selected = "sample", inline = TRUE),
 
-    # Year and month filters in a row
-    div(
-      style = "display: flex; gap: 10px;",
-      div(style = "flex: 1;",
-          selectInput("year_select", "Year", choices = NULL, width = "100%")),
-      div(style = "flex: 1;",
-          selectInput("month_select", "Month", choices = c("All" = "all"), width = "100%"))
+    # ── Sample Mode panel ──
+    conditionalPanel(
+      condition = "input.app_mode == 'sample'",
+
+      h4("Sample Selection"),
+
+      # Year, month, and instrument filters in a row
+      div(
+        style = "display: flex; gap: 10px;",
+        div(style = "flex: 1;",
+            selectInput("year_select", "Year", choices = NULL, width = "100%")),
+        div(style = "flex: 1;",
+            selectInput("month_select", "Month", choices = c("All" = "all"), width = "100%")),
+        div(style = "flex: 1;",
+            selectInput("instrument_select", "IFCB", choices = c("All" = "all"), width = "100%"))
+      ),
+
+      selectInput("sample_status_filter", "Show",
+                  choices = c("All samples" = "all",
+                             "Auto-classified (validation)" = "classified",
+                             "Manually annotated" = "annotated",
+                             "Unannotated" = "unclassified")),
+
+      # Sample dropdown with CSS to prevent text wrapping and reduce spacing
+      tags$style("
+        .sample-dropdown .selectize-input { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sample-dropdown .form-group { margin-bottom: 2px; }
+      "),
+      div(class = "sample-dropdown",
+          selectizeInput("sample_select", "Sample", choices = NULL, width = "100%",
+                         options = list(
+                           placeholder = "Select sample..."
+                         ))),
+
+      # Legend for sample status symbols (compact, single line)
+      div(
+        style = "font-size: 12px; color: #666; margin-bottom: 8px; white-space: nowrap;",
+        tags$span(style = "margin-right: 8px;", "\u270E Manual"),
+        tags$span(style = "margin-right: 8px;", "\u2713 Classified"),
+        tags$span("* Unannotated")
+      ),
+
+      # Navigation buttons
+      div(
+        style = "display: flex; gap: 5px; margin-bottom: 5px;",
+        actionButton("load_sample", "Load",
+                     class = "btn-primary", style = "flex: 1;"),
+        actionButton("prev_sample", label = icon("arrow-left"),
+                     class = "btn-outline-primary", style = "flex: 0;",
+                     title = "Previous sample"),
+        actionButton("next_sample", label = icon("arrow-right"),
+                     class = "btn-outline-primary", style = "flex: 0;",
+                     title = "Next sample"),
+        actionButton("random_sample", label = icon("random"),
+                     class = "btn-outline-secondary", style = "flex: 0;",
+                     title = "Random sample"),
+        actionButton("rescan_folders", label = icon("sync"),
+                     class = "btn-outline-secondary", style = "flex: 0;",
+                     title = "Sync folders (refresh file index)")
+      ),
+
+      # Cache age indicator
+      uiOutput("cache_age_text")
     ),
 
-    selectInput("sample_status_filter", "Show",
-                choices = c("All samples" = "all",
-                           "Auto-classified (validation)" = "classified",
-                           "Manually annotated" = "annotated",
-                           "Unannotated" = "unclassified")),
+    # ── Class Review panel ──
+    conditionalPanel(
+      condition = "input.app_mode == 'class_review'",
 
-    # Sample dropdown with CSS to prevent text wrapping and reduce spacing
-    tags$style("
-      .sample-dropdown .selectize-input { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .sample-dropdown .form-group { margin-bottom: 2px; }
-    "),
-    div(class = "sample-dropdown",
-        selectizeInput("sample_select", "Sample", choices = NULL, width = "100%",
-                       options = list(
-                         placeholder = "Select sample..."
-                       ))),
+      h4("Class Review"),
 
-    # Legend for sample status symbols (compact, single line)
-    div(
-      style = "font-size: 12px; color: #666; margin-bottom: 8px; white-space: nowrap;",
-      tags$span(style = "margin-right: 8px;", "\u270E Manual"),
-      tags$span(style = "margin-right: 8px;", "\u2713 Classified"),
-      tags$span("* Unannotated")
+      div(
+        style = "display: flex; gap: 10px; margin-bottom: 10px;",
+        div(style = "flex: 1;",
+            selectInput("cr_year_select", "Year",
+                        choices = c("All" = "all"), width = "100%")),
+        div(style = "flex: 1;",
+            selectInput("cr_month_select", "Month",
+                        choices = c("All" = "all"), width = "100%")),
+        div(style = "flex: 1;",
+            selectInput("cr_instrument_select", "IFCB",
+                        choices = c("All" = "all"), width = "100%"))
+      ),
+
+      selectizeInput("class_review_select", "Select Class",
+                     choices = NULL, width = "100%",
+                     options = list(maxOptions = 1000)),
+
+      uiOutput("class_review_info"),
+
+      div(
+        style = "display: flex; gap: 5px; margin-bottom: 5px;",
+        actionButton("load_class_review", "Load",
+                     class = "btn-primary", style = "flex: 1;"),
+        actionButton("save_class_review_btn", "Save Changes",
+                     class = "btn-success", style = "flex: 1;")
+      )
     ),
-
-    # Navigation buttons
-    div(
-      style = "display: flex; gap: 5px; margin-bottom: 5px;",
-      actionButton("load_sample", "Load",
-                   class = "btn-primary", style = "flex: 1;"),
-      actionButton("prev_sample", label = icon("arrow-left"),
-                   class = "btn-outline-primary", style = "flex: 0;",
-                   title = "Previous sample"),
-      actionButton("next_sample", label = icon("arrow-right"),
-                   class = "btn-outline-primary", style = "flex: 0;",
-                   title = "Next sample"),
-      actionButton("random_sample", label = icon("random"),
-                   class = "btn-outline-secondary", style = "flex: 0;",
-                   title = "Random sample"),
-      actionButton("rescan_folders", label = icon("sync"),
-                   class = "btn-outline-secondary", style = "flex: 0;",
-                   title = "Sync folders (refresh file index)")
-    ),
-
-    # Cache age indicator
-    uiOutput("cache_age_text"),
 
     hr(),
 
-    # Save button (prominent)
-    actionButton("save_btn", "Save Annotations",
-                 class = "btn-success", width = "100%"),
+    # Save button (prominent) — sample mode only
+    conditionalPanel(
+      condition = "input.app_mode == 'sample'",
+      actionButton("save_btn", "Save Annotations",
+                   class = "btn-success", width = "100%")
+    ),
 
     uiOutput("python_warning"),
 

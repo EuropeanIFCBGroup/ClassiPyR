@@ -501,6 +501,114 @@ test_that("export_db_to_mat returns FALSE for non-existent database", {
   expect_false(result)
 })
 
+test_that("export_db_to_mat returns FALSE when class list is missing", {
+  # Create a DB with annotations but manually remove the class_lists entries
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  sample_name <- "D20230101T120000_IFCB134"
+  class2use <- c("unclassified", "Diatom")
+
+  save_annotations_db(db_path, sample_name,
+                      data.frame(file_name = paste0(sample_name, "_00001.png"),
+                                 class_name = "Diatom",
+                                 stringsAsFactors = FALSE),
+                      class2use, "test")
+
+  # Remove the class_lists entries so the function hits the "no class list" path
+
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  DBI::dbExecute(con, "DELETE FROM class_lists WHERE sample_name = ?",
+                 params = list(sample_name))
+  DBI::dbDisconnect(con)
+
+  expect_warning(
+    result <- export_db_to_mat(db_path, sample_name, tempdir()),
+    "No class list found"
+  )
+  expect_false(result)
+
+  unlink(db_dir, recursive = TRUE)
+})
+
+test_that("import_all_mat_to_db returns zero counts for empty folder", {
+  mat_dir <- tempfile("mat_empty_")
+  dir.create(mat_dir)
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  result <- import_all_mat_to_db(mat_dir, db_path)
+  expect_equal(result$success, 0L)
+  expect_equal(result$failed, 0L)
+  expect_equal(result$skipped, 0L)
+
+  unlink(c(mat_dir, db_dir), recursive = TRUE)
+})
+
+test_that("import_all_mat_to_db excludes _class and class2use files", {
+  mat_dir <- tempfile("mat_filter_")
+  dir.create(mat_dir)
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  # Create files that should be excluded
+  file.create(file.path(mat_dir, "sample_A_class_v1.mat"))
+  file.create(file.path(mat_dir, "class2use_manual.mat"))
+
+  result <- import_all_mat_to_db(mat_dir, db_path)
+  # All files are filtered out, so nothing to import
+  expect_equal(result$success, 0L)
+  expect_equal(result$failed, 0L)
+  expect_equal(result$skipped, 0L)
+
+  unlink(c(mat_dir, db_dir), recursive = TRUE)
+})
+
+test_that("export_all_db_to_mat returns zero counts for empty database", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  # Create empty database (no annotations)
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  DBI::dbDisconnect(con)
+
+  result <- export_all_db_to_mat(db_path, tempdir())
+  expect_equal(result$success, 0L)
+  expect_equal(result$failed, 0L)
+
+  unlink(db_dir, recursive = TRUE)
+})
+
+test_that("export_all_db_to_png returns zero counts for empty database", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  # Create empty database
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  DBI::dbDisconnect(con)
+
+  result <- export_all_db_to_png(db_path, tempdir(), list())
+  expect_equal(result$success, 0L)
+  expect_equal(result$failed, 0L)
+  expect_equal(result$skipped, 0L)
+
+  unlink(db_dir, recursive = TRUE)
+})
+
+test_that("export_db_to_png returns FALSE for missing database", {
+  expect_warning(
+    result <- export_db_to_png("/nonexistent/db.sqlite", "sample",
+                               "/nonexistent/file.roi", tempdir()),
+    "Database not found"
+  )
+  expect_false(result)
+})
+
 test_that("import_all_mat_to_db imports multiple files and returns correct counts", {
   skip_if_not_installed("iRfcb")
   skip_if_not(reticulate::py_available(), "Python not available")
@@ -733,9 +841,10 @@ test_that("export_db_to_png skip_class with all ROIs skipped returns TRUE", {
   )
   save_annotations_db(db_path, sample_name, classifications, class2use, "test")
 
-  roi_path <- testthat::test_path("test_data", "raw", "2022", "D20220522",
-                                   "D20220522T000439_IFCB134.roi")
-  skip_if_not(file.exists(roi_path), "Test ROI file not found")
+  # Function returns TRUE at skip_class filter before using the ROI file,
+  # so we only need a file that exists
+  roi_path <- tempfile(fileext = ".roi")
+  file.create(roi_path)
 
   png_dir <- tempfile("png_")
   dir.create(png_dir)
@@ -747,7 +856,7 @@ test_that("export_db_to_png skip_class with all ROIs skipped returns TRUE", {
   # No class subfolders should be created
   expect_equal(length(list.dirs(png_dir, recursive = FALSE)), 0)
 
-  unlink(c(db_dir, png_dir), recursive = TRUE)
+  unlink(c(db_dir, png_dir, roi_path), recursive = TRUE)
 })
 
 test_that("export_db_to_png returns FALSE for missing sample", {
@@ -762,9 +871,9 @@ test_that("export_db_to_png returns FALSE for missing sample", {
                                  stringsAsFactors = FALSE),
                       c("unclassified", "Diatom"), "test")
 
-  roi_path <- testthat::test_path("test_data", "raw", "2022", "D20220522",
-                                   "D20220522T000439_IFCB134.roi")
-  skip_if_not(file.exists(roi_path), "Test ROI file not found")
+  # Need a real file for roi_path since the function checks existence first
+  roi_path <- tempfile(fileext = ".roi")
+  file.create(roi_path)
 
   expect_warning(
     result <- export_db_to_png(db_path, "nonexistent_sample", roi_path, tempdir()),
@@ -772,7 +881,7 @@ test_that("export_db_to_png returns FALSE for missing sample", {
   )
   expect_false(result)
 
-  unlink(db_dir, recursive = TRUE)
+  unlink(c(db_dir, roi_path), recursive = TRUE)
 })
 
 test_that("export_db_to_png returns FALSE for missing ROI file", {
@@ -1111,4 +1220,280 @@ test_that("full roundtrip: .mat -> SQLite -> .mat preserves NaN and class list",
   }
 
   unlink(c(mat_dir, db_dir, export_dir), recursive = TRUE)
+})
+
+# ============================================================================
+# Class Review Mode database functions
+# ============================================================================
+
+test_that("list_classes_db returns correct class counts", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  # Non-existent database returns empty data frame
+  result <- list_classes_db(db_path)
+  expect_s3_class(result, "data.frame")
+  expect_equal(nrow(result), 0)
+  expect_true(all(c("class_name", "count") %in% names(result)))
+
+  # Add annotations across two samples
+  class2use <- c("unclassified", "Diatom", "Ciliate")
+
+  save_annotations_db(db_path, "sample_A",
+                      data.frame(file_name = sprintf("sample_A_%05d.png", 1:3),
+                                 class_name = c("Diatom", "Diatom", "Ciliate"),
+                                 stringsAsFactors = FALSE),
+                      class2use, "test")
+  save_annotations_db(db_path, "sample_B",
+                      data.frame(file_name = sprintf("sample_B_%05d.png", 1:2),
+                                 class_name = c("Ciliate", "Diatom"),
+                                 stringsAsFactors = FALSE),
+                      class2use, "test")
+
+  result <- list_classes_db(db_path)
+  expect_equal(nrow(result), 2)  # Ciliate and Diatom
+  expect_equal(result$class_name, c("Ciliate", "Diatom"))  # alphabetical
+  expect_equal(result$count, c(2L, 3L))
+
+  unlink(db_dir, recursive = TRUE)
+})
+
+test_that("load_class_annotations_db returns correct file_names", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  class2use <- c("unclassified", "Diatom", "Ciliate")
+
+  save_annotations_db(db_path, "sample_A",
+                      data.frame(file_name = sprintf("sample_A_%05d.png", 1:3),
+                                 class_name = c("Diatom", "Ciliate", "Diatom"),
+                                 stringsAsFactors = FALSE),
+                      class2use, "test")
+  save_annotations_db(db_path, "sample_B",
+                      data.frame(file_name = sprintf("sample_B_%05d.png", 1:2),
+                                 class_name = c("Diatom", "Ciliate"),
+                                 stringsAsFactors = FALSE),
+                      class2use, "test")
+
+  # Load all Diatom annotations
+  result <- load_class_annotations_db(db_path, "Diatom")
+  expect_s3_class(result, "data.frame")
+  expect_equal(nrow(result), 3)
+  expect_true(all(c("sample_name", "roi_number", "class_name", "file_name") %in% names(result)))
+
+  # Check file_name format
+  expect_equal(result$file_name,
+               c("sample_A_00001.png", "sample_A_00003.png", "sample_B_00001.png"))
+  expect_equal(result$sample_name, c("sample_A", "sample_A", "sample_B"))
+
+  # Non-existent class returns NULL
+  result2 <- load_class_annotations_db(db_path, "Nonexistent")
+  expect_null(result2)
+
+  # Non-existent database returns NULL
+  result3 <- load_class_annotations_db("/nonexistent/db.sqlite", "Diatom")
+  expect_null(result3)
+
+  unlink(db_dir, recursive = TRUE)
+})
+
+test_that("save_class_review_changes_db updates only targeted rows", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  class2use <- c("unclassified", "Diatom", "Ciliate", "Dinoflagellate")
+
+  # Create two samples
+  save_annotations_db(db_path, "sample_A",
+                      data.frame(file_name = sprintf("sample_A_%05d.png", 1:3),
+                                 class_name = c("Diatom", "Diatom", "Ciliate"),
+                                 stringsAsFactors = FALSE),
+                      class2use, "OrigUser")
+  save_annotations_db(db_path, "sample_B",
+                      data.frame(file_name = sprintf("sample_B_%05d.png", 1:2),
+                                 class_name = c("Diatom", "Ciliate"),
+                                 stringsAsFactors = FALSE),
+                      class2use, "OrigUser")
+
+  # Reclassify: sample_A ROI 1 from Diatom to Dinoflagellate,
+  #             sample_B ROI 2 from Ciliate to Diatom
+  changes <- data.frame(
+    sample_name = c("sample_A", "sample_B"),
+    roi_number = c(1L, 2L),
+    new_class_name = c("Dinoflagellate", "Diatom"),
+    stringsAsFactors = FALSE
+  )
+
+  updated <- save_class_review_changes_db(db_path, changes, "Reviewer")
+  expect_equal(updated, 2L)
+
+  # Verify only changed rows were updated
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  on.exit(DBI::dbDisconnect(con))
+
+  # sample_A ROI 1 should be Dinoflagellate with Reviewer annotator
+  row_a1 <- DBI::dbGetQuery(con,
+    "SELECT class_name, annotator, is_manual FROM annotations WHERE sample_name = 'sample_A' AND roi_number = 1")
+  expect_equal(row_a1$class_name, "Dinoflagellate")
+  expect_equal(row_a1$annotator, "Reviewer")
+  expect_equal(row_a1$is_manual, 1L)
+
+  # sample_A ROI 2 should be unchanged (still Diatom, OrigUser)
+  row_a2 <- DBI::dbGetQuery(con,
+    "SELECT class_name, annotator FROM annotations WHERE sample_name = 'sample_A' AND roi_number = 2")
+  expect_equal(row_a2$class_name, "Diatom")
+  expect_equal(row_a2$annotator, "OrigUser")
+
+  # sample_B ROI 2 should be Diatom with Reviewer annotator
+  row_b2 <- DBI::dbGetQuery(con,
+    "SELECT class_name, annotator FROM annotations WHERE sample_name = 'sample_B' AND roi_number = 2")
+  expect_equal(row_b2$class_name, "Diatom")
+  expect_equal(row_b2$annotator, "Reviewer")
+
+  unlink(db_dir, recursive = TRUE)
+})
+
+test_that("list_classes_db filters by year, month, instrument", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  class2use <- c("Diatom", "Ciliate")
+
+  # Two samples: different year/month/instrument
+  save_annotations_db(db_path, "D20230615T120000_IFCB134",
+                      data.frame(file_name = sprintf("D20230615T120000_IFCB134_%05d.png", 1:2),
+                                 class_name = c("Diatom", "Ciliate"),
+                                 stringsAsFactors = FALSE),
+                      class2use, "test")
+  save_annotations_db(db_path, "D20240815T120000_IFCB135",
+                      data.frame(file_name = sprintf("D20240815T120000_IFCB135_%05d.png", 1:3),
+                                 class_name = c("Diatom", "Diatom", "Ciliate"),
+                                 stringsAsFactors = FALSE),
+                      class2use, "test")
+
+  # No filter — all 5 annotations
+  all <- list_classes_db(db_path)
+  expect_equal(sum(all$count), 5L)
+
+  # Filter by year
+  y2023 <- list_classes_db(db_path, year = "2023")
+  expect_equal(sum(y2023$count), 2L)
+
+  y2024 <- list_classes_db(db_path, year = "2024")
+  expect_equal(sum(y2024$count), 3L)
+
+  # Filter by month
+  m06 <- list_classes_db(db_path, month = "06")
+  expect_equal(sum(m06$count), 2L)
+
+  # Filter by instrument
+  i134 <- list_classes_db(db_path, instrument = "IFCB134")
+  expect_equal(sum(i134$count), 2L)
+
+  i135 <- list_classes_db(db_path, instrument = "IFCB135")
+  expect_equal(sum(i135$count), 3L)
+
+  # Combined filter
+  combo <- list_classes_db(db_path, year = "2024", instrument = "IFCB135")
+  expect_equal(sum(combo$count), 3L)
+
+  # Filter with no matches
+  empty <- list_classes_db(db_path, year = "2025")
+  expect_equal(nrow(empty), 0)
+
+  # "all" values are treated as no filter
+  all2 <- list_classes_db(db_path, year = "all", month = "all", instrument = "all")
+  expect_equal(sum(all2$count), 5L)
+
+  unlink(db_dir, recursive = TRUE)
+})
+
+test_that("load_class_annotations_db filters by year, month, instrument", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  class2use <- c("Diatom", "Ciliate")
+
+  save_annotations_db(db_path, "D20230615T120000_IFCB134",
+                      data.frame(file_name = sprintf("D20230615T120000_IFCB134_%05d.png", 1:2),
+                                 class_name = c("Diatom", "Diatom"),
+                                 stringsAsFactors = FALSE),
+                      class2use, "test")
+  save_annotations_db(db_path, "D20240815T120000_IFCB135",
+                      data.frame(file_name = sprintf("D20240815T120000_IFCB135_%05d.png", 1:3),
+                                 class_name = c("Diatom", "Diatom", "Diatom"),
+                                 stringsAsFactors = FALSE),
+                      class2use, "test")
+
+  # No filter — all 5 Diatom
+  all <- load_class_annotations_db(db_path, "Diatom")
+  expect_equal(nrow(all), 5)
+
+  # Filter by year
+  y2023 <- load_class_annotations_db(db_path, "Diatom", year = "2023")
+  expect_equal(nrow(y2023), 2)
+  expect_true(all(grepl("D2023", y2023$sample_name)))
+
+  # Filter by instrument
+  i135 <- load_class_annotations_db(db_path, "Diatom", instrument = "IFCB135")
+  expect_equal(nrow(i135), 3)
+
+  # Filter with no matches
+  none <- load_class_annotations_db(db_path, "Diatom", year = "2025")
+  expect_null(none)
+
+  unlink(db_dir, recursive = TRUE)
+})
+
+test_that("list_annotation_metadata_db returns correct metadata", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  # Non-existent database
+  meta <- list_annotation_metadata_db(db_path)
+  expect_equal(meta$years, character())
+  expect_equal(meta$months, character())
+  expect_equal(meta$instruments, character())
+
+  class2use <- c("Diatom", "Ciliate")
+
+  save_annotations_db(db_path, "D20230615T120000_IFCB134",
+                      data.frame(file_name = "D20230615T120000_IFCB134_00001.png",
+                                 class_name = "Diatom",
+                                 stringsAsFactors = FALSE),
+                      class2use, "test")
+  save_annotations_db(db_path, "D20240815T120000_IFCB135",
+                      data.frame(file_name = "D20240815T120000_IFCB135_00001.png",
+                                 class_name = "Ciliate",
+                                 stringsAsFactors = FALSE),
+                      class2use, "test")
+
+  meta <- list_annotation_metadata_db(db_path)
+  expect_equal(meta$years, c("2023", "2024"))
+  expect_equal(meta$months, c("06", "08"))
+  expect_equal(meta$instruments, c("IFCB134", "IFCB135"))
+
+  unlink(db_dir, recursive = TRUE)
+})
+
+test_that("save_class_review_changes_db handles empty input", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  # NULL input
+  expect_equal(save_class_review_changes_db(db_path, NULL, "test"), 0L)
+
+  # Empty data frame
+  empty_df <- data.frame(sample_name = character(), roi_number = integer(),
+                         new_class_name = character(), stringsAsFactors = FALSE)
+  expect_equal(save_class_review_changes_db(db_path, empty_df, "test"), 0L)
+
+  unlink(db_dir, recursive = TRUE)
 })

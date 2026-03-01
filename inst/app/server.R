@@ -60,7 +60,13 @@ server <- function(input, output, session) {
     resource_path_name = NULL,      # Session-specific Shiny resource path for images
     is_loading = FALSE,             # TRUE while loading/saving operations in progress
     measure_mode = FALSE,           # TRUE when measure tool is active
-    pending_sample_select = NULL    # Pending sample selection for dropdown update
+    pending_sample_select = NULL,   # Pending sample selection for dropdown update
+
+    # Class review mode state
+    class_review_mode = FALSE,      # TRUE when in class review mode
+    class_review_class = NULL,      # Currently reviewed class name
+    class_review_samples = character(), # Unique sample names in class review
+    class_review_original = NULL    # Original classifications snapshot for diff
   )
   
   # Settings file for persistence (uses R_user_dir for CRAN compliance)
@@ -104,7 +110,8 @@ server <- function(input, output, session) {
       class2use_path = NULL,  # Path to class2use file for auto-loading
       python_venv_path = NULL,  # NULL = use ./venv in working directory
       save_format = "sqlite",  # "sqlite" (default), "mat", or "both"
-      export_statistics = TRUE  # Write validation statistics CSV files
+      export_statistics = TRUE,  # Write validation statistics CSV files
+      skip_class_png = ""  # Class name to exclude from PNG export
     )
     
     if (file.exists(settings_file)) {
@@ -160,7 +167,8 @@ server <- function(input, output, session) {
     auto_sync = saved_settings$auto_sync,
     python_venv_path = saved_settings$python_venv_path,
     save_format = saved_settings$save_format,
-    export_statistics = saved_settings$export_statistics
+    export_statistics = saved_settings$export_statistics,
+    skip_class_png = saved_settings$skip_class_png
   )
   
   # Initialize class dropdown with default class list on startup
@@ -326,30 +334,34 @@ server <- function(input, output, session) {
       # ── Import / Export ────────────────────────────────────────────
       h5("Import / Export"),
 
+      tags$label("Import to SQLite", style = "font-weight: 600; display: block; margin-bottom: 5px;"),
       div(
-        style = "display: flex; gap: 10px; margin-bottom: 8px;",
-        actionButton("import_mat_to_db_btn", "Import .mat \u2192 SQLite",
-                     icon = icon("database"), class = "btn-outline-secondary btn-sm"),
-        actionButton("export_db_to_mat_btn", "Export SQLite \u2192 .mat",
-                     icon = icon("file-export"), class = "btn-outline-secondary btn-sm"),
-        actionButton("export_db_to_png_btn", "Export SQLite \u2192 PNG",
-                     icon = icon("image"), class = "btn-outline-secondary btn-sm"),
-        actionButton("import_png_to_db_btn", "Import PNG \u2192 SQLite",
-                     icon = icon("folder-open"), class = "btn-outline-secondary btn-sm")
+        style = "display: flex; gap: 10px; margin-bottom: 5px;",
+        actionButton("import_mat_to_db_btn", ".mat \u2192 SQLite",
+                     icon = icon("file-import"), class = "btn-outline-secondary btn-sm"),
+        actionButton("import_png_to_db_btn", "PNG \u2192 SQLite",
+                     icon = icon("file-import"), class = "btn-outline-secondary btn-sm")
       ),
-      tags$small(class = "text-muted",
-                 "Bulk import/export all annotated samples between storage formats.",
-                 "PNG export extracts images into class-name subfolders.",
-                 "PNG import reads images from class-name subfolders."),
+      tags$small(class = "text-muted", style = "display: block; margin-bottom: 10px;",
+                 "Bulk import annotated samples from .mat files or PNG class folders."),
 
+      tags$label("Export from SQLite", style = "font-weight: 600; display: block; margin-bottom: 5px;"),
       div(
-        style = "margin-top: 8px;",
+        style = "display: flex; gap: 10px; margin-bottom: 5px;",
+        actionButton("export_db_to_mat_btn", "SQLite \u2192 .mat",
+                     icon = icon("file-export"), class = "btn-outline-secondary btn-sm"),
+        actionButton("export_db_to_png_btn", "SQLite \u2192 PNG",
+                     icon = icon("file-export"), class = "btn-outline-secondary btn-sm")
+      ),
+      div(
+        style = "margin-bottom: 5px;",
         textInput("cfg_skip_class_png", "Skip class in PNG export",
-                  value = if (!is.null(rv$class2use) && length(rv$class2use) > 0) rv$class2use[1] else "",
+                  value = if (nzchar(config$skip_class_png)) config$skip_class_png
+                          else if (!is.null(rv$class2use) && length(rv$class2use) > 0) rv$class2use[1]
+                          else "",
                   width = "250px"),
         tags$small(class = "text-muted",
                    "Images with this class are excluded from PNG export.",
-                   "Pre-filled with the first class in your class list.",
                    "Leave empty to export all classes.")
       ),
 
@@ -449,7 +461,11 @@ server <- function(input, output, session) {
       title = "Class List Editor",
       size = "l",
       easyClose = TRUE,
-      
+
+      tags$head(tags$style(HTML(
+        ".modal-dialog.modal-lg { max-width: 1200px; }"
+      ))),
+
       tags$div(
         class = "alert alert-warning",
         style = "font-size: 12px; padding: 8px;",
@@ -547,21 +563,33 @@ server <- function(input, output, session) {
         "No classes defined yet. Add classes using the form below or edit the text area."
       ))
     }
-    
+
     classes <- rv$class2use
     indices <- seq_along(classes)
-    
+
+    # Get image counts per class from the database
+    counts <- tryCatch({
+      db_path <- get_db_path(config$db_folder)
+      if (file.exists(db_path)) {
+        classes_df <- list_classes_db(db_path)
+        setNames(classes_df$count, classes_df$class_name)
+      } else {
+        NULL
+      }
+    }, error = function(e) NULL)
+
     # Create data frame for sorting
     df <- data.frame(idx = indices, cls = classes, stringsAsFactors = FALSE)
-    
+
     if (rv$class_sort_mode == "alpha") {
       df <- df[order(df$cls), ]
     }
-    
+
     class_lines <- mapply(function(idx, cls) {
-      tags$div(sprintf("%3d: %s", idx, cls))
+      count <- if (!is.null(counts) && cls %in% names(counts)) counts[[cls]] else 0L
+      tags$div(sprintf("%3d: %s (%d)", idx, cls, count))
     }, df$idx, df$cls, SIMPLIFY = FALSE)
-    
+
     tagList(class_lines)
   })
   
@@ -699,6 +727,7 @@ server <- function(input, output, session) {
     config$auto_sync <- input$cfg_auto_sync
     config$save_format <- input$cfg_save_format
     config$export_statistics <- input$cfg_export_statistics
+    config$skip_class_png <- input$cfg_skip_class_png
 
     # Persist settings to file for next session
     # python_venv_path is kept from config (set via run_app() or previous save)
@@ -713,6 +742,7 @@ server <- function(input, output, session) {
       auto_sync = input$cfg_auto_sync,
       save_format = input$cfg_save_format,
       export_statistics = input$cfg_export_statistics,
+      skip_class_png = input$cfg_skip_class_png,
       class2use_path = rv$class2use_path,
       python_venv_path = config$python_venv_path
     ))
@@ -830,8 +860,8 @@ server <- function(input, output, session) {
       return()
     }
 
-    skip <- if (!is.null(input$cfg_skip_class_png) && nzchar(input$cfg_skip_class_png)) {
-      input$cfg_skip_class_png
+    skip <- if (!is.null(config$skip_class_png) && nzchar(config$skip_class_png)) {
+      config$skip_class_png
     } else {
       NULL
     }
@@ -1097,7 +1127,7 @@ server <- function(input, output, session) {
       div(
         style = "font-size: 11px; color: #999; margin-bottom: 5px;",
         icon("clock", style = "margin-right: 3px;"),
-        paste0("Last folder sync: ", age_text)
+        paste0("Last synced ", age_text)
       )
     }
   })
@@ -1141,22 +1171,26 @@ server <- function(input, output, session) {
   # Dynamic title with mode-based navbar coloring
   output$dynamic_title <- renderUI({
     # Determine mode class for navbar styling
-    mode_class <- if (is.null(rv$current_sample)) {
+    mode_class <- if (rv$class_review_mode) {
+      "navbar-mode-class-review"
+    } else if (is.null(rv$current_sample)) {
       "navbar-mode-none"
     } else if (rv$is_annotation_mode) {
       "navbar-mode-annotation"
     } else {
       "navbar-mode-validation"
     }
-    
+
+    all_mode_classes <- "navbar-mode-none navbar-mode-annotation navbar-mode-validation navbar-mode-class-review"
+
     # Add JavaScript to apply class to navbar
     tagList(
       tags$script(HTML(sprintf("
         $(document).ready(function() {
-          $('.navbar').removeClass('navbar-mode-none navbar-mode-annotation navbar-mode-validation').addClass('%s');
+          $('.navbar').removeClass('%s').addClass('%s');
         });
-        $('.navbar').removeClass('navbar-mode-none navbar-mode-annotation navbar-mode-validation').addClass('%s');
-      ", mode_class, mode_class))),
+        $('.navbar').removeClass('%s').addClass('%s');
+      ", all_mode_classes, mode_class, all_mode_classes, mode_class))),
       div(
         style = "display: flex; align-items: baseline; gap: 20px;",
         actionLink(
@@ -1171,7 +1205,25 @@ server <- function(input, output, session) {
   })
   
   output$mode_indicator_inline <- renderUI({
-    if (is.null(rv$current_sample)) {
+    if (rv$class_review_mode) {
+      n_images <- if (!is.null(rv$classifications)) nrow(rv$classifications) else 0
+      n_samples <- length(rv$class_review_samples)
+      n_changed <- 0L
+      if (!is.null(rv$class_review_original) && !is.null(rv$classifications)) {
+        n_changed <- sum(rv$classifications$class_name != rv$class_review_original$class_name)
+      }
+      change_text <- if (n_changed > 0) sprintf(", %d changed", n_changed) else ""
+
+      span(
+        style = "font-size: 14px; color: white;",
+        tags$span(style = "font-weight: bold; margin-right: 8px;", "CLASS REVIEW"),
+        tags$span(rv$class_review_class),
+        tags$span(
+          style = "margin-left: 10px; opacity: 0.9;",
+          sprintf("(%d images, %d samples%s)", n_images, n_samples, change_text)
+        )
+      )
+    } else if (is.null(rv$current_sample)) {
       span(
         style = "font-size: 14px; color: white; font-weight: 500;",
         "No sample loaded"
@@ -1461,6 +1513,12 @@ server <- function(input, output, session) {
     updateSelectInput(session, "year_select",
                       choices = c("All" = "all", setNames(years, years)),
                       selected = first_year)
+
+    instruments <- unique(sub(".*_", "", sample_names))
+    instruments <- sort(instruments)
+    updateSelectInput(session, "instrument_select",
+                      choices = c("All" = "all", setNames(instruments, instruments)),
+                      selected = "all")
     
     last_sync_time(index_data$timestamp)
     TRUE
@@ -1490,7 +1548,7 @@ server <- function(input, output, session) {
       populate_from_index(cached)
       return()
     }
-    
+
     # When auto-sync is disabled, load stale cache if available
     auto_sync <- config$auto_sync
     if (!isTRUE(auto_sync) && !is.null(cached)) {
@@ -1533,36 +1591,56 @@ server <- function(input, output, session) {
     rescan_trigger(rescan_trigger() + 1)
   })
   
-  # Helper function to update month choices based on year selection
+  # Helper function to update month and instrument choices based on year selection
   update_month_choices <- function() {
     samples <- all_samples()
     if (length(samples) == 0) return()
-    
+
     year_val <- input$year_select
-    
+
     if (!is.null(year_val) && year_val != "all") {
       # Filter to selected year
       year_pattern <- paste0("^D", year_val)
       year_samples <- samples[grepl(year_pattern, samples)]
-      
+
       # Extract months (characters 6-7 of sample name: DYYYYMMDD...)
       months <- unique(substr(year_samples, 6, 7))
       months <- sort(months)
-      
+
       # Create month names
       month_names <- c("01" = "Jan", "02" = "Feb", "03" = "Mar", "04" = "Apr",
                        "05" = "May", "06" = "Jun", "07" = "Jul", "08" = "Aug",
                        "09" = "Sep", "10" = "Oct", "11" = "Nov", "12" = "Dec")
       month_labels <- month_names[months]
-      
+
       # Auto-select first month for better UX with large sample lists
       first_month <- if (length(months) > 0) months[1] else "all"
       updateSelectInput(session, "month_select",
                         choices = c("All" = "all", setNames(months, month_labels)),
                         selected = first_month)
+
+      # Update instrument choices for selected year
+      instruments <- unique(sub(".*_", "", year_samples))
+      instruments <- sort(instruments)
+      current_instrument <- input$instrument_select
+      selected_instrument <- if (!is.null(current_instrument) && current_instrument %in% instruments) {
+        current_instrument
+      } else {
+        "all"
+      }
+      updateSelectInput(session, "instrument_select",
+                        choices = c("All" = "all", setNames(instruments, instruments)),
+                        selected = selected_instrument)
     } else {
       updateSelectInput(session, "month_select",
                         choices = c("All" = "all"),
+                        selected = "all")
+
+      # Show all instruments when no year filter
+      instruments <- unique(sub(".*_", "", samples))
+      instruments <- sort(instruments)
+      updateSelectInput(session, "instrument_select",
+                        choices = c("All" = "all", setNames(instruments, instruments)),
                         selected = "all")
     }
   }
@@ -1589,7 +1667,14 @@ server <- function(input, output, session) {
       month_pattern <- paste0("^D\\d{4}", month_val)
       samples <- samples[grepl(month_pattern, samples)]
     }
-    
+
+    # Filter by instrument
+    instrument_val <- input$instrument_select
+    if (!is.null(instrument_val) && instrument_val != "all") {
+      instrument_pattern <- paste0("_", instrument_val, "$")
+      samples <- samples[grepl(instrument_pattern, samples)]
+    }
+
     # Filter by classification status
     if (!is.null(status_val)) {
       if (status_val == "classified") {
@@ -1714,7 +1799,11 @@ server <- function(input, output, session) {
   observeEvent(input$month_select, {
     update_sample_list()
   }, ignoreInit = TRUE, ignoreNULL = TRUE)
-  
+
+  observeEvent(input$instrument_select, {
+    update_sample_list()
+  }, ignoreInit = TRUE, ignoreNULL = TRUE)
+
   observeEvent(input$sample_status_filter, {
     update_sample_list()
   }, ignoreInit = TRUE, ignoreNULL = TRUE)
@@ -1740,7 +1829,12 @@ server <- function(input, output, session) {
       month_pattern <- paste0("^D\\d{4}", input$month_select)
       samples <- samples[grepl(month_pattern, samples)]
     }
-    
+
+    if (!is.null(input$instrument_select) && input$instrument_select != "all") {
+      instrument_pattern <- paste0("_", input$instrument_select, "$")
+      samples <- samples[grepl(instrument_pattern, samples)]
+    }
+
     if (!is.null(input$sample_status_filter)) {
       if (input$sample_status_filter == "classified") {
         samples <- samples[samples %in% classified & !samples %in% annotated]
@@ -2110,6 +2204,13 @@ server <- function(input, output, session) {
       rv$is_loading <- FALSE
       enable_nav_buttons()
     })
+
+    # Clear class review state when loading a sample
+    rv$class_review_mode <- FALSE
+    rv$class_review_class <- NULL
+    rv$class_review_samples <- character()
+    rv$class_review_original <- NULL
+
     save_to_cache()
     rv$pending_sample_select <- input$sample_select
     load_sample_data(input$sample_select)
@@ -2121,7 +2222,7 @@ server <- function(input, output, session) {
     if (!is.null(rv$current_sample)) {
       save_to_cache()
     }
-    
+
     # Reset all sample-related state
     rv$current_sample <- NULL
     rv$classifications <- NULL
@@ -2130,10 +2231,19 @@ server <- function(input, output, session) {
     rv$selected_images <- character(0)
     rv$is_annotation_mode <- FALSE
     rv$has_both_modes <- FALSE
-    
+
+    # Reset class review state
+    rv$class_review_mode <- FALSE
+    rv$class_review_class <- NULL
+    rv$class_review_samples <- character()
+    rv$class_review_original <- NULL
+
     # Clear sample selection
     updateSelectizeInput(session, "sample_select", selected = "")
-    
+
+    # Reset app mode to sample mode
+    updateRadioButtons(session, "app_mode", selected = "sample")
+
     # Clear any displayed content via JavaScript
     shinyjs::runjs("$('.image-card').remove();")
   })
@@ -2297,26 +2407,27 @@ server <- function(input, output, session) {
   output$image_gallery <- renderUI({
     req(paginated_images())
     req(rv$temp_png_folder)
-    req(rv$current_sample)
-    
+    # Allow gallery to render in class review mode (no current_sample)
+    req(isTRUE(rv$class_review_mode) || !is.null(rv$current_sample))
+
     p <- paginated_images()
     images <- p$images
-    
+
     if (nrow(images) == 0) {
       return(div(class = "alert alert-info", "No images to display"))
     }
-    
+
     classes <- sort(unique(images$class_name))
-    
+
     class_panels <- lapply(classes, function(cls) {
       class_images <- images %>% filter(class_name == cls)
-      
+
       image_cards <- lapply(seq_len(nrow(class_images)), function(i) {
         img_row <- class_images[i, ]
         img_file <- img_row$file_name
-        
+
         is_selected <- img_file %in% rv$selected_images
-        
+
         was_relabeled <- FALSE
         original_class <- ""
         orig_idx <- which(rv$original_classifications$file_name == img_file)
@@ -2324,7 +2435,7 @@ server <- function(input, output, session) {
           original_class <- rv$original_classifications$class_name[orig_idx]
           was_relabeled <- (original_class != img_row$class_name)
         }
-        
+
         border_style <- if (is_selected) {
           "border: 3px solid #007bff;"
         } else if (was_relabeled) {
@@ -2332,13 +2443,20 @@ server <- function(input, output, session) {
         } else {
           "border: 1px solid #ddd;"
         }
-        
+
         card_class <- if (is_selected) "image-card selected" else "image-card"
-        
+
         # Sanitize file names to prevent XSS
         safe_img_file <- htmltools::htmlEscape(img_file)
-        safe_sample <- htmltools::htmlEscape(rv$current_sample)
         resource_path <- if (!is.null(rv$resource_path_name)) rv$resource_path_name else "temp_images"
+
+        # In class review mode, derive sample from file_name since current_sample is NULL
+        if (rv$class_review_mode) {
+          sample_for_img <- sub("_(\\d{5})\\.png$", "", img_file)
+        } else {
+          sample_for_img <- rv$current_sample
+        }
+        safe_sample <- htmltools::htmlEscape(sample_for_img)
         img_src <- sprintf("%s/%s/%s", resource_path, safe_sample, safe_img_file)
         
         div(
@@ -2359,8 +2477,12 @@ server <- function(input, output, session) {
               "Not found"),
           
           div(
-            style = "font-size: 10px; text-align: center; margin-top: 3px;",
-            gsub(".*_(\\d+)\\.png$", "ROI \\1", img_file),
+            style = "font-size: 10px; text-align: center; margin-top: 3px; word-break: break-all;",
+            if (isTRUE(rv$class_review_mode)) {
+              sub("\\.png$", "", img_file)
+            } else {
+              gsub(".*_(\\d+)\\.png$", "ROI \\1", img_file)
+            },
             if (was_relabeled) {
               tags$span(style = "color: #856404;",
                         paste0(" (was: ", gsub("_\\d+$", "", original_class), ")"))
@@ -2503,7 +2625,339 @@ server <- function(input, output, session) {
   observeEvent(input$relabel_quick, {
     do_relabel(input$new_class_quick)
   })
-  
+
+  # ============================================================================
+  # Class Review Mode
+  # ============================================================================
+
+  # Helper: update class review class list based on current filter values
+  update_cr_class_list <- function() {
+    db_path <- get_db_path(config$db_folder)
+    year <- input$cr_year_select
+    month <- input$cr_month_select
+    instrument <- input$cr_instrument_select
+
+    classes_df <- list_classes_db(db_path, year = year, month = month,
+                                  instrument = instrument)
+
+    if (nrow(classes_df) == 0) {
+      updateSelectizeInput(session, "class_review_select",
+                           choices = c("No classes found" = ""))
+      return()
+    }
+
+    choices <- setNames(
+      classes_df$class_name,
+      sprintf("%s (%d)", classes_df$class_name, classes_df$count)
+    )
+    updateSelectizeInput(session, "class_review_select", choices = choices)
+  }
+
+  # Helper: update month/instrument choices for class review filters
+  update_cr_month_choices <- function() {
+    db_path <- get_db_path(config$db_folder)
+    meta <- list_annotation_metadata_db(db_path)
+
+    year_val <- input$cr_year_select
+
+    month_names <- c("01" = "Jan", "02" = "Feb", "03" = "Mar", "04" = "Apr",
+                     "05" = "May", "06" = "Jun", "07" = "Jul", "08" = "Aug",
+                     "09" = "Sep", "10" = "Oct", "11" = "Nov", "12" = "Dec")
+
+    if (!is.null(year_val) && year_val != "all") {
+      # Get samples for this year to extract available months/instruments
+      con <- DBI::dbConnect(RSQLite::SQLite(), get_db_path(config$db_folder))
+      on.exit(DBI::dbDisconnect(con), add = TRUE)
+      year_samples <- DBI::dbGetQuery(con,
+        "SELECT DISTINCT sample_name FROM annotations WHERE sample_name LIKE ?",
+        params = list(paste0("D", year_val, "%"))
+      )$sample_name
+
+      months <- sort(unique(substr(year_samples, 6, 7)))
+      month_labels <- month_names[months]
+      updateSelectInput(session, "cr_month_select",
+                        choices = c("All" = "all", setNames(months, month_labels)),
+                        selected = "all")
+
+      instruments <- sort(unique(sub(".*_", "", year_samples)))
+      current_instrument <- input$cr_instrument_select
+      selected_instrument <- if (!is.null(current_instrument) && current_instrument %in% instruments) {
+        current_instrument
+      } else {
+        "all"
+      }
+      updateSelectInput(session, "cr_instrument_select",
+                        choices = c("All" = "all", setNames(instruments, instruments)),
+                        selected = selected_instrument)
+    } else {
+      months <- meta$months
+      month_labels <- month_names[months]
+      updateSelectInput(session, "cr_month_select",
+                        choices = c("All" = "all", setNames(months, month_labels)),
+                        selected = "all")
+
+      instruments <- meta$instruments
+      updateSelectInput(session, "cr_instrument_select",
+                        choices = c("All" = "all", setNames(instruments, instruments)),
+                        selected = "all")
+    }
+  }
+
+  # When entering class review mode, populate filters and class dropdown
+  observeEvent(input$app_mode, {
+    if (input$app_mode == "class_review") {
+      db_path <- get_db_path(config$db_folder)
+      meta <- list_annotation_metadata_db(db_path)
+
+      month_names <- c("01" = "Jan", "02" = "Feb", "03" = "Mar", "04" = "Apr",
+                       "05" = "May", "06" = "Jun", "07" = "Jul", "08" = "Aug",
+                       "09" = "Sep", "10" = "Oct", "11" = "Nov", "12" = "Dec")
+
+      updateSelectInput(session, "cr_year_select",
+                        choices = c("All" = "all", setNames(meta$years, meta$years)),
+                        selected = "all")
+      month_labels <- month_names[meta$months]
+      updateSelectInput(session, "cr_month_select",
+                        choices = c("All" = "all", setNames(meta$months, month_labels)),
+                        selected = "all")
+      updateSelectInput(session, "cr_instrument_select",
+                        choices = c("All" = "all", setNames(meta$instruments, meta$instruments)),
+                        selected = "all")
+
+      update_cr_class_list()
+    } else {
+      # Leaving class review mode — clear state
+      rv$class_review_mode <- FALSE
+      rv$class_review_class <- NULL
+      rv$class_review_samples <- character()
+      rv$class_review_original <- NULL
+    }
+  }, ignoreInit = TRUE)
+
+  # Cascading filter updates for class review
+  observeEvent(input$cr_year_select, {
+    req(input$app_mode == "class_review")
+    update_cr_month_choices()
+    update_cr_class_list()
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$cr_month_select, {
+    req(input$app_mode == "class_review")
+    update_cr_class_list()
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$cr_instrument_select, {
+    req(input$app_mode == "class_review")
+    update_cr_class_list()
+  }, ignoreInit = TRUE)
+
+  # Class review info output
+  output$class_review_info <- renderUI({
+    if (!rv$class_review_mode || is.null(rv$classifications)) return(NULL)
+
+    n_images <- nrow(rv$classifications)
+    n_samples <- length(rv$class_review_samples)
+    n_changed <- 0L
+
+    if (!is.null(rv$class_review_original)) {
+      n_changed <- sum(rv$classifications$class_name != rv$class_review_original$class_name)
+    }
+
+    div(
+      style = "font-size: 12px; color: #666; margin-bottom: 8px;",
+      sprintf("%d images from %d samples", n_images, n_samples),
+      if (n_changed > 0) tags$span(
+        style = "color: #dc3545; font-weight: bold; margin-left: 5px;",
+        sprintf("(%d changed)", n_changed)
+      )
+    )
+  })
+
+  # Load class for review
+  observeEvent(input$load_class_review, {
+    req(input$class_review_select, input$class_review_select != "")
+
+    class_name <- input$class_review_select
+    db_path <- get_db_path(config$db_folder)
+
+    rv$is_loading <- TRUE
+    disable_nav_buttons()
+    on.exit({
+      rv$is_loading <- FALSE
+      enable_nav_buttons()
+    })
+
+    # Save current sample work if in sample mode
+    if (!rv$class_review_mode && !is.null(rv$current_sample)) {
+      save_to_cache()
+    }
+
+    # Query all annotations for this class (with filters)
+    annotations <- load_class_annotations_db(db_path, class_name,
+                                              year = input$cr_year_select,
+                                              month = input$cr_month_select,
+                                              instrument = input$cr_instrument_select)
+
+    if (is.null(annotations) || nrow(annotations) == 0) {
+      showNotification(paste("No annotations found for class:", class_name),
+                       type = "warning")
+      return()
+    }
+
+    # Get unique samples and their ROI paths
+    unique_samples <- unique(annotations$sample_name)
+    current_roi_map <- roi_path_map()
+
+    # Create temp folder for extracted PNGs
+    if (!is.null(rv$temp_png_folder) && dir.exists(rv$temp_png_folder)) {
+      unlink(rv$temp_png_folder, recursive = TRUE)
+    }
+    rv$temp_png_folder <- tempfile(pattern = "ifcb_class_review_")
+    dir.create(rv$temp_png_folder, recursive = TRUE)
+
+    # Extract PNGs per sample
+    missing_samples <- character()
+    extracted_files <- character()
+
+    withProgress(message = paste("Extracting", class_name, "images..."),
+                 value = 0, {
+      for (idx in seq_along(unique_samples)) {
+        sn <- unique_samples[idx]
+        roi_path <- current_roi_map[[sn]]
+
+        if (is.null(roi_path) || !file.exists(roi_path)) {
+          missing_samples <- c(missing_samples, sn)
+          next
+        }
+
+        sample_rois <- annotations$roi_number[annotations$sample_name == sn]
+
+        tryCatch({
+          ifcb_extract_pngs(
+            roi_file = roi_path,
+            out_folder = rv$temp_png_folder,
+            ROInumbers = sample_rois,
+            verbose = FALSE
+          )
+
+          # Check which files were actually extracted
+          sample_dir <- file.path(rv$temp_png_folder, sn)
+          if (dir.exists(sample_dir)) {
+            files <- list.files(sample_dir, pattern = "\\.png$")
+            extracted_files <- c(extracted_files, files)
+          }
+        }, error = function(e) {
+          missing_samples <<- c(missing_samples, sn)
+        })
+
+        incProgress(1 / length(unique_samples))
+      }
+    })
+
+    # Filter annotations to only those with extracted images
+    annotations <- annotations[annotations$file_name %in% extracted_files, ]
+
+    if (nrow(annotations) == 0) {
+      showNotification("No images could be extracted. Check ROI file paths.",
+                       type = "error")
+      return()
+    }
+
+    # Build classifications data frame (compatible with gallery)
+    classifications <- data.frame(
+      file_name = annotations$file_name,
+      class_name = annotations$class_name,
+      score = NA_real_,
+      width = NA_real_,
+      height = NA_real_,
+      roi_area = NA_real_,
+      stringsAsFactors = FALSE
+    )
+
+    # Set class review state
+    rv$class_review_mode <- TRUE
+    rv$class_review_class <- class_name
+    rv$class_review_samples <- setdiff(unique_samples, missing_samples)
+    rv$current_sample <- NULL
+    rv$classifications <- classifications
+    rv$original_classifications <- classifications
+    rv$class_review_original <- classifications
+    rv$is_annotation_mode <- TRUE
+    rv$has_both_modes <- FALSE
+    rv$selected_images <- character()
+    rv$current_page <- 1
+    rv$changes_log <- create_empty_changes_log()
+
+    # Update class filter dropdown
+    available_classes <- sort(unique(classifications$class_name))
+    updateSelectInput(session, "class_filter",
+                      choices = c("All" = "all", setNames(available_classes, available_classes)),
+                      selected = "all")
+
+    # Notify
+    n_extracted <- nrow(classifications)
+    n_samples <- length(rv$class_review_samples)
+    msg <- sprintf("Loaded %d %s images from %d samples", n_extracted, class_name, n_samples)
+    if (length(missing_samples) > 0) {
+      msg <- paste0(msg, sprintf(" (%d samples skipped - ROI not found)", length(missing_samples)))
+    }
+    showNotification(msg, type = "message", duration = 8)
+  })
+
+  # Save class review changes
+  observeEvent(input$save_class_review_btn, {
+    req(rv$class_review_mode)
+    req(rv$classifications)
+    req(rv$class_review_original)
+
+    rv$is_loading <- TRUE
+    on.exit({ rv$is_loading <- FALSE })
+
+    # Find changed rows
+    current <- rv$classifications
+    original <- rv$class_review_original
+    changed_mask <- current$class_name != original$class_name
+    n_changed <- sum(changed_mask)
+
+    if (n_changed == 0) {
+      showNotification("No changes to save", type = "warning")
+      return()
+    }
+
+    # Parse sample_name and roi_number from file_name
+    changed_files <- current$file_name[changed_mask]
+    changes_df <- data.frame(
+      sample_name = sub("_(\\d{5})\\.png$", "", changed_files),
+      roi_number = as.integer(sub(".*_(\\d{5})\\.png$", "\\1", changed_files)),
+      new_class_name = current$class_name[changed_mask],
+      stringsAsFactors = FALSE
+    )
+
+    db_path <- get_db_path(config$db_folder)
+    annotator <- if (!is.null(input$annotator_name) && nzchar(input$annotator_name)) {
+      input$annotator_name
+    } else {
+      "Unknown"
+    }
+
+    tryCatch({
+      withProgress(message = "Saving class review changes...", {
+        updated <- save_class_review_changes_db(db_path, changes_df, annotator)
+      })
+
+      # Update original to reflect saved state
+      rv$class_review_original <- rv$classifications
+
+      showNotification(
+        sprintf("Saved %d changes across %d samples",
+                updated, length(unique(changes_df$sample_name))),
+        type = "message"
+      )
+    }, error = function(e) {
+      showNotification(paste("Error saving:", e$message), type = "error")
+    })
+  })
+
   # ============================================================================
   # Manual Save
   # ============================================================================
