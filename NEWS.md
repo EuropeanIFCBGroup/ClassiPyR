@@ -2,10 +2,19 @@
 
 ## New features
 
+- **Class Review Mode**: View and reclassify all annotated images of a specific class across the entire database. Switch to class review via the mode toggle in the sidebar, select a class, and load all matching images from all samples at once. Changes are saved as row-level updates to the database.
+- New exported functions: `list_classes_db()`, `load_class_annotations_db()`, and `save_class_review_changes_db()` for programmatic class review operations.
 - Added **Import PNG → SQLite** button in Settings > Import / Export. Imports annotations from a folder of PNG images organized in class-name subfolders (e.g. exported by ClassiPyR or other tools). Folder names follow the iRfcb convention where trailing `_NNN` suffixes are stripped.
 - When importing PNG folders with class names not in the current class list, a **class mapping dialog** lets users remap unmatched classes to existing ones or add them as new classes.
 - Overwrite warning dialog shown when imported samples already exist in the database.
 - New exported functions: `scan_png_class_folder()` for scanning PNG class folder structures, and `import_png_folder_to_db()` for programmatic bulk import.
+- **HDF5 classification support**: Load classifications from `.h5` files produced by [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb) (>= 0.8.0). Requires the optional `hdf5r` package.
+- **Classification threshold toggle**: New "Apply classification threshold" checkbox in Settings controls whether thresholded or raw predictions are used, for all classification formats (CSV, H5, MAT).
+- **Skip class from PNG export**: New option in Settings to exclude a specific class (e.g. "unclassified") from PNG output.
+
+## UI improvements
+
+- The **class list editor** now shows the number of annotated images per class in parentheses, queried from the SQLite database.
 
 # ClassiPyR 0.1.1
 

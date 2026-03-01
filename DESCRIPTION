@@ -20,7 +20,7 @@ Imports:
     shinyjs,
     shinyFiles,
     bslib,
-    iRfcb (>= 0.8.0),
+    iRfcb (>= 0.8.1),
     dplyr,
     DT,
     jsonlite,

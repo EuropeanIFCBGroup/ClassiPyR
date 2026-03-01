@@ -616,6 +616,106 @@ test_that("rescan_file_index works with non-standard folder structure", {
   unlink(temp_root, recursive = TRUE)
 })
 
+test_that("rescan_file_index detects H5 and MAT classifier files", {
+  temp_root <- tempfile("h5_test_")
+  roi_folder <- file.path(temp_root, "raw")
+  csv_folder <- file.path(temp_root, "classified")
+  output_folder <- file.path(temp_root, "manual")
+  dir.create(roi_folder, recursive = TRUE)
+  dir.create(csv_folder, recursive = TRUE)
+  dir.create(output_folder, recursive = TRUE)
+
+  # Create ROI files
+  file.create(file.path(roi_folder, "D20230101T120000_IFCB134.roi"))
+  file.create(file.path(roi_folder, "D20230102T120000_IFCB134.roi"))
+  file.create(file.path(roi_folder, "D20230103T120000_IFCB134.roi"))
+
+  # Create H5 classifier file
+  file.create(file.path(csv_folder, "D20230101T120000_IFCB134_class_v1.h5"))
+
+  # Create MAT classifier file
+  file.create(file.path(csv_folder, "D20230102T120000_IFCB134_class_v1.mat"))
+
+  # Create CSV classifier file
+  writeLines("file_name,class_name",
+             file.path(csv_folder, "D20230103T120000_IFCB134.csv"))
+
+  result <- rescan_file_index(
+    roi_folder = roi_folder,
+    csv_folder = csv_folder,
+    output_folder = output_folder,
+    verbose = FALSE
+  )
+
+  expect_type(result, "list")
+  expect_length(result$sample_names, 3)
+
+  # H5 classifier detected
+  expect_true("D20230101T120000_IFCB134" %in%
+                names(result$classifier_h5_files))
+
+  # MAT classifier detected
+  expect_true("D20230102T120000_IFCB134" %in%
+                names(result$classifier_mat_files))
+
+  # All three should be classified
+  expect_length(result$classified_samples, 3)
+
+  unlink(temp_root, recursive = TRUE)
+})
+
+test_that("rescan_file_index uses db_folder for annotated sample lookup", {
+  temp_root <- tempfile("dbfolder_test_")
+  roi_folder <- file.path(temp_root, "raw")
+  output_folder <- file.path(temp_root, "manual")
+  db_folder <- file.path(temp_root, "db")
+  dir.create(roi_folder, recursive = TRUE)
+  dir.create(output_folder, recursive = TRUE)
+  dir.create(db_folder, recursive = TRUE)
+
+  # Create ROI file
+  file.create(file.path(roi_folder, "D20230101T120000_IFCB134.roi"))
+
+  # Save an annotation in the SQLite DB in db_folder
+  db_path <- get_db_path(db_folder)
+  save_annotations_db(
+    db_path, "D20230101T120000_IFCB134",
+    data.frame(file_name = "D20230101T120000_IFCB134_00001.png",
+               class_name = "Diatom", stringsAsFactors = FALSE),
+    c("unclassified", "Diatom"), "test"
+  )
+
+  result <- rescan_file_index(
+    roi_folder = roi_folder,
+    csv_folder = roi_folder,  # no CSV files here
+    output_folder = output_folder,
+    db_folder = db_folder,
+    verbose = FALSE
+  )
+
+  expect_type(result, "list")
+  expect_true("D20230101T120000_IFCB134" %in% result$annotated_samples)
+
+  unlink(temp_root, recursive = TRUE)
+})
+
+test_that("rescan_file_index returns NULL when no ROI files found", {
+  temp_root <- tempfile("noroi_test_")
+  roi_folder <- file.path(temp_root, "empty_raw")
+  dir.create(roi_folder, recursive = TRUE)
+
+  result <- rescan_file_index(
+    roi_folder = roi_folder,
+    csv_folder = roi_folder,
+    output_folder = roi_folder,
+    verbose = FALSE
+  )
+
+  expect_null(result)
+
+  unlink(temp_root, recursive = TRUE)
+})
+
 test_that("rescan_file_index reads folder paths from saved settings", {
   # This test verifies that rescan_file_index falls back to saved settings
   # We can't easily mock get_settings_path, so we test the fallback path:

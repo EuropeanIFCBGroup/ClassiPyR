@@ -76,6 +76,34 @@ Some samples may have both manual annotations AND auto-classifications (e.g., yo
 
 ---
 
+## Class Review Mode
+
+Class Review mode lets you view **all annotated images of a specific class** across the entire database. This is useful for verifying that annotations are consistent and correcting misclassified images without loading samples one by one.
+
+<a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-review.png">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-review.png" alt="Class Review mode showing all images of a selected class across the database." style="max-width:100%;">
+</a>
+<p><em>Class Review mode showing all images of a selected class across the database. Click to enlarge.</em></p>
+
+### How to use
+
+1. Switch to **Class Review** using the mode toggle in the sidebar
+2. The class dropdown is searchable — type to filter. Each class shows its image count in parentheses
+3. Select a class and click **Load** — images are extracted from ROI files across all samples
+4. Review images in the gallery. Each image label shows the full name (sample + ROI) so you can identify which sample it belongs to
+5. Use the same selection and relabeling tools as in sample mode
+6. Click **Save Changes** to write row-level updates to the database
+
+### Key differences from sample mode
+
+- Images come from **multiple samples**, not just one
+- Image labels show the **full image name** (e.g. `D20230101T120000_IFCB134_00001`) instead of just the ROI number
+- Saving performs **surgical row-level UPDATEs** rather than replacing an entire sample's annotations
+- The title bar turns **purple** to indicate class review mode
+- Navigation buttons (prev/next/random sample) are not available
+
+---
+
 ## Working with Images
 
 ### Image Cards
@@ -83,7 +111,7 @@ Some samples may have both manual annotations AND auto-classifications (e.g., yo
 Each image card displays:
 
 - The plankton image
-- ROI number
+- ROI number (in sample mode) or full image name (in class review mode)
 - Classification score (if available)
 - Original class (if relabeled)
 
@@ -357,6 +385,10 @@ The path is remembered for future sessions. **Priority order**: `run_app(venv_pa
 ### Classifier Options
 
 **Apply classification threshold**: When loading classifier output (CSV, H5, or MAT), use the threshold-filtered class predictions (checked) or the raw unthresholded predictions (unchecked).
+
+### PNG Export Options
+
+**Skip class from PNG export**: Optionally exclude a class (e.g. "unclassified") from the organized PNG output. Set in Settings under the PNG Output Folder section.
 
 ---
 

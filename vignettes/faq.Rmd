@@ -36,6 +36,14 @@ A: The app is specifically designed for IFCB data format. For other imaging syst
 
 A: No. The app only reads your original files. All output is written to separate folders.
 
+**Q: How can I review all images of a specific class?**
+
+A: Use **Class Review mode**. Switch to "Class Review" using the mode toggle in the sidebar, select a class from the dropdown, and click Load. This loads all images annotated as that class from every sample in the database. You can then reclassify any mistakes using the normal relabeling tools.
+
+**Q: Can I reclassify images across multiple samples at once?**
+
+A: Yes. Class Review mode loads images from all samples and saves changes as row-level updates to the database. This means only the images you reclassify are updated — other annotations in those samples remain untouched.
+
 ---
 
 ## Installation Issues
@@ -59,7 +67,7 @@ A: No. The default storage format is SQLite, which works out of the box with no 
 
 **Q: Where is the Python virtual environment created?**
 
-A: By default, `ifcb_py_install()` creates a `venv` folder in your home directory. You can specify a different location:
+A: By default, `ifcb_py_install()` creates a virtual environment at `~/.virtualenvs/iRfcb`. You can specify a different location:
 
 ```{r, eval = FALSE}
 ifcb_py_install("/path/to/your/venv")
@@ -95,7 +103,7 @@ remotes::install_github("EuropeanIFCBGroup/ClassiPyR")
 A: Try reinstalling the package:
 
 ```{r, eval = FALSE}
-install.packages("iRfcb")
+remotes::install_github("EuropeanIFCBGroup/ClassiPyR")
 ```
 
 **Q: iRfcb won't install**
@@ -319,10 +327,9 @@ Or use the **Export SQLite → .mat** button in Settings.
 
 ```{r, eval = FALSE}
 library(ClassiPyR)
-class2use <- load_class_list("/shared/network/class2use.mat")
 db_path <- get_db_path(get_default_db_dir())
 # Import .mat files from the shared folder into the local database
-result <- import_all_mat_to_db("/shared/network/manual", db_path, class2use)
+result <- import_all_mat_to_db("/shared/network/manual", db_path)
 cat(result$success, "imported,", result$skipped, "skipped\n")
 ```
 
@@ -349,19 +356,17 @@ You can also import programmatically — a single file:
 
 ```{r, eval = FALSE}
 library(ClassiPyR)
-class2use <- load_class_list("/path/to/class2use.mat")
 import_mat_to_db(
   mat_path = "/data/manual/D20230101T120000_IFCB134.mat",
   db_path = get_db_path(get_default_db_dir()),
-  sample_name = "D20230101T120000_IFCB134",
-  class2use = class2use
+  sample_name = "D20230101T120000_IFCB134"
 )
 ```
 
 Or bulk-import all `.mat` files in a folder:
 
 ```{r, eval = FALSE}
-result <- import_all_mat_to_db("/data/manual", get_db_path(get_default_db_dir()), class2use)
+result <- import_all_mat_to_db("/data/manual", get_db_path(get_default_db_dir()))
 cat(result$success, "imported,", result$failed, "failed,", result$skipped, "skipped\n")
 ```
 

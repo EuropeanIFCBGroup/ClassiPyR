@@ -50,7 +50,7 @@ Only needed if you plan to export `.mat` files. Skip this step if using the defa
 
 ```{r, eval = FALSE}
 library(iRfcb)
-ifcb_py_install(envname = "./venv")  # Creates venv in current working directory
+ifcb_py_install()  # Creates venv at ~/.virtualenvs/iRfcb by default
 ```
 
 ---
@@ -70,9 +70,9 @@ run_app(venv_path = "./venv")
 Click the **gear icon** next to your username in the sidebar.
 
 <a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/settings-dialog.png">
-<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/settings-dialog.png" alt="Settings dialog showing folder configuration options." style="max-width:80%;">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/settings-dialog.png" alt="Settings dialog showing folder paths, classification threshold toggle, annotation storage, and import/export options." style="max-width:80%;">
 </a>
-<p><em>Settings dialog showing folder configuration options. Click to enlarge.</em></p>
+<p><em>Settings dialog showing folder paths, classification threshold toggle, annotation storage, and import/export options. Click to enlarge.</em></p>
 
 Configure your folders using the built-in folder browser:
 
@@ -210,7 +210,7 @@ The images will move to their new class group.
 
 Click **Save Annotations** to save:
 
-- **SQLite database** (default) - annotations are written to `annotations.sqlite` in your Output Folder. This single file stores annotations for all samples. No Python needed.
+- **SQLite database** (default) - annotations are written to `annotations.sqlite` in your Database Folder. This single file stores annotations for all samples. No Python needed.
 - Statistics CSV with accuracy metrics
 - PNGs organized by class
 
@@ -240,6 +240,10 @@ Work is automatically saved when:
 4. **Check statistics** - The "Validation Statistics" tab shows your progress
 
 ---
+
+## Reviewing Annotations Across Samples
+
+Once you have annotated several samples, you can use **Class Review mode** to verify annotations across the entire database. Switch to Class Review in the sidebar, use the searchable class dropdown to find a class (each class shows its image count), and load all images annotated as that class. Image labels show the full name (sample + ROI) so you can identify which sample each image belongs to. This makes it easy to spot and fix misclassifications. See the [User Guide](user-guide.html#class-review-mode) for details.
 
 ## Next Steps
 

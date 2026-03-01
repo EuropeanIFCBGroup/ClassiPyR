@@ -16,6 +16,7 @@ A Shiny application for manual (human) image classification and validation of Im
 ## Features
 
 - **Dual Mode**: Validate existing classifications or annotate from scratch
+- **Class Review**: Review and reclassify all images of a specific class across the entire database
 - **Multiple Formats**: Load from CSV or MATLAB classifier output
 - **SQLite Storage**: Annotations stored in a local SQLite database by default - no Python needed
 - **Efficient Workflow**: Drag-select, batch relabeling, class filtering

@@ -46,9 +46,9 @@ When you save an annotation as a .mat file for ifcb-analysis, the file stores:
 You can create a new class list directly in the app without uploading a file:
 
 <a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-editor.png">
-<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-editor.png" alt="Class list editor for adding, removing, and reordering classes." style="max-width:80%;">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-editor.png" alt="Class list editor showing classes with annotation counts, editing area, and export options." style="max-width:80%;">
 </a>
-<p><em>Class list editor for adding, removing, and reordering classes. Click to enlarge.</em></p>
+<p><em>Class list editor showing classes with annotation counts, editing area, and export options. Click to enlarge.</em></p>
 
 1. Open **Settings** → **Edit Class List**
 2. The editor opens with an empty class list
@@ -99,7 +99,7 @@ Diatom
 ## Viewing Classes
 
 1. Open Settings → **Edit Class List**
-2. The left panel shows all classes with indices
+2. The left panel shows all classes with their indices and the number of annotated images per class (queried from the database)
 3. Toggle **By ID** / **A-Z** to sort the view
 
 **Note**: Sorting is for viewing only - it doesn't change actual indices.

@@ -13,7 +13,4 @@ ignore:
   - "tests/"
   - "docs/"
 
-comment:
-  layout: "reach,diff,flags,files"
-  behavior: default
-  require_changes: true
+comment: false
