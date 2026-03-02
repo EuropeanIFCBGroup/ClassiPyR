@@ -1,4 +1,4 @@
-# ClassiPyR (development version)
+# ClassiPyR 0.2.0
 
 ## New features
 
