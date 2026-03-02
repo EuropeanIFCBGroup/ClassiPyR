@@ -9,7 +9,8 @@ download_dashboard_image_single(
   sample_name,
   roi_number,
   dest_dir,
-  max_retries = 3
+  max_retries = 3,
+  timeout = 15
 )
 }
 \arguments{
@@ -22,6 +23,8 @@ download_dashboard_image_single(
 \item{dest_dir}{Character. Destination directory.}
 
 \item{max_retries}{Integer. Maximum number of retry attempts.}
+
+\item{timeout}{Numeric. Request timeout in seconds.}
 }
 \value{
 File path to the downloaded PNG, or NULL on failure.

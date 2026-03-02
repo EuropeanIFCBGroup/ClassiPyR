@@ -8,7 +8,8 @@ download_dashboard_images_individual(
   base_url,
   file_names,
   dest_dir,
-  max_retries = 3
+  max_retries = 3,
+  sample_fail_threshold = 2
 )
 }
 \arguments{
@@ -20,6 +21,9 @@ download_dashboard_images_individual(
 \item{dest_dir}{Character. Destination directory.}
 
 \item{max_retries}{Integer. Maximum number of retry attempts per image.}
+
+\item{sample_fail_threshold}{Integer. After this many consecutive failures
+from the same sample, skip all remaining images from that sample.}
 }
 \value{
 Character vector of successfully downloaded file names.
@@ -28,4 +32,8 @@ Character vector of successfully downloaded file names.
 Downloads specific PNG files from the Dashboard's \code{/data/} endpoint,
 one at a time. This is much faster than downloading entire zip archives
 when only a subset of ROIs are needed (e.g., class review mode).
+}
+\details{
+Samples that fail repeatedly are automatically skipped to avoid long
+waits when annotations reference samples not available on the dashboard.
 }

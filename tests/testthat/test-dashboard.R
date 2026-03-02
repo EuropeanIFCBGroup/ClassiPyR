@@ -359,12 +359,14 @@ test_that("download_dashboard_images_individual returns empty on all failures", 
   tmp <- file.path(tempdir(), "dashboard_test_indiv_fail")
   on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
 
-  result <- download_dashboard_images_individual(
-    base_url = "https://this-host-does-not-exist.invalid",
-    file_names = c("D20160810T104734_IFCB110_00001.png",
-                   "D20160810T104734_IFCB110_00002.png"),
-    dest_dir = tmp,
-    max_retries = 1
+  result <- suppressWarnings(
+    download_dashboard_images_individual(
+      base_url = "https://this-host-does-not-exist.invalid",
+      file_names = c("D20160810T104734_IFCB110_00001.png",
+                     "D20160810T104734_IFCB110_00002.png"),
+      dest_dir = tmp,
+      max_retries = 1
+    )
   )
   expect_length(result, 0)
 })
@@ -401,6 +403,26 @@ test_that("download_dashboard_images_individual skips malformed file names", {
     file_names = c("not_a_valid_filename.txt", "also-bad"),
     dest_dir = tmp,
     max_retries = 1
+  )
+  expect_length(result, 0)
+})
+
+test_that("download_dashboard_images_individual skips unavailable samples after threshold", {
+  tmp <- file.path(tempdir(), "dashboard_test_indiv_skip")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+
+  # 5 images from a non-existent host — after 2 failures the rest should be skipped
+  file_names <- sprintf("D20160810T104734_IFCB999_%05d.png", 1:5)
+
+  expect_warning(
+    result <- download_dashboard_images_individual(
+      base_url = "https://this-host-does-not-exist.invalid",
+      file_names = file_names,
+      dest_dir = tmp,
+      max_retries = 1,
+      sample_fail_threshold = 2
+    ),
+    "Skipping remaining images"
   )
   expect_length(result, 0)
 })

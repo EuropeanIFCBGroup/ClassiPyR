@@ -439,10 +439,12 @@ download_dashboard_images_bulk <- function(base_url, sample_names,
 #' @param roi_number Integer. ROI number to download.
 #' @param dest_dir Character. Destination directory.
 #' @param max_retries Integer. Maximum number of retry attempts.
+#' @param timeout Numeric. Request timeout in seconds.
 #' @return File path to the downloaded PNG, or NULL on failure.
 #' @export
 download_dashboard_image_single <- function(base_url, sample_name, roi_number,
-                                            dest_dir, max_retries = 3) {
+                                            dest_dir, max_retries = 3,
+                                            timeout = 15) {
   file_name <- sprintf("%s_%05d.png", sample_name, roi_number)
   dest_folder <- file.path(dest_dir, sample_name)
   dest_path <- file.path(dest_folder, file_name)
@@ -457,14 +459,16 @@ download_dashboard_image_single <- function(base_url, sample_name, roi_number,
 
   for (attempt in seq_len(max_retries)) {
     result <- tryCatch({
-      response <- curl::curl_fetch_disk(img_url, dest_path,
-                                        handle = curl::new_handle())
+      h <- curl::new_handle()
+      curl::handle_setopt(h, connecttimeout = 10, timeout = timeout)
+      response <- curl::curl_fetch_disk(img_url, dest_path, handle = h)
       if (response$status_code == 200 && file.exists(dest_path) &&
           file.info(dest_path)$size > 0) {
         return(dest_path)
       }
-      # Non-200 status or empty file
+      # Non-200 status or empty file — no point retrying a 404
       if (file.exists(dest_path)) unlink(dest_path)
+      if (response$status_code %in% c(404L, 410L)) return(NULL)
       NULL
     }, error = function(e) {
       if (file.exists(dest_path)) unlink(dest_path)
@@ -484,18 +488,28 @@ download_dashboard_image_single <- function(base_url, sample_name, roi_number,
 #' one at a time. This is much faster than downloading entire zip archives
 #' when only a subset of ROIs are needed (e.g., class review mode).
 #'
+#' Samples that fail repeatedly are automatically skipped to avoid long
+#' waits when annotations reference samples not available on the dashboard.
+#'
 #' @param base_url Character. Dashboard base URL.
 #' @param file_names Character vector. PNG file names
 #'   (e.g., \code{"D20240716T000431_IFCB134_00108.png"}).
 #' @param dest_dir Character. Destination directory.
 #' @param max_retries Integer. Maximum number of retry attempts per image.
+#' @param sample_fail_threshold Integer. After this many consecutive failures
+#'   from the same sample, skip all remaining images from that sample.
 #' @return Character vector of successfully downloaded file names.
 #' @export
 download_dashboard_images_individual <- function(base_url, file_names, dest_dir,
-                                                 max_retries = 3) {
+                                                 max_retries = 3,
+                                                 sample_fail_threshold = 2) {
   dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
 
   succeeded <- character()
+  # Track consecutive failures per sample to skip unavailable samples early
+  sample_failures <- list()
+  skipped_samples <- character()
+
   for (fname in file_names) {
     # Parse sample_name and roi_number from file_name
     parts <- regmatches(fname, regexec("^(.+)_(\\d+)\\.png$", fname))[[1]]
@@ -503,6 +517,9 @@ download_dashboard_images_individual <- function(base_url, file_names, dest_dir,
 
     sample_name <- parts[2]
     roi_number <- as.integer(parts[3])
+
+    # Skip samples that have already been marked as unavailable
+    if (sample_name %in% skipped_samples) next
 
     result <- download_dashboard_image_single(
       base_url = base_url,
@@ -514,6 +531,17 @@ download_dashboard_images_individual <- function(base_url, file_names, dest_dir,
 
     if (!is.null(result)) {
       succeeded <- c(succeeded, fname)
+      # Reset failure counter on success
+      sample_failures[[sample_name]] <- 0L
+    } else {
+      prev <- sample_failures[[sample_name]]
+      count <- (if (is.null(prev)) 0L else prev) + 1L
+      sample_failures[[sample_name]] <- count
+      if (count >= sample_fail_threshold) {
+        skipped_samples <- c(skipped_samples, sample_name)
+        warning("Skipping remaining images from ", sample_name,
+                " (", count, " consecutive failures)", call. = FALSE)
+      }
     }
   }
 
