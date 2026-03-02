@@ -2,6 +2,8 @@
 
 ## New features
 
+- **IFCB Dashboard support**: Connect directly to remote IFCB Dashboard instances (e.g. `https://habon-ifcb.whoi.edu/`) without downloading data locally. Toggle between "Local Folders" and "IFCB Dashboard" in Settings, enter a Dashboard URL (with optional `?dataset=` parameter), and browse samples from the API. Images are downloaded on demand and cached locally. Optionally load dashboard auto-classifications for validation mode. Supports MAT export by downloading ADC files on demand, with graceful fallback to SQLite-only when ADC is unavailable.
+- New exported functions: `parse_dashboard_url()`, `list_dashboard_bins()`, `download_dashboard_images()`, `download_dashboard_images_bulk()`, `download_dashboard_adc()`, `download_dashboard_autoclass()`, and `get_dashboard_cache_dir()` for programmatic dashboard access.
 - **Class Review Mode**: View and reclassify all annotated images of a specific class across the entire database. Switch to class review via the mode toggle in the sidebar, select a class, and load all matching images from all samples at once. Changes are saved as row-level updates to the database.
 - New exported functions: `list_classes_db()`, `load_class_annotations_db()`, and `save_class_review_changes_db()` for programmatic class review operations.
 - Added **Import PNG → SQLite** button in Settings > Import / Export. Imports annotations from a folder of PNG images organized in class-name subfolders (e.g. exported by ClassiPyR or other tools). Folder names follow the iRfcb convention where trailing `_NNN` suffixes are stripped.

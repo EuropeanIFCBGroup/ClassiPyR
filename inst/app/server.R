@@ -111,7 +111,10 @@ server <- function(input, output, session) {
       python_venv_path = NULL,  # NULL = use ./venv in working directory
       save_format = "sqlite",  # "sqlite" (default), "mat", or "both"
       export_statistics = TRUE,  # Write validation statistics CSV files
-      skip_class_png = ""  # Class name to exclude from PNG export
+      skip_class_png = "",  # Class name to exclude from PNG export
+      data_source = "local",  # "local" or "dashboard"
+      dashboard_url = "",  # IFCB Dashboard URL
+      dashboard_autoclass = FALSE  # Use dashboard auto-classifications for validation
     )
     
     if (file.exists(settings_file)) {
@@ -168,7 +171,10 @@ server <- function(input, output, session) {
     python_venv_path = saved_settings$python_venv_path,
     save_format = saved_settings$save_format,
     export_statistics = saved_settings$export_statistics,
-    skip_class_png = saved_settings$skip_class_png
+    skip_class_png = saved_settings$skip_class_png,
+    data_source = saved_settings$data_source,
+    dashboard_url = saved_settings$dashboard_url,
+    dashboard_autoclass = saved_settings$dashboard_autoclass
   )
   
   # Initialize class dropdown with default class list on startup
@@ -230,30 +236,56 @@ server <- function(input, output, session) {
       size = "l",
       easyClose = TRUE,
 
-      # ── Folder Paths ──────────────────────────────────────────────
-      h5("Folder Paths"),
+      # ── Data Source ─────────────────────────────────────────────
+      h5("Data Source"),
 
-      div(
-        style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 5px;",
-        div(style = "flex: 1;",
-            textInput("cfg_csv_folder", "Classification Folder (CSV/H5/MAT)",
-                      value = config$csv_folder, width = "100%")),
-        shinyDirButton("browse_csv_folder", "Browse", "Select Classification Folder",
-                       class = "btn-outline-secondary", style = "margin-bottom: 15px;")
+      radioButtons("cfg_data_source", NULL,
+                   choices = c("Local Folders" = "local",
+                               "IFCB Dashboard" = "dashboard"),
+                   selected = config$data_source, inline = TRUE),
+
+      # Dashboard settings (visible when data source is "dashboard")
+      conditionalPanel(
+        condition = "input.cfg_data_source == 'dashboard'",
+        textInput("cfg_dashboard_url", "Dashboard URL",
+                  value = config$dashboard_url, width = "100%",
+                  placeholder = "https://habon-ifcb.whoi.edu/timeline?dataset=tangosund"),
+        tags$small(class = "text-muted", style = "display: block; margin-bottom: 10px;",
+                   "Enter the IFCB Dashboard URL. Dataset can be specified via ?dataset=name."),
+        checkboxInput("cfg_dashboard_autoclass", "Use dashboard auto-classifications",
+                      value = config$dashboard_autoclass),
+        tags$small(class = "text-muted", style = "display: block; margin-bottom: 15px;",
+                   "When enabled, downloads auto-classification scores from the dashboard for validation mode.")
       ),
 
-      checkboxInput("cfg_use_threshold", "Apply classification threshold",
-                    value = config$use_threshold),
-      tags$small(class = "text-muted", style = "display: block; margin-bottom: 15px;",
-                 "When enabled, classifications below the confidence threshold are marked as 'unclassified'."),
+      # ── Folder Paths (local mode) ──────────────────────────────────
+      conditionalPanel(
+        condition = "input.cfg_data_source == 'local'",
 
-      div(
-        style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
-        div(style = "flex: 1;",
-            textInput("cfg_roi_folder", "ROI Data Folder",
-                      value = config$roi_folder, width = "100%")),
-        shinyDirButton("browse_roi_folder", "Browse", "Select ROI Data Folder",
-                       class = "btn-outline-secondary", style = "margin-bottom: 15px;")
+        h5("Folder Paths"),
+
+        div(
+          style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 5px;",
+          div(style = "flex: 1;",
+              textInput("cfg_csv_folder", "Classification Folder (CSV/H5/MAT)",
+                        value = config$csv_folder, width = "100%")),
+          shinyDirButton("browse_csv_folder", "Browse", "Select Classification Folder",
+                         class = "btn-outline-secondary", style = "margin-bottom: 15px;")
+        ),
+
+        checkboxInput("cfg_use_threshold", "Apply classification threshold",
+                      value = config$use_threshold),
+        tags$small(class = "text-muted", style = "display: block; margin-bottom: 15px;",
+                   "When enabled, classifications below the confidence threshold are marked as 'unclassified'."),
+
+        div(
+          style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
+          div(style = "flex: 1;",
+              textInput("cfg_roi_folder", "ROI Data Folder",
+                        value = config$roi_folder, width = "100%")),
+          shinyDirButton("browse_roi_folder", "Browse", "Select ROI Data Folder",
+                         class = "btn-outline-secondary", style = "margin-bottom: 15px;")
+        )
       ),
 
       div(
@@ -715,8 +747,10 @@ server <- function(input, output, session) {
     # Check if folder paths actually changed (to avoid spurious resets)
     roi_changed <- !identical(config$roi_folder, input$cfg_roi_folder)
     csv_changed <- !identical(config$csv_folder, input$cfg_csv_folder)
-    paths_changed <- roi_changed || csv_changed
-    
+    data_source_changed <- !identical(config$data_source, input$cfg_data_source)
+    dashboard_url_changed <- !identical(config$dashboard_url, input$cfg_dashboard_url)
+    paths_changed <- roi_changed || csv_changed || data_source_changed || dashboard_url_changed
+
     config$csv_folder <- input$cfg_csv_folder
     config$roi_folder <- input$cfg_roi_folder
     config$output_folder <- input$cfg_output_folder
@@ -728,6 +762,9 @@ server <- function(input, output, session) {
     config$save_format <- input$cfg_save_format
     config$export_statistics <- input$cfg_export_statistics
     config$skip_class_png <- input$cfg_skip_class_png
+    config$data_source <- input$cfg_data_source
+    config$dashboard_url <- input$cfg_dashboard_url
+    config$dashboard_autoclass <- input$cfg_dashboard_autoclass
 
     # Persist settings to file for next session
     # python_venv_path is kept from config (set via run_app() or previous save)
@@ -744,12 +781,15 @@ server <- function(input, output, session) {
       export_statistics = input$cfg_export_statistics,
       skip_class_png = input$cfg_skip_class_png,
       class2use_path = rv$class2use_path,
-      python_venv_path = config$python_venv_path
+      python_venv_path = config$python_venv_path,
+      data_source = input$cfg_data_source,
+      dashboard_url = input$cfg_dashboard_url,
+      dashboard_autoclass = input$cfg_dashboard_autoclass
     ))
-    
+
     removeModal()
     showNotification("Settings saved.", type = "message")
-    
+
     # Only trigger sample rescan if folder paths actually changed
     if (paths_changed) {
       cache_path <- get_file_index_path()
@@ -845,38 +885,127 @@ server <- function(input, output, session) {
                        type = "error")
       return()
     }
-    if (is.null(config$output_folder) || config$output_folder == "") {
-      showNotification("Output folder is not configured. Set it in Settings first.",
-                       type = "error")
-      return()
-    }
 
     db_path <- get_db_path(config$db_folder)
-    current_roi_map <- roi_path_map()
+    is_dashboard <- identical(config$data_source, "dashboard")
 
-    if (length(current_roi_map) == 0) {
-      showNotification("No ROI file index available. Click Sync first.",
-                       type = "error")
-      return()
-    }
+    if (is_dashboard) {
+      # Dashboard mode: copy PNGs from cache instead of extracting from ROI
+      samples <- list_annotated_samples_db(db_path)
+      if (length(samples) == 0) {
+        showNotification("No annotated samples in database.", type = "warning")
+        return()
+      }
 
-    skip <- if (!is.null(config$skip_class_png) && nzchar(config$skip_class_png)) {
-      config$skip_class_png
+      cache_dir <- get_dashboard_cache_dir()
+      parsed <- parse_dashboard_url(config$dashboard_url)
+
+      skip <- if (!is.null(config$skip_class_png) && nzchar(config$skip_class_png)) {
+        config$skip_class_png
+      } else {
+        NULL
+      }
+
+      counts <- list(success = 0L, failed = 0L, skipped = 0L)
+
+      # Bulk download all needed zip archives in one batched call
+      # (uses parallel_downloads internally, much faster than one-at-a-time)
+      withProgress(message = "Downloading images from dashboard...", value = 0, {
+        cached_samples <- download_dashboard_images_bulk(
+          parsed$base_url, samples, cache_dir)
+      })
+
+      withProgress(message = "Copying PNGs to class folders...", value = 0, {
+        con <- dbConnect(SQLite(), db_path)
+        on.exit(dbDisconnect(con), add = TRUE)
+
+        for (sn in samples) {
+          rows <- dbGetQuery(con,
+            "SELECT roi_number, class_name FROM annotations WHERE sample_name = ? ORDER BY roi_number",
+            params = list(sn))
+
+          if (nrow(rows) == 0) {
+            counts$skipped <- counts$skipped + 1L
+            next
+          }
+
+          if (!is.null(skip)) {
+            rows <- rows[!rows$class_name %in% skip, ]
+            if (nrow(rows) == 0) next
+          }
+
+          src_dir <- file.path(cache_dir, sn, sn)
+          if (!sn %in% cached_samples || !dir.exists(src_dir)) {
+            counts$skipped <- counts$skipped + 1L
+            next
+          }
+
+          ok <- tryCatch({
+            for (cls in unique(rows$class_name)) {
+              cls_rois <- rows$roi_number[rows$class_name == cls]
+              dest <- file.path(config$png_output_folder, cls)
+              dir.create(dest, recursive = TRUE, showWarnings = FALSE)
+              for (rn in cls_rois) {
+                fname <- sprintf("%s_%05d.png", sn, rn)
+                src <- file.path(src_dir, fname)
+                if (file.exists(src)) {
+                  file.copy(src, file.path(dest, fname), overwrite = TRUE)
+                }
+              }
+            }
+            TRUE
+          }, error = function(e) FALSE)
+
+          if (isTRUE(ok)) {
+            counts$success <- counts$success + 1L
+          } else {
+            counts$failed <- counts$failed + 1L
+          }
+
+          incProgress(1 / length(samples))
+        }
+      })
+
+      showNotification(
+        sprintf("PNG export complete: %d exported, %d failed, %d skipped.",
+                counts$success, counts$failed, counts$skipped),
+        type = if (counts$failed > 0) "warning" else "message",
+        duration = 8
+      )
     } else {
-      NULL
+      # Local mode: extract from ROI files
+      if (is.null(config$output_folder) || config$output_folder == "") {
+        showNotification("Output folder is not configured. Set it in Settings first.",
+                         type = "error")
+        return()
+      }
+
+      current_roi_map <- roi_path_map()
+
+      if (length(current_roi_map) == 0) {
+        showNotification("No ROI file index available. Click Sync first.",
+                         type = "error")
+        return()
+      }
+
+      skip <- if (!is.null(config$skip_class_png) && nzchar(config$skip_class_png)) {
+        config$skip_class_png
+      } else {
+        NULL
+      }
+
+      withProgress(message = "Exporting PNGs from SQLite...", {
+        result <- export_all_db_to_png(db_path, config$png_output_folder,
+                                       current_roi_map, skip_class = skip)
+      })
+
+      showNotification(
+        sprintf("PNG export complete: %d exported, %d failed, %d skipped (ROI not found).",
+                result$success, result$failed, result$skipped),
+        type = if (result$failed > 0) "warning" else "message",
+        duration = 8
+      )
     }
-
-    withProgress(message = "Exporting PNGs from SQLite...", {
-      result <- export_all_db_to_png(db_path, config$png_output_folder,
-                                     current_roi_map, skip_class = skip)
-    })
-
-    showNotification(
-      sprintf("PNG export complete: %d exported, %d failed, %d skipped (ROI not found).",
-              result$success, result$failed, result$skipped),
-      type = if (result$failed > 0) "warning" else "message",
-      duration = 8
-    )
   })
 
   # ============================================================================
@@ -1528,46 +1657,87 @@ server <- function(input, output, session) {
   # Uses disk cache for fast startup on subsequent launches
   observe({
     rescan_trigger()  # Force dependency on rescan trigger
-    roi_folder <- config$roi_folder
-    csv_folder <- config$csv_folder
-    output_folder <- config$output_folder
-    
-    # Validate folder paths before using them
-    roi_valid <- !is.null(roi_folder) && length(roi_folder) == 1 && !isTRUE(is.na(roi_folder)) && nzchar(roi_folder) && dir.exists(roi_folder)
-    
-    if (!roi_valid) return()
-    
-    # Try loading from cache first
-    cached <- load_file_index()
-    cache_valid <- !is.null(cached) &&
-      identical(cached$roi_folder, roi_folder) &&
-      identical(cached$csv_folder, csv_folder) &&
-      identical(cached$output_folder, output_folder)
-    
-    if (cache_valid) {
-      populate_from_index(cached)
-      return()
-    }
+    data_source <- config$data_source
 
-    # When auto-sync is disabled, load stale cache if available
-    auto_sync <- config$auto_sync
-    if (!isTRUE(auto_sync) && !is.null(cached)) {
-      populate_from_index(cached)
-      return()
-    }
-    
-    # Full scan with progress indicator (delegates to rescan_file_index)
-    withProgress(message = "Syncing folders...", value = 0, {
-      result <- rescan_file_index(
-        roi_folder = roi_folder,
-        csv_folder = csv_folder,
-        output_folder = output_folder,
-        verbose = FALSE
-      )
-    })
-    
-    if (!is.null(result)) {
-      populate_from_index(result)
+    if (identical(data_source, "dashboard")) {
+      # Dashboard mode: fetch sample list from remote API
+      dashboard_url <- config$dashboard_url
+      if (is.null(dashboard_url) || !nzchar(dashboard_url)) return()
+
+      # Try loading from cache first
+      cached <- load_file_index()
+      cache_valid <- !is.null(cached) &&
+        identical(cached$data_source, "dashboard") &&
+        identical(cached$dashboard_url, dashboard_url)
+
+      if (cache_valid) {
+        populate_from_index(cached)
+        return()
+      }
+
+      # When auto-sync is disabled, load stale cache if available
+      auto_sync <- config$auto_sync
+      if (!isTRUE(auto_sync) && !is.null(cached) &&
+          identical(cached$data_source, "dashboard")) {
+        populate_from_index(cached)
+        return()
+      }
+
+      withProgress(message = "Fetching dashboard samples...", value = 0, {
+        result <- rescan_file_index(
+          data_source = "dashboard",
+          dashboard_url = dashboard_url,
+          db_folder = config$db_folder,
+          verbose = FALSE
+        )
+      })
+
+      if (!is.null(result)) {
+        populate_from_index(result)
+      }
+    } else {
+      # Local mode: scan folders
+      roi_folder <- config$roi_folder
+      csv_folder <- config$csv_folder
+      output_folder <- config$output_folder
+
+      # Validate folder paths before using them
+      roi_valid <- !is.null(roi_folder) && length(roi_folder) == 1 && !isTRUE(is.na(roi_folder)) && nzchar(roi_folder) && dir.exists(roi_folder)
+
+      if (!roi_valid) return()
+
+      # Try loading from cache first
+      cached <- load_file_index()
+      cache_valid <- !is.null(cached) &&
+        identical(cached$roi_folder, roi_folder) &&
+        identical(cached$csv_folder, csv_folder) &&
+        identical(cached$output_folder, output_folder)
+
+      if (cache_valid) {
+        populate_from_index(cached)
+        return()
+      }
+
+      # When auto-sync is disabled, load stale cache if available
+      auto_sync <- config$auto_sync
+      if (!isTRUE(auto_sync) && !is.null(cached)) {
+        populate_from_index(cached)
+        return()
+      }
+
+      # Full scan with progress indicator (delegates to rescan_file_index)
+      withProgress(message = "Syncing folders...", value = 0, {
+        result <- rescan_file_index(
+          roi_folder = roi_folder,
+          csv_folder = csv_folder,
+          output_folder = output_folder,
+          verbose = FALSE
+        )
+      })
+
+      if (!is.null(result)) {
+        populate_from_index(result)
+      }
     }
   })
   
@@ -1918,6 +2088,15 @@ server <- function(input, output, session) {
       tryCatch({
         roi_path_for_save <- roi_path_map()[[rv$current_sample]]
         adc_folder_for_save <- if (!is.null(roi_path_for_save)) dirname(roi_path_for_save) else NULL
+
+        # In dashboard mode, fall back to SQLite if no ADC folder
+        save_fmt_for_autosave <- config$save_format
+        if (identical(config$data_source, "dashboard") && is.null(adc_folder_for_save)) {
+          if (save_fmt_for_autosave %in% c("mat", "both")) {
+            save_fmt_for_autosave <- "sqlite"
+          }
+        }
+
         saved <- save_sample_annotations(
           sample_name = rv$current_sample,
           classifications = rv$classifications,
@@ -1931,7 +2110,7 @@ server <- function(input, output, session) {
           class2use = rv$class2use,
           annotator = input$annotator_name,
           adc_folder = adc_folder_for_save,
-          save_format = config$save_format,
+          save_format = save_fmt_for_autosave,
           db_folder = config$db_folder,
           export_statistics = config$export_statistics
         )
@@ -1952,7 +2131,167 @@ server <- function(input, output, session) {
   # Main sample loading function
   load_sample_data <- function(sample_name) {
     req(rv$class2use)
-    
+
+    is_dashboard <- identical(config$data_source, "dashboard")
+
+    # --- Dashboard mode ---
+    if (is_dashboard) {
+      # Check session cache first
+      if (sample_name %in% names(rv$session_cache)) {
+        return(load_from_cache(sample_name, NULL))
+      }
+
+      tryCatch({
+        parsed <- parse_dashboard_url(config$dashboard_url)
+        cache_dir <- get_dashboard_cache_dir()
+        db_path <- get_db_path(config$db_folder)
+        has_db_annotation <- sample_name %in% list_annotated_samples_db(db_path)
+
+        # Download PNG images from dashboard
+        png_folder <- withProgress(message = "Downloading images...", {
+          download_dashboard_images(parsed$base_url, sample_name, cache_dir)
+        })
+
+        if (is.null(png_folder)) {
+          showNotification(paste("Failed to download images for:", sample_name), type = "error")
+          return(FALSE)
+        }
+
+        # Download ADC on demand for dimensions (graceful fallback to NA)
+        adc_path <- download_dashboard_adc(parsed$base_url, sample_name, cache_dir)
+        roi_dims <- if (!is.null(adc_path) && file.exists(adc_path)) {
+          tryCatch(read_roi_dimensions(adc_path), error = function(e) NULL)
+        } else {
+          NULL
+        }
+
+        mode_message <- NULL
+        classifications <- NULL
+
+        if (has_db_annotation) {
+          # Load from existing DB annotations
+          if (is.null(roi_dims)) {
+            # Build minimal roi_dims from PNG files
+            png_files <- list.files(file.path(png_folder, sample_name), pattern = "\\.png$")
+            roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", png_files))
+            roi_dims <- data.frame(
+              roi_number = roi_numbers,
+              width = NA_real_, height = NA_real_, area = NA_real_
+            )
+          }
+          classifications <- load_from_db(db_path, sample_name, roi_dims)
+          rv$is_annotation_mode <- TRUE
+          rv$has_both_modes <- isTRUE(config$dashboard_autoclass)
+          rv$using_manual_mode <- TRUE
+          mode_message <- if (rv$has_both_modes) "Manual mode (switch available)" else "Resumed"
+
+        } else if (isTRUE(config$dashboard_autoclass)) {
+          # Try dashboard autoclass for validation mode
+          autoclass <- withProgress(message = "Downloading auto-classifications...", {
+            download_dashboard_autoclass(parsed$base_url, sample_name, cache_dir)
+          })
+
+          if (!is.null(autoclass) && nrow(autoclass) > 0) {
+            # Merge with ROI dimensions if available
+            if (!is.null(roi_dims)) {
+              roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", autoclass$file_name))
+              dim_data <- lapply(roi_numbers, function(rn) {
+                idx <- which(roi_dims$roi_number == rn)
+                if (length(idx) > 0) {
+                  list(width = roi_dims$width[idx], height = roi_dims$height[idx],
+                       area = roi_dims$area[idx])
+                } else {
+                  list(width = NA_real_, height = NA_real_, area = NA_real_)
+                }
+              })
+              autoclass$width <- vapply(dim_data, `[[`, numeric(1), "width")
+              autoclass$height <- vapply(dim_data, `[[`, numeric(1), "height")
+              autoclass$roi_area <- vapply(dim_data, `[[`, numeric(1), "area")
+            } else {
+              autoclass$width <- NA_real_
+              autoclass$height <- NA_real_
+              autoclass$roi_area <- NA_real_
+            }
+
+            classifications <- autoclass
+            rv$is_annotation_mode <- FALSE
+            rv$has_both_modes <- FALSE
+            rv$using_manual_mode <- FALSE
+            mode_message <- "Validation mode (Dashboard autoclass)"
+          }
+        }
+
+        if (is.null(classifications)) {
+          # NEW ANNOTATION - no existing annotations or autoclass
+          png_files <- list.files(file.path(png_folder, sample_name), pattern = "\\.png$")
+          if (length(png_files) == 0) {
+            showNotification(paste("No images found for:", sample_name), type = "error")
+            return(FALSE)
+          }
+
+          roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", png_files))
+
+          if (is.null(roi_dims)) {
+            roi_dims <- data.frame(
+              roi_number = roi_numbers,
+              width = NA_real_, height = NA_real_, area = NA_real_
+            )
+          }
+
+          classifications <- create_new_classifications(sample_name, roi_dims)
+          rv$is_annotation_mode <- TRUE
+          rv$has_both_modes <- FALSE
+          rv$using_manual_mode <- TRUE
+          mode_message <- "New annotation"
+        }
+
+        # Store state
+        rv$original_classifications <- classifications
+        rv$classifications <- classifications
+        rv$current_sample <- sample_name
+        rv$selected_images <- character()
+        rv$current_page <- 1
+        rv$changes_log <- create_empty_changes_log()
+
+        # Set temp_png_folder to the parent (preserves path structure for gallery)
+        if (!is.null(rv$temp_png_folder) && dir.exists(rv$temp_png_folder) &&
+            !startsWith(rv$temp_png_folder, cache_dir)) {
+          unlink(rv$temp_png_folder, recursive = TRUE)
+        }
+        rv$temp_png_folder <- png_folder
+
+        # Filter to actually extracted PNGs
+        extracted_folder <- file.path(png_folder, sample_name)
+        if (dir.exists(extracted_folder)) {
+          extracted_files <- list.files(extracted_folder, pattern = "\\.png$")
+          rv$classifications <- rv$classifications[rv$classifications$file_name %in% extracted_files, ]
+          rv$original_classifications <- rv$original_classifications[
+            rv$original_classifications$file_name %in% extracted_files, ]
+        }
+
+        # Update class filter
+        available_classes <- sort(unique(rv$classifications$class_name))
+        unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
+        display_names <- sapply(available_classes, function(cls) {
+          if (cls %in% unmatched) paste0("\u26A0 ", cls) else cls
+        })
+        updateSelectInput(session, "class_filter",
+                          choices = c("All" = "all", setNames(available_classes, display_names)))
+
+        if (!is.null(mode_message)) {
+          actual_count <- nrow(rv$classifications)
+          showNotification(paste0(mode_message, ": ", actual_count, " images"), type = "message")
+        }
+
+        return(TRUE)
+      }, error = function(e) {
+        showNotification(paste("Error loading sample:", e$message), type = "error")
+        return(FALSE)
+      })
+    }
+
+    # --- Local mode ---
+
     # Find classification files (priority: CSV > H5 > MAT)
     csv_path <- find_csv_file(sample_name)
     classifier_h5_path <- find_classifier_h5(sample_name)
@@ -1960,7 +2299,7 @@ server <- function(input, output, session) {
     has_csv <- !is.null(csv_path)
     has_classifier_h5 <- !is.null(classifier_h5_path)
     has_classifier_mat <- !is.null(classifier_mat_path)
-    
+
     # Use discovered paths from scan (supports any folder structure)
     roi_path <- roi_path_map()[[sample_name]]
     if (is.null(roi_path) || !file.exists(roi_path)) {
@@ -1968,12 +2307,12 @@ server <- function(input, output, session) {
       return(FALSE)
     }
     adc_path <- sub("\\.roi$", ".adc", roi_path)
-    
+
     # Check session cache first
     if (sample_name %in% names(rv$session_cache)) {
       return(load_from_cache(sample_name, roi_path))
     }
-    
+
     tryCatch({
       annotation_mat_path <- file.path(config$output_folder, paste0(sample_name, ".mat"))
       db_path <- get_db_path(config$db_folder)
@@ -2039,31 +2378,31 @@ server <- function(input, output, session) {
           showNotification(paste("ADC file not found:", adc_path), type = "error")
           return(FALSE)
         }
-        
+
         roi_dims <- read_roi_dimensions(adc_path)
         classifications <- load_from_classifier_mat(
           classifier_mat_path, sample_name, rv$class2use, roi_dims,
           use_threshold = config$use_threshold
         )
         rv$is_annotation_mode <- FALSE
-        
+
         threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
         mode_message <- paste0("Validation mode (MAT, ", threshold_text, ")")
-        
+
       } else {
         # NEW ANNOTATION
         if (!file.exists(adc_path)) {
           showNotification(paste("ADC file not found:", adc_path), type = "error")
           return(FALSE)
         }
-        
+
         roi_dims <- read_roi_dimensions(adc_path)
         classifications <- create_new_classifications(sample_name, roi_dims)
         rv$is_annotation_mode <- TRUE
-        
+
         mode_message <- "New annotation"
       }
-      
+
       # Store state
       rv$original_classifications <- classifications
       rv$classifications <- classifications
@@ -2071,7 +2410,7 @@ server <- function(input, output, session) {
       rv$selected_images <- character()
       rv$current_page <- 1
       rv$changes_log <- create_empty_changes_log()
-      
+
       # Update class filter with warnings for unmatched classes
       available_classes <- sort(unique(classifications$class_name))
       unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
@@ -2080,12 +2419,12 @@ server <- function(input, output, session) {
       })
       updateSelectInput(session, "class_filter",
                         choices = c("All" = "all", setNames(available_classes, display_names)))
-      
+
       # Extract images (notification shown after filtering with correct count)
       extract_sample_images(sample_name, roi_path, classifications, mode_message = mode_message)
-      
+
       return(TRUE)
-      
+
     }, error = function(e) {
       showNotification(paste("Error loading sample:", e$message), type = "error")
       return(FALSE)
@@ -2101,7 +2440,7 @@ server <- function(input, output, session) {
     rv$current_sample <- sample_name
     rv$selected_images <- character()
     rv$is_annotation_mode <- cached$is_annotation_mode
-    
+
     available_classes <- sort(unique(rv$classifications$class_name))
     unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
     display_names <- sapply(available_classes, function(cls) {
@@ -2109,25 +2448,40 @@ server <- function(input, output, session) {
     })
     updateSelectInput(session, "class_filter",
                       choices = c("All" = "all", setNames(available_classes, display_names)))
-    
-    if (!is.null(rv$temp_png_folder) && dir.exists(rv$temp_png_folder)) {
-      unlink(rv$temp_png_folder, recursive = TRUE)
+
+    is_dashboard <- identical(config$data_source, "dashboard")
+
+    if (is_dashboard) {
+      # Dashboard mode: use cached download dir (PNGs already extracted)
+      cache_dir <- get_dashboard_cache_dir()
+      png_folder <- file.path(cache_dir, sample_name)
+
+      if (!is.null(rv$temp_png_folder) && dir.exists(rv$temp_png_folder) &&
+          !startsWith(rv$temp_png_folder, cache_dir)) {
+        unlink(rv$temp_png_folder, recursive = TRUE)
+      }
+      rv$temp_png_folder <- png_folder
+    } else {
+      # Local mode: re-extract from ROI file
+      if (!is.null(rv$temp_png_folder) && dir.exists(rv$temp_png_folder)) {
+        unlink(rv$temp_png_folder, recursive = TRUE)
+      }
+
+      rv$temp_png_folder <- tempfile(pattern = "ifcb_validator_")
+      dir.create(rv$temp_png_folder, recursive = TRUE)
+
+      roi_numbers <- as.numeric(gsub(".*_(\\d+)\\.png$", "\\1", rv$classifications$file_name))
+
+      withProgress(message = "Extracting images...", {
+        ifcb_extract_pngs(
+          roi_file = roi_path,
+          out_folder = rv$temp_png_folder,
+          ROInumbers = roi_numbers,
+          verbose = FALSE
+        )
+      })
     }
-    
-    rv$temp_png_folder <- tempfile(pattern = "ifcb_validator_")
-    dir.create(rv$temp_png_folder, recursive = TRUE)
-    
-    roi_numbers <- as.numeric(gsub(".*_(\\d+)\\.png$", "\\1", rv$classifications$file_name))
-    
-    withProgress(message = "Extracting images...", {
-      ifcb_extract_pngs(
-        roi_file = roi_path,
-        out_folder = rv$temp_png_folder,
-        ROInumbers = roi_numbers,
-        verbose = FALSE
-      )
-    })
-    
+
     n_changes <- nrow(rv$changes_log)
     showNotification(paste("Restored from cache:", n_changes, "changes"), type = "message")
     return(TRUE)
@@ -2807,10 +3161,13 @@ server <- function(input, output, session) {
     # Get unique samples and their ROI paths
     unique_samples <- unique(annotations$sample_name)
     current_roi_map <- roi_path_map()
+    is_dashboard <- identical(config$data_source, "dashboard")
 
     # Create temp folder for extracted PNGs
     if (!is.null(rv$temp_png_folder) && dir.exists(rv$temp_png_folder)) {
-      unlink(rv$temp_png_folder, recursive = TRUE)
+      if (!is_dashboard || !startsWith(rv$temp_png_folder, get_dashboard_cache_dir())) {
+        unlink(rv$temp_png_folder, recursive = TRUE)
+      }
     }
     rv$temp_png_folder <- tempfile(pattern = "ifcb_class_review_")
     dir.create(rv$temp_png_folder, recursive = TRUE)
@@ -2819,36 +3176,66 @@ server <- function(input, output, session) {
     missing_samples <- character()
     extracted_files <- character()
 
-    withProgress(message = paste("Extracting", class_name, "images..."),
+    withProgress(message = paste("Loading", class_name, "images..."),
                  value = 0, {
       for (idx in seq_along(unique_samples)) {
         sn <- unique_samples[idx]
-        roi_path <- current_roi_map[[sn]]
 
-        if (is.null(roi_path) || !file.exists(roi_path)) {
-          missing_samples <- c(missing_samples, sn)
-          next
-        }
+        if (is_dashboard) {
+          # Dashboard mode: download/use cached PNGs and symlink into temp folder
+          cache_dir <- get_dashboard_cache_dir()
+          parsed <- parse_dashboard_url(config$dashboard_url)
+          png_folder <- download_dashboard_images(parsed$base_url, sn, cache_dir)
 
-        sample_rois <- annotations$roi_number[annotations$sample_name == sn]
-
-        tryCatch({
-          ifcb_extract_pngs(
-            roi_file = roi_path,
-            out_folder = rv$temp_png_folder,
-            ROInumbers = sample_rois,
-            verbose = FALSE
-          )
-
-          # Check which files were actually extracted
-          sample_dir <- file.path(rv$temp_png_folder, sn)
-          if (dir.exists(sample_dir)) {
-            files <- list.files(sample_dir, pattern = "\\.png$")
-            extracted_files <- c(extracted_files, files)
+          if (is.null(png_folder)) {
+            missing_samples <- c(missing_samples, sn)
+            next
           }
-        }, error = function(e) {
-          missing_samples <<- c(missing_samples, sn)
-        })
+
+          # Copy relevant PNGs to the class review temp folder
+          src_dir <- file.path(png_folder, sn)
+          dest_dir <- file.path(rv$temp_png_folder, sn)
+          dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
+
+          sample_rois <- annotations$roi_number[annotations$sample_name == sn]
+          expected_files <- sprintf("%s_%05d.png", sn, sample_rois)
+
+          for (f in expected_files) {
+            src_file <- file.path(src_dir, f)
+            if (file.exists(src_file)) {
+              file.copy(src_file, file.path(dest_dir, f))
+              extracted_files <- c(extracted_files, f)
+            }
+          }
+        } else {
+          # Local mode: extract from ROI file
+          roi_path <- current_roi_map[[sn]]
+
+          if (is.null(roi_path) || !file.exists(roi_path)) {
+            missing_samples <- c(missing_samples, sn)
+            next
+          }
+
+          sample_rois <- annotations$roi_number[annotations$sample_name == sn]
+
+          tryCatch({
+            ifcb_extract_pngs(
+              roi_file = roi_path,
+              out_folder = rv$temp_png_folder,
+              ROInumbers = sample_rois,
+              verbose = FALSE
+            )
+
+            # Check which files were actually extracted
+            sample_dir <- file.path(rv$temp_png_folder, sn)
+            if (dir.exists(sample_dir)) {
+              files <- list.files(sample_dir, pattern = "\\.png$")
+              extracted_files <- c(extracted_files, files)
+            }
+          }, error = function(e) {
+            missing_samples <<- c(missing_samples, sn)
+          })
+        }
 
         incProgress(1 / length(unique_samples))
       }
@@ -2991,14 +3378,40 @@ server <- function(input, output, session) {
     }
     
     tryCatch({
+      is_dashboard <- identical(config$data_source, "dashboard")
+
       roi_path <- roi_path_map()[[rv$current_sample]]
       adc_folder <- if (!is.null(roi_path)) dirname(roi_path) else NULL
-      if (is.null(adc_folder)) {
+
+      # In dashboard mode, adc_folder may be NULL since there are no local ROI files
+      if (is.null(adc_folder) && is_dashboard) {
+        # Try to get ADC from dashboard cache for MAT saving
+        cache_dir <- get_dashboard_cache_dir()
+        parsed <- parse_dashboard_url(config$dashboard_url)
+        adc_path <- download_dashboard_adc(parsed$base_url, rv$current_sample, cache_dir)
+        adc_folder <- if (!is.null(adc_path)) dirname(adc_path) else NULL
+      }
+
+      save_fmt <- config$save_format
+
+      # In dashboard mode, if MAT save is requested but no ADC available, fall back to SQLite
+      if (is_dashboard && is.null(adc_folder) && save_fmt %in% c("mat", "both")) {
+        if (save_fmt == "mat") {
+          showNotification("MAT saving requires ADC data (not available from dashboard). Saving to SQLite instead.",
+                           type = "warning", duration = 8)
+          save_fmt <- "sqlite"
+        } else {
+          showNotification("ADC data not available from dashboard. Skipping MAT save, saving to SQLite only.",
+                           type = "warning", duration = 8)
+          save_fmt <- "sqlite"
+        }
+      }
+
+      if (is.null(adc_folder) && !is_dashboard) {
         showNotification("Cannot find ROI data folder for this sample", type = "error")
         return()
       }
 
-      save_fmt <- config$save_format
       progress_msg <- switch(save_fmt,
         sqlite = "Saving to database...",
         mat = "Saving MAT file...",

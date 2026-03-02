@@ -87,6 +87,16 @@ reference:
   - load_file_index
   - save_file_index
   - rescan_file_index
+- title: Dashboard
+  desc: Functions for working with remote IFCB Dashboard instances
+  contents:
+  - parse_dashboard_url
+  - list_dashboard_bins
+  - download_dashboard_images
+  - download_dashboard_images_bulk
+  - download_dashboard_adc
+  - download_dashboard_autoclass
+  - get_dashboard_cache_dir
 - title: Utilities
   desc: Helper functions for IFCB data processing
   contents:

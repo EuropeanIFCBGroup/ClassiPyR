@@ -142,6 +142,10 @@ load_file_index <- function() {
 #' @param db_folder Path to the database folder for SQLite annotations. If NULL,
 #'   read from saved settings; if not found in settings, defaults to
 #'   \code{\link{get_default_db_dir}()}.
+#' @param data_source Either \code{"local"} (default) for local folder scanning,
+#'   or \code{"dashboard"} to fetch the sample list from a remote IFCB Dashboard.
+#' @param dashboard_url When \code{data_source = "dashboard"}, the full Dashboard
+#'   URL (e.g. \code{"https://habon-ifcb.whoi.edu/timeline?dataset=tangosund"}).
 #' @return Invisibly returns the file index list, or NULL if roi_folder is invalid.
 #' @export
 #' @examples
@@ -156,12 +160,17 @@ load_file_index <- function() {
 #'   output_folder = "/data/ifcb/manual"
 #' )
 #'
+#' # Scan from a remote Dashboard
+#' rescan_file_index(data_source = "dashboard",
+#'                   dashboard_url = "https://habon-ifcb.whoi.edu/timeline?dataset=tangosund")
+#'
 #' # Use in a cron job:
 #' # Rscript -e 'ClassiPyR::rescan_file_index()'
 #' }
 rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
                               output_folder = NULL, verbose = TRUE,
-                              db_folder = NULL) {
+                              db_folder = NULL, data_source = "local",
+                              dashboard_url = NULL) {
   # Read from saved settings if not provided
   if (is.null(roi_folder) || is.null(csv_folder) || is.null(output_folder) ||
       is.null(db_folder)) {
@@ -181,6 +190,58 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
   # Fall back to default db folder if still NULL
   if (is.null(db_folder)) {
     db_folder <- get_default_db_dir()
+  }
+
+  # Dashboard mode: fetch sample list from remote API
+  if (identical(data_source, "dashboard")) {
+    if (is.null(dashboard_url) || !nzchar(dashboard_url)) {
+      if (verbose) message("Dashboard URL not set")
+      return(invisible(NULL))
+    }
+
+    parsed <- parse_dashboard_url(dashboard_url)
+    if (verbose) message("Fetching bin list from: ", parsed$base_url)
+
+    bins <- tryCatch(
+      list_dashboard_bins(parsed$base_url, parsed$dataset_name),
+      error = function(e) {
+        if (verbose) message("Failed to list dashboard bins: ", e$message)
+        character()
+      }
+    )
+
+    sample_names <- as.character(bins)
+    if (verbose) message("  Found ", length(sample_names), " samples")
+
+    if (length(sample_names) == 0) {
+      if (verbose) message("No samples found on dashboard.")
+      return(invisible(NULL))
+    }
+
+    # Check DB for existing annotations
+    db_path <- get_db_path(db_folder)
+    annotated_db <- list_annotated_samples_db(db_path)
+    annotated <- annotated_db[annotated_db %in% sample_names]
+
+    index_data <- list(
+      data_source = "dashboard",
+      dashboard_url = dashboard_url,
+      dashboard_base_url = parsed$base_url,
+      dashboard_dataset = parsed$dataset_name,
+      sample_names = sample_names,
+      classified_samples = character(),
+      annotated_samples = annotated,
+      roi_path_map = list(),
+      csv_path_map = list(),
+      classifier_mat_files = list(),
+      classifier_h5_files = list(),
+      timestamp = as.character(Sys.time())
+    )
+
+    save_file_index(index_data)
+    if (verbose) message("File index saved to: ", get_file_index_path())
+
+    return(invisible(index_data))
   }
 
   # Validate ROI folder

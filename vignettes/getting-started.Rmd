@@ -21,7 +21,7 @@ This tutorial walks you through your first session with `ClassiPyR`.
 Make sure you have:
 
 1. The package installed (see [Installation](https://europeanifcbgroup.github.io/ClassiPyR/))
-2. Your IFCB data files (ROI, ADC, HDR)
+2. Your IFCB data files (ROI, ADC, HDR) — or a remote IFCB Dashboard URL (see [Dashboard Mode](#dashboard-mode) below)
 3. Optionally: a class list file (.mat or .txt) - you can also create one from scratch in the app
 4. Optionally: existing classifications (CSV, H5, or classifier MAT files, see below)
 5. Optionally: existing PNG-organized datasets can be imported via Settings > Import PNG → SQLite
@@ -238,6 +238,24 @@ Work is automatically saved when:
 3. **Sort by size** - Images are sorted by ROI area, grouping similar organisms
 
 4. **Check statistics** - The "Validation Statistics" tab shows your progress
+
+---
+
+## Dashboard Mode {#dashboard-mode}
+
+If your IFCB data is hosted on a remote Dashboard (e.g. [habon-ifcb.whoi.edu](https://habon-ifcb.whoi.edu/)), you can work directly with the Dashboard without downloading data locally:
+
+1. Open **Settings** (gear icon)
+2. Under **Data Source**, select **IFCB Dashboard**
+3. Enter the Dashboard URL, e.g.:
+   - `https://habon-ifcb.whoi.edu/` (all datasets)
+   - `https://habon-ifcb.whoi.edu/timeline?dataset=tangosund` (specific dataset)
+4. Optionally check **Use dashboard auto-classifications** to load the dashboard's automated classifications for validation
+5. Click **Save Settings**
+
+The app will fetch the sample list from the Dashboard API. When you load a sample, PNG images are downloaded on demand and cached locally for fast subsequent access. ADC files (for image dimensions and MAT export) are also downloaded as needed.
+
+> **Note**: MAT file export in dashboard mode requires downloading the ADC file for each sample. If the download fails, the app falls back to SQLite-only saving.
 
 ---
 

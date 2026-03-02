@@ -337,12 +337,37 @@ Images organized into class folders for training CNN models or other classifiers
 
 ## Settings Reference
 
+### Data Source
+
+ClassiPyR supports two data source modes, selectable in Settings:
+
+| Mode | Description |
+|------|-------------|
+| **Local Folders** (default) | Read IFCB data from local ROI/ADC/HDR files |
+| **IFCB Dashboard** | Connect to a remote IFCB Dashboard instance |
+
+#### IFCB Dashboard Mode
+
+When "IFCB Dashboard" is selected, enter a Dashboard URL such as:
+
+- `https://habon-ifcb.whoi.edu/` — all datasets on the dashboard
+- `https://habon-ifcb.whoi.edu/timeline?dataset=tangosund` — a specific dataset
+
+The app fetches the sample list from the Dashboard API. When you load a sample, PNG images are downloaded from the dashboard and cached locally at `tools::R_user_dir("ClassiPyR", "cache")/dashboard/`. ADC files are downloaded on demand for image dimensions and MAT export.
+
+| Dashboard Setting | Description |
+|-------------------|-------------|
+| Dashboard URL | The full URL of the IFCB Dashboard (with optional `?dataset=` parameter) |
+| Use dashboard auto-classifications | When checked, downloads the dashboard's `_class_scores.csv` for validation mode |
+
+> **Note**: In dashboard mode, the Classification Folder and ROI Data Folder settings are not used. The Output Folder, Database Folder, and PNG Output Folder still apply for saving annotations and exports.
+
 ### Folder Paths
 
 | Setting | Description |
 |---------|-------------|
-| Classification Folder | Source of CSV/H5/MAT classifications |
-| ROI Data Folder | IFCB raw files (ROI/ADC/HDR) |
+| Classification Folder | Source of CSV/H5/MAT classifications (local mode only) |
+| ROI Data Folder | IFCB raw files (ROI/ADC/HDR) (local mode only) |
 | Output Folder | Where MAT files and statistics go (can be on a network drive) |
 | Database Folder | Where the SQLite database is stored (must be a local drive) |
 | PNG Output Folder | Where organized images go |
