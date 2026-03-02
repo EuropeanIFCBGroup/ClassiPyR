@@ -32,6 +32,7 @@ Complete documentation for all `ClassiPyR` features.
   - No sample loaded: Initial state before selecting a sample
   - Validation mode: Shows accuracy percentage
   - Annotation mode: Shows progress (X/Y classified)
+  - Class Review mode: Shows selected class and image counts
 
 ### Sidebar
 

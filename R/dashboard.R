@@ -42,6 +42,9 @@ parse_dashboard_url <- function(url) {
   if (is.null(url) || !is.character(url) || length(url) != 1 || !nzchar(url)) {
     stop("url must be a non-empty character string")
   }
+  if (!grepl("^https?://", url)) {
+    stop("url must start with http:// or https://")
+  }
 
   # Extract dataset from query parameter ?dataset=xxx
   dataset_name <- NULL
@@ -331,11 +334,22 @@ download_dashboard_autoclass <- function(base_url, sample_name,
     max_scores <- apply(score_matrix, 1, max)
     winning_classes <- class_cols[max_idx]
 
-    # Build ROI numbers
-    roi_numbers <- seq_len(nrow(scores))
+    # Extract file names from pid column (e.g., "D20190402T200352_IFCB010_00001")
+    # or fall back to sequential ROI numbers if pid is not available
+    if (is.character(first_col) && all(grepl("_\\d+$", first_col))) {
+      # pid column contains full identifiers — use them directly
+      file_names <- paste0(first_col, ".png")
+    } else if (is.numeric(first_col) || all(grepl("^\\d+$", as.character(first_col)))) {
+      # First column is numeric ROI numbers
+      roi_numbers <- as.integer(first_col)
+      file_names <- sprintf("%s_%05d.png", sample_name, roi_numbers)
+    } else {
+      # Fallback: sequential numbering
+      file_names <- sprintf("%s_%05d.png", sample_name, seq_len(nrow(scores)))
+    }
 
     data.frame(
-      file_name = sprintf("%s_%05d.png", sample_name, roi_numbers),
+      file_name = file_names,
       class_name = winning_classes,
       score = max_scores,
       stringsAsFactors = FALSE

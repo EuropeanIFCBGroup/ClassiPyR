@@ -927,6 +927,12 @@ server <- function(input, output, session) {
   observeEvent(input$predict_btn, {
     req(rv$current_sample, rv$temp_png_folder, config$gradio_url, config$prediction_model)
 
+    # Validate Gradio URL scheme
+    if (!grepl("^https?://", config$gradio_url)) {
+      showNotification("Gradio URL must start with http:// or https://", type = "error")
+      return()
+    }
+
     # Get PNG files from temp folder (PNGs live in a sample-name subfolder)
     png_folder <- file.path(rv$temp_png_folder, rv$current_sample)
     if (!dir.exists(png_folder)) {

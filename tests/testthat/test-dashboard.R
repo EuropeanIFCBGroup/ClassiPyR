@@ -48,6 +48,12 @@ test_that("parse_dashboard_url rejects empty string", {
   expect_error(parse_dashboard_url(""), "non-empty character string")
 })
 
+test_that("parse_dashboard_url rejects non-HTTP URLs", {
+  expect_error(parse_dashboard_url("file:///etc/passwd"), "http:// or https://")
+  expect_error(parse_dashboard_url("ftp://example.com"), "http:// or https://")
+  expect_error(parse_dashboard_url("javascript:alert(1)"), "http:// or https://")
+})
+
 test_that("get_dashboard_cache_dir returns a path", {
   cache_dir <- get_dashboard_cache_dir()
   expect_type(cache_dir, "character")
