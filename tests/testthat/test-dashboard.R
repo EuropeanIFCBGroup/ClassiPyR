@@ -487,6 +487,10 @@ DASHBOARD_DATASET <- "tangosund"
 # Pick a specific small sample to keep downloads fast
 DASHBOARD_SAMPLE <- "D20160810T104734_IFCB110"
 
+# Pick a sample with class_scores
+DASHBOARD_CLASS_DATASET <- "mvco"
+DASHBOARD_CLASS_SAMPLE <- "D20190402T200352_IFCB010"
+
 test_that("list_dashboard_bins returns character vector from real API", {
   skip_if_dashboard_unavailable()
 
@@ -574,7 +578,7 @@ test_that("download_dashboard_autoclass returns data frame with expected columns
   tmp <- file.path(tempdir(), "dashboard_integ_autoclass")
   on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
 
-  result <- download_dashboard_autoclass(DASHBOARD_BASE, DASHBOARD_SAMPLE, tmp)
+  result <- download_dashboard_autoclass(paste0(DASHBOARD_BASE, "/", DASHBOARD_CLASS_DATASET), DASHBOARD_CLASS_SAMPLE, tmp)
 
   # autoclass may not be available for every sample — skip if NULL
   skip_if(is.null(result), "No autoclass data available for test sample")
@@ -583,7 +587,7 @@ test_that("download_dashboard_autoclass returns data frame with expected columns
   expect_true(all(c("file_name", "class_name", "score") %in% names(result)))
   expect_true(nrow(result) > 0)
   # file_name should match the sample
-  expect_true(all(grepl(DASHBOARD_SAMPLE, result$file_name)))
+  expect_true(all(grepl(DASHBOARD_CLASS_SAMPLE, result$file_name)))
   # scores should be numeric between 0 and 1
   expect_true(all(result$score >= 0 & result$score <= 1))
 })
