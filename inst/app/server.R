@@ -114,7 +114,9 @@ server <- function(input, output, session) {
       skip_class_png = "",  # Class name to exclude from PNG export
       data_source = "local",  # "local" or "dashboard"
       dashboard_url = "",  # IFCB Dashboard URL
-      dashboard_autoclass = FALSE  # Use dashboard auto-classifications for validation
+      dashboard_autoclass = FALSE,  # Use dashboard auto-classifications for validation
+      gradio_url = "",  # Gradio API URL for CNN classification
+      prediction_model = ""  # Model name for live prediction
     )
     
     if (file.exists(settings_file)) {
@@ -174,7 +176,9 @@ server <- function(input, output, session) {
     skip_class_png = saved_settings$skip_class_png,
     data_source = saved_settings$data_source,
     dashboard_url = saved_settings$dashboard_url,
-    dashboard_autoclass = saved_settings$dashboard_autoclass
+    dashboard_autoclass = saved_settings$dashboard_autoclass,
+    gradio_url = saved_settings$gradio_url,
+    prediction_model = saved_settings$prediction_model
   )
   
   # Initialize class dropdown with default class list on startup
@@ -399,6 +403,24 @@ server <- function(input, output, session) {
 
       hr(),
 
+      # ── Live Prediction ─────────────────────────────────────────
+      h5("Live Prediction"),
+
+      textInput("cfg_gradio_url", "Gradio API URL",
+                value = config$gradio_url, width = "100%",
+                placeholder = "https://irfcb-classify.hf.space"),
+      tags$small(class = "text-muted", style = "display: block; margin-bottom: 10px;",
+                 "Enter Gradio API URL for CNN classification. Example: https://irfcb-classify.hf.space"),
+
+      selectInput("cfg_prediction_model", "Prediction Model",
+                  choices = if (nzchar(config$prediction_model)) config$prediction_model else NULL,
+                  selected = if (nzchar(config$prediction_model)) config$prediction_model else NULL,
+                  width = "100%"),
+      tags$small(class = "text-muted", style = "display: block; margin-bottom: 15px;",
+                 "Select a CNN model for classification. Models are fetched from the Gradio API."),
+
+      hr(),
+
       # ── IFCB Options ──────────────────────────────────────────────
       h5("IFCB Options"),
 
@@ -476,9 +498,35 @@ server <- function(input, output, session) {
     }
   })
   
-  
+  # Fetch available models when Gradio URL changes in settings (debounced)
+  gradio_url_debounced <- debounce(reactive(input$cfg_gradio_url), 1500)
+
+  observeEvent(gradio_url_debounced(), {
+    url <- gradio_url_debounced()
+    if (is.null(url) || !nzchar(url)) {
+      updateSelectInput(session, "cfg_prediction_model", choices = character(0))
+      return()
+    }
+    tryCatch({
+      models <- iRfcb::ifcb_classify_models(url)
+      if (length(models) > 0) {
+        # Preserve current selection if still valid
+        current <- config$prediction_model
+        selected <- if (nzchar(current) && current %in% models) current else models[1]
+        updateSelectInput(session, "cfg_prediction_model",
+                          choices = models, selected = selected)
+      } else {
+        updateSelectInput(session, "cfg_prediction_model", choices = character(0))
+        showNotification("No models found at the provided URL.", type = "warning")
+      }
+    }, error = function(e) {
+      updateSelectInput(session, "cfg_prediction_model", choices = character(0))
+      showNotification(paste("Could not fetch models:", e$message), type = "error")
+    })
+  })
+
   # Class count display
-  
+
   output$class_count_text <- renderText({
     if (is.null(rv$class2use)) {
       "No class list loaded"
@@ -765,6 +813,8 @@ server <- function(input, output, session) {
     config$data_source <- input$cfg_data_source
     config$dashboard_url <- input$cfg_dashboard_url
     config$dashboard_autoclass <- input$cfg_dashboard_autoclass
+    config$gradio_url <- input$cfg_gradio_url
+    config$prediction_model <- input$cfg_prediction_model
 
     # Persist settings to file for next session
     # python_venv_path is kept from config (set via run_app() or previous save)
@@ -784,7 +834,9 @@ server <- function(input, output, session) {
       python_venv_path = config$python_venv_path,
       data_source = input$cfg_data_source,
       dashboard_url = input$cfg_dashboard_url,
-      dashboard_autoclass = input$cfg_dashboard_autoclass
+      dashboard_autoclass = input$cfg_dashboard_autoclass,
+      gradio_url = input$cfg_gradio_url,
+      prediction_model = input$cfg_prediction_model
     ))
 
     removeModal()
@@ -798,6 +850,148 @@ server <- function(input, output, session) {
       }
       rescan_trigger(rescan_trigger() + 1)
     }
+  })
+
+  # ============================================================================
+  # LIVE PREDICTION
+  # ============================================================================
+
+  # Render predict button conditionally
+  output$predict_btn_ui <- renderUI({
+    has_config <- nzchar(config$gradio_url) && nzchar(config$prediction_model)
+    has_sample <- !is.null(rv$current_sample)
+
+    if (!has_config) return(NULL)
+
+    actionButton("predict_btn", "Predict",
+                 icon = icon("robot"),
+                 class = if (has_sample) "btn-info" else "btn-outline-secondary",
+                 width = "100%",
+                 disabled = if (!has_sample) "disabled" else NULL)
+  })
+
+  # Predict observer
+  observeEvent(input$predict_btn, {
+    req(rv$current_sample, rv$temp_png_folder, config$gradio_url, config$prediction_model)
+
+    # Get PNG files from temp folder (PNGs live in a sample-name subfolder)
+    png_folder <- file.path(rv$temp_png_folder, rv$current_sample)
+    if (!dir.exists(png_folder)) {
+      # Fallback: try the temp folder directly (e.g. dashboard cache)
+      png_folder <- rv$temp_png_folder
+    }
+    png_files <- list.files(png_folder, pattern = "\\.png$", full.names = TRUE)
+    if (length(png_files) == 0) {
+      showNotification("No PNG images found in the loaded sample.", type = "warning")
+      return()
+    }
+
+    # Identify images manually reclassified by the user (skip these)
+    manually_changed <- character()
+    if (!is.null(rv$original_classifications) && !is.null(rv$classifications)) {
+      merged <- merge(
+        rv$classifications[, c("file_name", "class_name")],
+        rv$original_classifications[, c("file_name", "class_name")],
+        by = "file_name", suffixes = c("_current", "_original")
+      )
+      changed_rows <- merged$class_name_current != merged$class_name_original
+      manually_changed <- merged$file_name[changed_rows]
+    }
+
+    # Filter to only non-reclassified images
+    all_filenames <- basename(png_files)
+    files_to_predict <- png_files[!all_filenames %in% manually_changed]
+
+    if (length(files_to_predict) == 0) {
+      showNotification("All images have been manually reclassified. Nothing to predict.",
+                       type = "message")
+      return()
+    }
+
+    # Run classification with per-image progress
+    n_total <- length(files_to_predict)
+    result_list <- vector("list", n_total)
+    failed <- 0L
+
+    withProgress(message = "Classifying images...", value = 0, {
+      for (i in seq_len(n_total)) {
+        setProgress(value = (i - 1) / n_total,
+                    detail = paste0(i, " / ", n_total))
+        tryCatch({
+          result_list[[i]] <- iRfcb::ifcb_classify_images(
+            png_file = files_to_predict[i],
+            gradio_url = config$gradio_url,
+            model_name = config$prediction_model,
+            verbose = FALSE
+          )
+        }, error = function(e) {
+          failed <<- failed + 1L
+        })
+      }
+      setProgress(1, detail = "Done")
+    })
+
+    predictions <- do.call(rbind, Filter(Negate(is.null), result_list))
+
+    if (is.null(predictions) || nrow(predictions) == 0) {
+      showNotification("Prediction failed for all images.", type = "error")
+      return()
+    }
+    if (failed > 0) {
+      showNotification(paste("Warning:", failed, "images failed to classify."),
+                       type = "warning")
+    }
+
+    # Apply threshold logic
+    if (!config$use_threshold && "class_name_auto" %in% names(predictions)) {
+      predictions$class_name <- predictions$class_name_auto
+    }
+
+    # Merge predictions into rv$classifications
+    cls <- rv$classifications
+    for (i in seq_len(nrow(predictions))) {
+      fname <- predictions$file_name[i]
+      idx <- which(cls$file_name == fname)
+      if (length(idx) == 1) {
+        cls$class_name[idx] <- predictions$class_name[i]
+        if ("score" %in% names(cls)) {
+          cls$score[idx] <- predictions$score[i]
+        }
+      }
+    }
+    rv$classifications <- cls
+
+    # Update original_classifications so predictions become the new baseline
+    rv$original_classifications <- rv$classifications
+
+    # Switch to validation mode since we now have auto-classifications
+    rv$is_annotation_mode <- FALSE
+
+    # Add any new classes from predictions to class2use
+    new_classes <- setdiff(unique(predictions$class_name), rv$class2use)
+    new_classes <- new_classes[!is.na(new_classes) & nzchar(new_classes)]
+    if (length(new_classes) > 0) {
+      rv$class2use <- c(rv$class2use, new_classes)
+      # Update relabel dropdown
+      sorted_classes <- sort(rv$class2use)
+      updateSelectizeInput(session, "new_class_quick",
+                           choices = sorted_classes,
+                           selected = character(0))
+    }
+
+    # Update class filter dropdown
+    available_classes <- sort(unique(rv$classifications$class_name))
+    updateSelectInput(session, "class_filter",
+                      choices = build_class_filter_choices(available_classes),
+                      selected = "all")
+
+    n_predicted <- nrow(predictions)
+    n_skipped <- length(manually_changed)
+    msg <- paste0("Predicted ", n_predicted, " images.")
+    if (n_skipped > 0) {
+      msg <- paste0(msg, " Skipped ", n_skipped, " manually reclassified images.")
+    }
+    showNotification(msg, type = "message", duration = 8)
   })
 
   # Import .mat -> SQLite bulk handler

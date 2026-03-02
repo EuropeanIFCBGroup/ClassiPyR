@@ -18,6 +18,7 @@ A Shiny application for manual (human) image classification and validation of Im
 - **Dual Mode**: Validate existing classifications or annotate from scratch
 - **Class Review**: Review and reclassify all images of a specific class across the entire database
 - **IFCB Dashboard**: Work directly with remote IFCB Dashboard instances - no local data files needed
+- **Live Prediction**: One-click CNN classification via a remote Gradio API using [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb)
 - **Multiple Formats**: Load from CSV or MATLAB classifier output
 - **SQLite Storage**: Annotations stored in a local SQLite database by default - no Python needed
 - **Efficient Workflow**: Drag-select, batch relabeling, class filtering

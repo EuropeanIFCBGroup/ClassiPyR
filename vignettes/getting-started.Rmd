@@ -23,7 +23,7 @@ Make sure you have:
 1. The package installed (see [Installation](https://europeanifcbgroup.github.io/ClassiPyR/))
 2. Your IFCB data files (ROI, ADC, HDR) — or a remote IFCB Dashboard URL (see [Dashboard Mode](#dashboard-mode) below)
 3. Optionally: a class list file (.mat or .txt) - you can also create one from scratch in the app
-4. Optionally: existing classifications (CSV, H5, or classifier MAT files, see below)
+4. Optionally: existing classifications (CSV, H5, or classifier MAT files, see below) — or use [Live Prediction](user-guide.html#live-prediction) to classify on the fly
 5. Optionally: existing PNG-organized datasets can be imported via Settings > Import PNG → SQLite
 
 ### Python Requirements
@@ -238,6 +238,8 @@ Work is automatically saved when:
 3. **Sort by size** - Images are sorted by ROI area, grouping similar organisms
 
 4. **Check statistics** - The "Validation Statistics" tab shows your progress
+
+5. **Use Live Prediction** - For unannotated samples, use the Predict button to get CNN classifications as a starting point, then correct mistakes manually
 
 ---
 

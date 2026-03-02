@@ -41,6 +41,7 @@ Complete documentation for all `ClassiPyR` features.
 - **Navigation**: Load, previous, next, random, sync
 - **Cache age**: Shows when folders were last scanned
 - **Save button**: Manual save trigger
+- **Predict button**: One-click CNN classification (when configured)
 
 ### Main Area (Tabs)
 
@@ -101,6 +102,35 @@ Class Review mode lets you view **all annotated images of a specific class** acr
 - Saving performs **surgical row-level UPDATEs** rather than replacing an entire sample's annotations
 - The title bar turns **purple** to indicate class review mode
 - Navigation buttons (prev/next/random sample) are not available
+
+---
+
+## Live Prediction
+
+The **Predict** button in the sidebar lets you classify all images in the loaded sample using a remote CNN model, without needing pre-computed classifier files. This uses `iRfcb::ifcb_classify_images()` to send images to a Gradio-hosted classification model.
+
+### Setup
+
+1. Open **Settings** (gear icon)
+2. Under **Live Prediction**, enter a Gradio API URL (e.g. `https://irfcb-classify.hf.space`)
+3. The **Prediction Model** dropdown is populated automatically from the server
+4. Select a model and click **Save Settings**
+
+The Predict button appears in the sidebar once a Gradio URL and model are configured.
+
+### Using Predict
+
+1. Load a sample in Sample Mode (annotated or unannotated)
+2. Click **Predict** in the sidebar
+3. A progress bar shows per-image classification progress
+4. When complete, the app switches to validation mode with the predicted classes
+
+### Behaviour details
+
+- **Manual labels are preserved**: If you have already reclassified some images, those are skipped during prediction. Only unchanged images are sent to the model.
+- **Threshold setting applies**: The "Apply classification threshold" setting controls whether thresholded or raw predictions are used, just like for CSV/H5/MAT classifications.
+- **New classes are added automatically**: If the model returns class names not in your current class list, they are added so the filter and relabel dropdowns work correctly.
+- **Predictions become the baseline**: After prediction, the predicted classes are treated as the "original" classifications for validation statistics.
 
 ---
 
@@ -180,9 +210,9 @@ The default scale is 3.4 pixels per micrometer (standard for IFCB). To adjust:
 
 ## Classification Sources
 
-`ClassiPyR` supports multiple classification input formats. When multiple formats exist for the same sample, the priority is: CSV > H5 > MAT.
+`ClassiPyR` supports multiple classification input formats. When multiple formats exist for the same sample, the priority is: CSV > H5 > MAT. Samples without any pre-computed classifications can be classified on the fly using [Live Prediction](#live-prediction).
 
-All three formats support a **classification threshold** option (configurable in Settings under the Classification Folder). When enabled, predictions below the confidence threshold are shown as "unclassified"; when disabled, the raw (unthresholded) class prediction is used.
+All formats (including live predictions) support a **classification threshold** option (configurable in Settings under the Classification Folder). When enabled, predictions below the confidence threshold are shown as "unclassified"; when disabled, the raw (unthresholded) class prediction is used.
 
 ### CSV Files
 
@@ -407,9 +437,18 @@ run_app(venv_path = "/path/to/your/venv")
 
 The path is remembered for future sessions. **Priority order**: `run_app(venv_path=)` argument > saved settings > default (`./venv`).
 
+### Live Prediction
+
+| Setting | Description |
+|---------|-------------|
+| Gradio API URL | URL of a Gradio-hosted CNN classification server (e.g. `https://irfcb-classify.hf.space`) |
+| Prediction Model | CNN model to use for classification. Choices are fetched from the Gradio server. |
+
+When both fields are configured, a **Predict** button appears in the sidebar for Sample Mode. See [Live Prediction](#live-prediction) for usage details.
+
 ### Classifier Options
 
-**Apply classification threshold**: When loading classifier output (CSV, H5, or MAT), use the threshold-filtered class predictions (checked) or the raw unthresholded predictions (unchecked).
+**Apply classification threshold**: When loading classifier output (CSV, H5, or MAT) or live predictions, use the threshold-filtered class predictions (checked) or the raw unthresholded predictions (unchecked).
 
 ### PNG Export Options
 

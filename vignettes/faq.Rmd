@@ -44,6 +44,10 @@ A: Use **Class Review mode**. Switch to "Class Review" using the mode toggle in 
 
 A: Yes. Class Review mode loads images from all samples and saves changes as row-level updates to the database. This means only the images you reclassify are updated — other annotations in those samples remain untouched.
 
+**Q: Can I classify images without pre-computed classifier files?**
+
+A: Yes. Configure a Gradio API URL and model in Settings > Live Prediction, then click the **Predict** button in the sidebar after loading a sample. This sends images to a remote CNN model and applies the predictions directly. See the [User Guide](user-guide.html#live-prediction) for details.
+
 ---
 
 ## Installation Issues

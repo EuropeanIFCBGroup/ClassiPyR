@@ -508,11 +508,13 @@ ui <- page_sidebar(
 
     hr(),
 
-    # Save button (prominent) — sample mode only
+    # Save and Predict buttons — sample mode only
     conditionalPanel(
       condition = "input.app_mode == 'sample'",
       actionButton("save_btn", "Save Annotations",
-                   class = "btn-success", width = "100%")
+                   class = "btn-success", width = "100%"),
+      div(style = "margin-top: 5px;",
+          uiOutput("predict_btn_ui"))
     ),
 
     uiOutput("python_warning"),
