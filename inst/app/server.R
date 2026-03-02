@@ -116,7 +116,11 @@ server <- function(input, output, session) {
       dashboard_url = "",  # IFCB Dashboard URL
       dashboard_autoclass = FALSE,  # Use dashboard auto-classifications for validation
       gradio_url = "",  # Gradio API URL for CNN classification
-      prediction_model = ""  # Model name for live prediction
+      prediction_model = "",  # Model name for live prediction
+      dashboard_parallel_downloads = 5,
+      dashboard_sleep_time = 2,
+      dashboard_multi_timeout = 120,
+      dashboard_max_retries = 3
     )
     
     if (file.exists(settings_file)) {
@@ -178,7 +182,11 @@ server <- function(input, output, session) {
     dashboard_url = saved_settings$dashboard_url,
     dashboard_autoclass = saved_settings$dashboard_autoclass,
     gradio_url = saved_settings$gradio_url,
-    prediction_model = saved_settings$prediction_model
+    prediction_model = saved_settings$prediction_model,
+    dashboard_parallel_downloads = saved_settings$dashboard_parallel_downloads,
+    dashboard_sleep_time = saved_settings$dashboard_sleep_time,
+    dashboard_multi_timeout = saved_settings$dashboard_multi_timeout,
+    dashboard_max_retries = saved_settings$dashboard_max_retries
   )
   
   # Initialize class dropdown with default class list on startup
@@ -259,28 +267,65 @@ server <- function(input, output, session) {
         checkboxInput("cfg_dashboard_autoclass", "Use dashboard auto-classifications",
                       value = config$dashboard_autoclass),
         tags$small(class = "text-muted", style = "display: block; margin-bottom: 15px;",
-                   "When enabled, downloads auto-classification scores from the dashboard for validation mode.")
+                   "When enabled, downloads auto-classification scores from the dashboard for validation mode."),
+
+        # Advanced download settings (collapsible)
+        tags$details(
+          tags$summary(style = "cursor: pointer; margin-bottom: 10px; color: #666;",
+                       "Advanced Download Settings"),
+          fluidRow(
+            column(6, numericInput("cfg_dashboard_parallel_downloads",
+                                   "Parallel Downloads",
+                                   value = config$dashboard_parallel_downloads,
+                                   min = 1, max = 20, step = 1)),
+            column(6, numericInput("cfg_dashboard_sleep_time",
+                                   "Sleep Time (seconds)",
+                                   value = config$dashboard_sleep_time,
+                                   min = 0, max = 30, step = 0.5))
+          ),
+          fluidRow(
+            column(6, numericInput("cfg_dashboard_multi_timeout",
+                                   "Download Timeout (seconds)",
+                                   value = config$dashboard_multi_timeout,
+                                   min = 10, max = 600, step = 10)),
+            column(6, numericInput("cfg_dashboard_max_retries",
+                                   "Max Retries",
+                                   value = config$dashboard_max_retries,
+                                   min = 1, max = 10, step = 1))
+          ),
+          tags$small(class = "text-muted", style = "display: block; margin-bottom: 15px;",
+                     "Settings for zip/ADC/autoclass downloads from the dashboard.")
+        )
       ),
 
-      # ── Folder Paths (local mode) ──────────────────────────────────
+      # ── Classification Folder (both modes) ──────────────────────────
+      h5("Classification"),
+
+      div(
+        style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 5px;",
+        div(style = "flex: 1;",
+            textInput("cfg_csv_folder", "Classification Folder (CSV/H5/MAT)",
+                      value = config$csv_folder, width = "100%")),
+        shinyDirButton("browse_csv_folder", "Browse", "Select Classification Folder",
+                       class = "btn-outline-secondary", style = "margin-bottom: 15px;")
+      ),
+
+      conditionalPanel(
+        condition = "input.cfg_data_source == 'dashboard'",
+        tags$small(class = "text-muted", style = "display: block; margin-bottom: 5px;",
+                   "Optional. Use local classification files instead of dashboard auto-classifications.")
+      ),
+
+      checkboxInput("cfg_use_threshold", "Apply classification threshold",
+                    value = config$use_threshold),
+      tags$small(class = "text-muted", style = "display: block; margin-bottom: 15px;",
+                 "When enabled, classifications below the confidence threshold are marked as 'unclassified'."),
+
+      # ── Folder Paths (local mode only) ──────────────────────────────
       conditionalPanel(
         condition = "input.cfg_data_source == 'local'",
 
-        h5("Folder Paths"),
-
-        div(
-          style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 5px;",
-          div(style = "flex: 1;",
-              textInput("cfg_csv_folder", "Classification Folder (CSV/H5/MAT)",
-                        value = config$csv_folder, width = "100%")),
-          shinyDirButton("browse_csv_folder", "Browse", "Select Classification Folder",
-                         class = "btn-outline-secondary", style = "margin-bottom: 15px;")
-        ),
-
-        checkboxInput("cfg_use_threshold", "Apply classification threshold",
-                      value = config$use_threshold),
-        tags$small(class = "text-muted", style = "display: block; margin-bottom: 15px;",
-                   "When enabled, classifications below the confidence threshold are marked as 'unclassified'."),
+        h5("ROI Data"),
 
         div(
           style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
@@ -813,6 +858,10 @@ server <- function(input, output, session) {
     config$data_source <- input$cfg_data_source
     config$dashboard_url <- input$cfg_dashboard_url
     config$dashboard_autoclass <- input$cfg_dashboard_autoclass
+    config$dashboard_parallel_downloads <- if (!is.null(input$cfg_dashboard_parallel_downloads)) input$cfg_dashboard_parallel_downloads else 5
+    config$dashboard_sleep_time <- if (!is.null(input$cfg_dashboard_sleep_time)) input$cfg_dashboard_sleep_time else 2
+    config$dashboard_multi_timeout <- if (!is.null(input$cfg_dashboard_multi_timeout)) input$cfg_dashboard_multi_timeout else 120
+    config$dashboard_max_retries <- if (!is.null(input$cfg_dashboard_max_retries)) input$cfg_dashboard_max_retries else 3
     config$gradio_url <- input$cfg_gradio_url
     config$prediction_model <- input$cfg_prediction_model
 
@@ -835,6 +884,10 @@ server <- function(input, output, session) {
       data_source = input$cfg_data_source,
       dashboard_url = input$cfg_dashboard_url,
       dashboard_autoclass = input$cfg_dashboard_autoclass,
+      dashboard_parallel_downloads = config$dashboard_parallel_downloads,
+      dashboard_sleep_time = config$dashboard_sleep_time,
+      dashboard_multi_timeout = config$dashboard_multi_timeout,
+      dashboard_max_retries = config$dashboard_max_retries,
       gradio_url = input$cfg_gradio_url,
       prediction_model = input$cfg_prediction_model
     ))
@@ -1106,7 +1159,11 @@ server <- function(input, output, session) {
       # (uses parallel_downloads internally, much faster than one-at-a-time)
       withProgress(message = "Downloading images from dashboard...", value = 0, {
         cached_samples <- download_dashboard_images_bulk(
-          parsed$base_url, samples, cache_dir)
+          parsed$base_url, samples, cache_dir,
+          parallel_downloads = config$dashboard_parallel_downloads,
+          sleep_time = config$dashboard_sleep_time,
+          multi_timeout = config$dashboard_multi_timeout,
+          max_retries = config$dashboard_max_retries)
       })
 
       withProgress(message = "Copying PNGs to class folders...", value = 0, {
@@ -2343,7 +2400,11 @@ server <- function(input, output, session) {
 
         # Download PNG images from dashboard
         png_folder <- withProgress(message = "Downloading images...", {
-          download_dashboard_images(parsed$base_url, sample_name, cache_dir)
+          download_dashboard_images(parsed$base_url, sample_name, cache_dir,
+                                    parallel_downloads = config$dashboard_parallel_downloads,
+                                    sleep_time = config$dashboard_sleep_time,
+                                    multi_timeout = config$dashboard_multi_timeout,
+                                    max_retries = config$dashboard_max_retries)
         })
 
         if (is.null(png_folder)) {
@@ -2352,7 +2413,11 @@ server <- function(input, output, session) {
         }
 
         # Download ADC on demand for dimensions (graceful fallback to NA)
-        adc_path <- download_dashboard_adc(parsed$base_url, sample_name, cache_dir)
+        adc_path <- download_dashboard_adc(parsed$base_url, sample_name, cache_dir,
+                                           parallel_downloads = config$dashboard_parallel_downloads,
+                                           sleep_time = config$dashboard_sleep_time,
+                                           multi_timeout = config$dashboard_multi_timeout,
+                                           max_retries = config$dashboard_max_retries)
         roi_dims <- if (!is.null(adc_path) && file.exists(adc_path)) {
           tryCatch(read_roi_dimensions(adc_path), error = function(e) NULL)
         } else {
@@ -2379,10 +2444,61 @@ server <- function(input, output, session) {
           rv$using_manual_mode <- TRUE
           mode_message <- if (rv$has_both_modes) "Manual mode (switch available)" else "Resumed"
 
-        } else if (isTRUE(config$dashboard_autoclass)) {
-          # Try dashboard autoclass for validation mode
+        }
+
+        # Try local classification files if csv_folder is configured
+        if (is.null(classifications)) {
+          csv_folder <- config$csv_folder
+          has_csv_folder <- !is.null(csv_folder) && nzchar(csv_folder) && dir.exists(csv_folder)
+
+          if (has_csv_folder) {
+            # Search for classification files in csv_folder (recursive)
+            local_csv <- list.files(csv_folder, pattern = paste0("^", sample_name, "\\.csv$"),
+                                    recursive = TRUE, full.names = TRUE)
+            local_h5 <- list.files(csv_folder, pattern = paste0("^", sample_name, ".*\\.h5$"),
+                                   recursive = TRUE, full.names = TRUE)
+            local_mat <- list.files(csv_folder, pattern = paste0("^", sample_name, ".*\\.mat$"),
+                                    recursive = TRUE, full.names = TRUE)
+
+            if (length(local_csv) > 0) {
+              classifications <- load_from_csv(local_csv[1], use_threshold = config$use_threshold)
+              rv$is_annotation_mode <- FALSE
+              rv$has_both_modes <- FALSE
+              rv$using_manual_mode <- FALSE
+              threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
+              mode_message <- paste0("Validation mode (Local CSV, ", threshold_text, ")")
+            } else if (length(local_h5) > 0) {
+              classifications <- load_from_h5(
+                local_h5[1], sample_name, roi_dims,
+                use_threshold = config$use_threshold
+              )
+              rv$is_annotation_mode <- FALSE
+              rv$has_both_modes <- FALSE
+              rv$using_manual_mode <- FALSE
+              threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
+              mode_message <- paste0("Validation mode (Local H5, ", threshold_text, ")")
+            } else if (length(local_mat) > 0) {
+              classifications <- load_from_classifier_mat(
+                local_mat[1], sample_name, rv$class2use, roi_dims,
+                use_threshold = config$use_threshold
+              )
+              rv$is_annotation_mode <- FALSE
+              rv$has_both_modes <- FALSE
+              rv$using_manual_mode <- FALSE
+              threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
+              mode_message <- paste0("Validation mode (Local MAT, ", threshold_text, ")")
+            }
+          }
+        }
+
+        if (is.null(classifications) && isTRUE(config$dashboard_autoclass)) {
+          # Try dashboard autoclass for validation mode (fallback)
           autoclass <- withProgress(message = "Downloading auto-classifications...", {
-            download_dashboard_autoclass(parsed$base_url, sample_name, cache_dir)
+            download_dashboard_autoclass(parsed$base_url, sample_name, cache_dir,
+                                        parallel_downloads = config$dashboard_parallel_downloads,
+                                        sleep_time = config$dashboard_sleep_time,
+                                        multi_timeout = config$dashboard_multi_timeout,
+                                        max_retries = config$dashboard_max_retries)
           })
 
           if (!is.null(autoclass) && nrow(autoclass) > 0) {
@@ -3384,35 +3500,31 @@ server <- function(input, output, session) {
 
     withProgress(message = paste("Loading", class_name, "images..."),
                  value = 0, {
+
+      if (is_dashboard) {
+        # Dashboard mode: download individual PNGs directly (much faster than zip)
+        parsed <- parse_dashboard_url(config$dashboard_url)
+        all_file_names <- annotations$file_name
+
+        downloaded <- download_dashboard_images_individual(
+          base_url = parsed$base_url,
+          file_names = all_file_names,
+          dest_dir = rv$temp_png_folder,
+          max_retries = config$dashboard_max_retries
+        )
+
+        extracted_files <- downloaded
+        downloaded_samples <- unique(gsub("_\\d+\\.png$", "", downloaded))
+        missing_samples <- setdiff(unique_samples, downloaded_samples)
+      }
+
       for (idx in seq_along(unique_samples)) {
         sn <- unique_samples[idx]
 
         if (is_dashboard) {
-          # Dashboard mode: download/use cached PNGs and symlink into temp folder
-          cache_dir <- get_dashboard_cache_dir()
-          parsed <- parse_dashboard_url(config$dashboard_url)
-          png_folder <- download_dashboard_images(parsed$base_url, sn, cache_dir)
-
-          if (is.null(png_folder)) {
-            missing_samples <- c(missing_samples, sn)
-            next
-          }
-
-          # Copy relevant PNGs to the class review temp folder
-          src_dir <- file.path(png_folder, sn)
-          dest_dir <- file.path(rv$temp_png_folder, sn)
-          dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
-
-          sample_rois <- annotations$roi_number[annotations$sample_name == sn]
-          expected_files <- sprintf("%s_%05d.png", sn, sample_rois)
-
-          for (f in expected_files) {
-            src_file <- file.path(src_dir, f)
-            if (file.exists(src_file)) {
-              file.copy(src_file, file.path(dest_dir, f))
-              extracted_files <- c(extracted_files, f)
-            }
-          }
+          # Already handled above in batch
+          incProgress(1 / length(unique_samples))
+          next
         } else {
           # Local mode: extract from ROI file
           roi_path <- current_roi_map[[sn]]
@@ -3594,7 +3706,11 @@ server <- function(input, output, session) {
         # Try to get ADC from dashboard cache for MAT saving
         cache_dir <- get_dashboard_cache_dir()
         parsed <- parse_dashboard_url(config$dashboard_url)
-        adc_path <- download_dashboard_adc(parsed$base_url, rv$current_sample, cache_dir)
+        adc_path <- download_dashboard_adc(parsed$base_url, rv$current_sample, cache_dir,
+                                           parallel_downloads = config$dashboard_parallel_downloads,
+                                           sleep_time = config$dashboard_sleep_time,
+                                           multi_timeout = config$dashboard_multi_timeout,
+                                           max_retries = config$dashboard_max_retries)
         adc_folder <- if (!is.null(adc_path)) dirname(adc_path) else NULL
       }
 

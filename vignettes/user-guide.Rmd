@@ -389,14 +389,22 @@ The app fetches the sample list from the Dashboard API. When you load a sample, 
 |-------------------|-------------|
 | Dashboard URL | The full URL of the IFCB Dashboard (with optional `?dataset=` parameter) |
 | Use dashboard auto-classifications | When checked, downloads the dashboard's `_class_scores.csv` for validation mode |
+| Advanced Download Settings | Parallel downloads, sleep time, timeout, and max retries for dashboard downloads |
 
-> **Note**: In dashboard mode, the Classification Folder and ROI Data Folder settings are not used. The Output Folder, Database Folder, and PNG Output Folder still apply for saving annotations and exports.
+The **Classification Folder** setting is available in both local and dashboard mode. In dashboard mode, local classification files (CSV/H5/MAT) take priority over dashboard auto-classifications. The priority order is:
+
+1. Database annotations (manual, existing)
+2. Local classification files (CSV > H5 > MAT) — if Classification Folder is configured
+3. Dashboard auto-classifications (if enabled)
+4. New annotation mode
+
+> **Note**: In dashboard mode, the ROI Data Folder setting is not used. The Output Folder, Database Folder, and PNG Output Folder still apply for saving annotations and exports.
 
 ### Folder Paths
 
 | Setting | Description |
 |---------|-------------|
-| Classification Folder | Source of CSV/H5/MAT classifications (local mode only) |
+| Classification Folder | Source of CSV/H5/MAT classifications (both local and dashboard mode) |
 | ROI Data Folder | IFCB raw files (ROI/ADC/HDR) (local mode only) |
 | Output Folder | Where MAT files and statistics go (can be on a network drive) |
 | Database Folder | Where the SQLite database is stored (must be a local drive) |

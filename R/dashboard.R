@@ -4,7 +4,7 @@
 # instances (e.g., https://habon-ifcb.whoi.edu/).
 
 #' @importFrom jsonlite fromJSON
-#' @importFrom curl curl_fetch_memory new_handle
+#' @importFrom curl curl_fetch_memory curl_fetch_disk new_handle
 #' @importFrom iRfcb ifcb_download_dashboard_data
 NULL
 
@@ -129,9 +129,16 @@ list_dashboard_bins <- function(base_url, dataset_name = NULL) {
 #' @param sample_name Character. Sample name (bin PID).
 #' @param cache_dir Character. Cache directory. Defaults to
 #'   \code{\link{get_dashboard_cache_dir}()}.
+#' @param parallel_downloads Integer. Number of parallel downloads.
+#' @param sleep_time Numeric. Seconds to sleep between download batches.
+#' @param multi_timeout Numeric. Timeout in seconds for multi-file downloads.
+#' @param max_retries Integer. Maximum number of retry attempts.
 #' @return Path to the folder containing extracted PNGs, or NULL on failure.
 #' @export
-download_dashboard_images <- function(base_url, sample_name, cache_dir = get_dashboard_cache_dir()) {
+download_dashboard_images <- function(base_url, sample_name,
+                                      cache_dir = get_dashboard_cache_dir(),
+                                      parallel_downloads = 5, sleep_time = 2,
+                                      multi_timeout = 120, max_retries = 3) {
   # Expected path structure: cache_dir/sample_name/sample_name/*.png
   png_folder <- file.path(cache_dir, sample_name)
   png_subfolder <- file.path(png_folder, sample_name)
@@ -156,8 +163,10 @@ download_dashboard_images <- function(base_url, sample_name, cache_dir = get_das
       samples = sample_name,
       file_types = "zip",
       dest_dir = cache_dir,
-      parallel_downloads = 2,
-      sleep_time = 5,
+      parallel_downloads = parallel_downloads,
+      sleep_time = sleep_time,
+      multi_timeout = multi_timeout,
+      max_retries = max_retries,
       quiet = TRUE
     )
 
@@ -202,9 +211,16 @@ download_dashboard_images <- function(base_url, sample_name, cache_dir = get_das
 #' @param base_url Character. Dashboard base URL.
 #' @param sample_name Character. Sample name.
 #' @param cache_dir Character. Cache directory.
+#' @param parallel_downloads Integer. Number of parallel downloads.
+#' @param sleep_time Numeric. Seconds to sleep between download batches.
+#' @param multi_timeout Numeric. Timeout in seconds for multi-file downloads.
+#' @param max_retries Integer. Maximum number of retry attempts.
 #' @return Path to the downloaded ADC file, or NULL on failure.
 #' @export
-download_dashboard_adc <- function(base_url, sample_name, cache_dir = get_dashboard_cache_dir()) {
+download_dashboard_adc <- function(base_url, sample_name,
+                                   cache_dir = get_dashboard_cache_dir(),
+                                   parallel_downloads = 5, sleep_time = 2,
+                                   multi_timeout = 120, max_retries = 3) {
   date_part <- substr(sample_name, 1, 9)
   adc_path <- file.path(cache_dir, date_part, paste0(sample_name, ".adc"))
 
@@ -220,8 +236,10 @@ download_dashboard_adc <- function(base_url, sample_name, cache_dir = get_dashbo
       samples = sample_name,
       file_types = "adc",
       dest_dir = cache_dir,
-      parallel_downloads = 2,
-      sleep_time = 5,
+      parallel_downloads = parallel_downloads,
+      sleep_time = sleep_time,
+      multi_timeout = multi_timeout,
+      max_retries = max_retries,
       quiet = TRUE
     )
 
@@ -250,10 +268,17 @@ download_dashboard_adc <- function(base_url, sample_name, cache_dir = get_dashbo
 #' @param base_url Character. Dashboard base URL.
 #' @param sample_name Character. Sample name.
 #' @param cache_dir Character. Cache directory.
+#' @param parallel_downloads Integer. Number of parallel downloads.
+#' @param sleep_time Numeric. Seconds to sleep between download batches.
+#' @param multi_timeout Numeric. Timeout in seconds for multi-file downloads.
+#' @param max_retries Integer. Maximum number of retry attempts.
 #' @return Data frame with columns \code{file_name}, \code{class_name},
 #'   \code{score}, or NULL on failure.
 #' @export
-download_dashboard_autoclass <- function(base_url, sample_name, cache_dir = get_dashboard_cache_dir()) {
+download_dashboard_autoclass <- function(base_url, sample_name,
+                                         cache_dir = get_dashboard_cache_dir(),
+                                         parallel_downloads = 5, sleep_time = 2,
+                                         multi_timeout = 120, max_retries = 3) {
   # The dashboard URL needs to include the dataset path for autoclass
   dashboard_url <- paste0(sub("/+$", "", base_url), "/")
 
@@ -263,8 +288,10 @@ download_dashboard_autoclass <- function(base_url, sample_name, cache_dir = get_
       samples = sample_name,
       file_types = "autoclass",
       dest_dir = cache_dir,
-      parallel_downloads = 2,
-      sleep_time = 5,
+      parallel_downloads = parallel_downloads,
+      sleep_time = sleep_time,
+      multi_timeout = multi_timeout,
+      max_retries = max_retries,
       quiet = TRUE
     )
 
@@ -329,11 +356,17 @@ download_dashboard_autoclass <- function(base_url, sample_name, cache_dir = get_
 #' @param base_url Character. Dashboard base URL.
 #' @param sample_names Character vector. Sample names to download.
 #' @param cache_dir Character. Cache directory.
+#' @param parallel_downloads Integer. Number of parallel downloads.
+#' @param sleep_time Numeric. Seconds to sleep between download batches.
+#' @param multi_timeout Numeric. Timeout in seconds for multi-file downloads.
+#' @param max_retries Integer. Maximum number of retry attempts.
 #' @return Character vector of sample names that were successfully downloaded
 #'   or already cached.
 #' @export
 download_dashboard_images_bulk <- function(base_url, sample_names,
-                                           cache_dir = get_dashboard_cache_dir()) {
+                                           cache_dir = get_dashboard_cache_dir(),
+                                           parallel_downloads = 5, sleep_time = 2,
+                                           multi_timeout = 120, max_retries = 3) {
   dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
   dashboard_url <- paste0(sub("/+$", "", base_url), "/")
 
@@ -353,8 +386,10 @@ download_dashboard_images_bulk <- function(base_url, sample_names,
         samples = to_download,
         file_types = "zip",
         dest_dir = cache_dir,
-        parallel_downloads = 2,
-        sleep_time = 5,
+        parallel_downloads = parallel_downloads,
+        sleep_time = sleep_time,
+        multi_timeout = multi_timeout,
+        max_retries = max_retries,
         quiet = TRUE
       )
     }, error = function(e) {
@@ -392,4 +427,95 @@ download_dashboard_images_bulk <- function(base_url, sample_names,
   }, logical(1))
 
   sample_names[cached_ok]
+}
+
+#' Download a single PNG image from the Dashboard
+#'
+#' Downloads one PNG from the Dashboard's \code{/data/} endpoint.
+#' The image is saved to \code{dest_dir/sample_name/file_name}.
+#'
+#' @param base_url Character. Dashboard base URL.
+#' @param sample_name Character. Sample name (bin PID).
+#' @param roi_number Integer. ROI number to download.
+#' @param dest_dir Character. Destination directory.
+#' @param max_retries Integer. Maximum number of retry attempts.
+#' @return File path to the downloaded PNG, or NULL on failure.
+#' @export
+download_dashboard_image_single <- function(base_url, sample_name, roi_number,
+                                            dest_dir, max_retries = 3) {
+  file_name <- sprintf("%s_%05d.png", sample_name, roi_number)
+  dest_folder <- file.path(dest_dir, sample_name)
+  dest_path <- file.path(dest_folder, file_name)
+
+  if (file.exists(dest_path)) {
+    return(dest_path)
+  }
+
+  dir.create(dest_folder, recursive = TRUE, showWarnings = FALSE)
+
+  img_url <- paste0(sub("/+$", "", base_url), "/data/", file_name)
+
+  for (attempt in seq_len(max_retries)) {
+    result <- tryCatch({
+      response <- curl::curl_fetch_disk(img_url, dest_path,
+                                        handle = curl::new_handle())
+      if (response$status_code == 200 && file.exists(dest_path) &&
+          file.info(dest_path)$size > 0) {
+        return(dest_path)
+      }
+      # Non-200 status or empty file
+      if (file.exists(dest_path)) unlink(dest_path)
+      NULL
+    }, error = function(e) {
+      if (file.exists(dest_path)) unlink(dest_path)
+      NULL
+    })
+
+    if (!is.null(result)) return(result)
+    if (attempt < max_retries) Sys.sleep(0.5)
+  }
+
+  NULL
+}
+
+#' Download individual PNG images from the Dashboard
+#'
+#' Downloads specific PNG files from the Dashboard's \code{/data/} endpoint,
+#' one at a time. This is much faster than downloading entire zip archives
+#' when only a subset of ROIs are needed (e.g., class review mode).
+#'
+#' @param base_url Character. Dashboard base URL.
+#' @param file_names Character vector. PNG file names
+#'   (e.g., \code{"D20240716T000431_IFCB134_00108.png"}).
+#' @param dest_dir Character. Destination directory.
+#' @param max_retries Integer. Maximum number of retry attempts per image.
+#' @return Character vector of successfully downloaded file names.
+#' @export
+download_dashboard_images_individual <- function(base_url, file_names, dest_dir,
+                                                 max_retries = 3) {
+  dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
+
+  succeeded <- character()
+  for (fname in file_names) {
+    # Parse sample_name and roi_number from file_name
+    parts <- regmatches(fname, regexec("^(.+)_(\\d+)\\.png$", fname))[[1]]
+    if (length(parts) < 3) next
+
+    sample_name <- parts[2]
+    roi_number <- as.integer(parts[3])
+
+    result <- download_dashboard_image_single(
+      base_url = base_url,
+      sample_name = sample_name,
+      roi_number = roi_number,
+      dest_dir = dest_dir,
+      max_retries = max_retries
+    )
+
+    if (!is.null(result)) {
+      succeeded <- c(succeeded, fname)
+    }
+  }
+
+  succeeded
 }

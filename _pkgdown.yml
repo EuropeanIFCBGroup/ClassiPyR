@@ -94,6 +94,8 @@ reference:
   - list_dashboard_bins
   - download_dashboard_images
   - download_dashboard_images_bulk
+  - download_dashboard_image_single
+  - download_dashboard_images_individual
   - download_dashboard_adc
   - download_dashboard_autoclass
   - get_dashboard_cache_dir

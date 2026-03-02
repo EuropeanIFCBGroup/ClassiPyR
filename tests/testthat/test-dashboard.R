@@ -255,6 +255,179 @@ test_that("download_dashboard_images_bulk returns all when all cached", {
 })
 
 # ---------------------------------------------------------------------------
+# download_dashboard_image_single — cache-hit path (offline-safe)
+# ---------------------------------------------------------------------------
+
+test_that("download_dashboard_image_single returns cached file when it exists", {
+  tmp <- file.path(tempdir(), "dashboard_test_single_cache")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+
+  sample_name <- "D20160810T104734_IFCB110"
+  roi_number <- 42
+  file_name <- sprintf("%s_%05d.png", sample_name, roi_number)
+  dest_folder <- file.path(tmp, sample_name)
+  dir.create(dest_folder, recursive = TRUE)
+  dest_path <- file.path(dest_folder, file_name)
+  writeBin(charToRaw("fake png"), dest_path)
+
+  result <- download_dashboard_image_single(
+    base_url = "https://unused.example.com",
+    sample_name = sample_name,
+    roi_number = roi_number,
+    dest_dir = tmp
+  )
+  expect_equal(result, dest_path)
+})
+
+test_that("download_dashboard_image_single returns NULL on download failure", {
+  tmp <- file.path(tempdir(), "dashboard_test_single_fail")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+
+  result <- download_dashboard_image_single(
+    base_url = "https://this-host-does-not-exist.invalid",
+    sample_name = "D20160810T104734_IFCB110",
+    roi_number = 1,
+    dest_dir = tmp,
+    max_retries = 1
+  )
+  expect_null(result)
+})
+
+test_that("download_dashboard_image_single creates dest directory", {
+  tmp <- file.path(tempdir(), "dashboard_test_single_mkdir")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+
+  # Will fail to download but should still create the directory
+  result <- download_dashboard_image_single(
+    base_url = "https://this-host-does-not-exist.invalid",
+    sample_name = "D20160810T104734_IFCB110",
+    roi_number = 1,
+    dest_dir = tmp,
+    max_retries = 1
+  )
+  expect_null(result)
+  expect_true(dir.exists(file.path(tmp, "D20160810T104734_IFCB110")))
+})
+
+test_that("download_dashboard_image_single formats ROI number with 5 digits", {
+  tmp <- file.path(tempdir(), "dashboard_test_single_format")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+
+  sample_name <- "D20160810T104734_IFCB110"
+  # Pre-create the file with the expected 5-digit format
+  dest_folder <- file.path(tmp, sample_name)
+  dir.create(dest_folder, recursive = TRUE)
+  expected_file <- file.path(dest_folder, paste0(sample_name, "_00007.png"))
+  writeBin(charToRaw("fake png"), expected_file)
+
+  result <- download_dashboard_image_single(
+    base_url = "https://unused.example.com",
+    sample_name = sample_name,
+    roi_number = 7,
+    dest_dir = tmp
+  )
+  expect_equal(result, expected_file)
+})
+
+# ---------------------------------------------------------------------------
+# download_dashboard_images_individual — offline-safe
+# ---------------------------------------------------------------------------
+
+test_that("download_dashboard_images_individual returns cached files", {
+  tmp <- file.path(tempdir(), "dashboard_test_indiv_cache")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+
+  sample_name <- "D20160810T104734_IFCB110"
+  dest_folder <- file.path(tmp, sample_name)
+  dir.create(dest_folder, recursive = TRUE)
+
+  # Pre-create two files
+  f1 <- paste0(sample_name, "_00001.png")
+  f2 <- paste0(sample_name, "_00042.png")
+  writeBin(charToRaw("fake png 1"), file.path(dest_folder, f1))
+  writeBin(charToRaw("fake png 2"), file.path(dest_folder, f2))
+
+  result <- download_dashboard_images_individual(
+    base_url = "https://unused.example.com",
+    file_names = c(f1, f2),
+    dest_dir = tmp
+  )
+  expect_equal(sort(result), sort(c(f1, f2)))
+})
+
+test_that("download_dashboard_images_individual returns empty on all failures", {
+  tmp <- file.path(tempdir(), "dashboard_test_indiv_fail")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+
+  result <- download_dashboard_images_individual(
+    base_url = "https://this-host-does-not-exist.invalid",
+    file_names = c("D20160810T104734_IFCB110_00001.png",
+                   "D20160810T104734_IFCB110_00002.png"),
+    dest_dir = tmp,
+    max_retries = 1
+  )
+  expect_length(result, 0)
+})
+
+test_that("download_dashboard_images_individual handles mixed cached and uncached", {
+  tmp <- file.path(tempdir(), "dashboard_test_indiv_mixed")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+
+  sample_name <- "D20160810T104734_IFCB110"
+  dest_folder <- file.path(tmp, sample_name)
+  dir.create(dest_folder, recursive = TRUE)
+
+  # Pre-create only the first file
+  f1 <- paste0(sample_name, "_00001.png")
+  f2 <- paste0(sample_name, "_00099.png")
+  writeBin(charToRaw("fake png"), file.path(dest_folder, f1))
+
+  result <- download_dashboard_images_individual(
+    base_url = "https://this-host-does-not-exist.invalid",
+    file_names = c(f1, f2),
+    dest_dir = tmp,
+    max_retries = 1
+  )
+  expect_true(f1 %in% result)
+  expect_false(f2 %in% result)
+})
+
+test_that("download_dashboard_images_individual skips malformed file names", {
+  tmp <- file.path(tempdir(), "dashboard_test_indiv_malformed")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+
+  result <- download_dashboard_images_individual(
+    base_url = "https://unused.example.com",
+    file_names = c("not_a_valid_filename.txt", "also-bad"),
+    dest_dir = tmp,
+    max_retries = 1
+  )
+  expect_length(result, 0)
+})
+
+test_that("download_dashboard_images_individual handles files from multiple samples", {
+  tmp <- file.path(tempdir(), "dashboard_test_indiv_multi")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+
+  s1 <- "D20160810T104734_IFCB110"
+  s2 <- "D20160811T090000_IFCB110"
+  dir.create(file.path(tmp, s1), recursive = TRUE)
+  dir.create(file.path(tmp, s2), recursive = TRUE)
+
+  f1 <- paste0(s1, "_00001.png")
+  f2 <- paste0(s2, "_00005.png")
+  writeBin(charToRaw("fake"), file.path(tmp, s1, f1))
+  writeBin(charToRaw("fake"), file.path(tmp, s2, f2))
+
+  result <- download_dashboard_images_individual(
+    base_url = "https://unused.example.com",
+    file_names = c(f1, f2),
+    dest_dir = tmp
+  )
+  expect_equal(sort(result), sort(c(f1, f2)))
+})
+
+# ---------------------------------------------------------------------------
 # rescan_file_index — dashboard mode, offline-safe
 # ---------------------------------------------------------------------------
 
@@ -433,4 +606,63 @@ test_that("rescan_file_index works in dashboard mode with real API", {
   expect_equal(result$dashboard_dataset, DASHBOARD_DATASET)
   expect_true(length(result$sample_names) > 0)
   expect_true(DASHBOARD_SAMPLE %in% result$sample_names)
+})
+
+test_that("download_dashboard_image_single downloads a real PNG", {
+  skip_if_dashboard_unavailable()
+
+  tmp <- file.path(tempdir(), "dashboard_integ_single")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+
+  result <- download_dashboard_image_single(
+    base_url = DASHBOARD_BASE,
+    sample_name = DASHBOARD_SAMPLE,
+    roi_number = 1,
+    dest_dir = tmp
+  )
+
+  expect_false(is.null(result))
+  expect_true(file.exists(result))
+  expect_true(file.info(result)$size > 0)
+  expect_true(grepl("\\.png$", result))
+})
+
+test_that("download_dashboard_image_single uses cache on second call", {
+  skip_if_dashboard_unavailable()
+
+  tmp <- file.path(tempdir(), "dashboard_integ_single_cache")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+
+  r1 <- download_dashboard_image_single(DASHBOARD_BASE, DASHBOARD_SAMPLE, 1, tmp)
+  expect_false(is.null(r1))
+
+  r2 <- download_dashboard_image_single(DASHBOARD_BASE, DASHBOARD_SAMPLE, 1, tmp)
+  expect_equal(r1, r2)
+})
+
+test_that("download_dashboard_images_individual downloads real PNGs", {
+  skip_if_dashboard_unavailable()
+
+  tmp <- file.path(tempdir(), "dashboard_integ_individual")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+
+  file_names <- c(
+    paste0(DASHBOARD_SAMPLE, "_00001.png"),
+    paste0(DASHBOARD_SAMPLE, "_00002.png")
+  )
+
+  result <- download_dashboard_images_individual(
+    base_url = DASHBOARD_BASE,
+    file_names = file_names,
+    dest_dir = tmp
+  )
+
+  expect_true(length(result) > 0)
+  # At least the first ROI should exist
+  expect_true(file_names[1] %in% result)
+  # Verify the files actually exist on disk
+  for (f in result) {
+    sample_name <- sub("_\\d+\\.png$", "", f)
+    expect_true(file.exists(file.path(tmp, sample_name, f)))
+  }
 })

@@ -7,7 +7,11 @@
 download_dashboard_images_bulk(
   base_url,
   sample_names,
-  cache_dir = get_dashboard_cache_dir()
+  cache_dir = get_dashboard_cache_dir(),
+  parallel_downloads = 5,
+  sleep_time = 2,
+  multi_timeout = 120,
+  max_retries = 3
 )
 }
 \arguments{
@@ -16,6 +20,14 @@ download_dashboard_images_bulk(
 \item{sample_names}{Character vector. Sample names to download.}
 
 \item{cache_dir}{Character. Cache directory.}
+
+\item{parallel_downloads}{Integer. Number of parallel downloads.}
+
+\item{sleep_time}{Numeric. Seconds to sleep between download batches.}
+
+\item{multi_timeout}{Numeric. Timeout in seconds for multi-file downloads.}
+
+\item{max_retries}{Integer. Maximum number of retry attempts.}
 }
 \value{
 Character vector of sample names that were successfully downloaded
