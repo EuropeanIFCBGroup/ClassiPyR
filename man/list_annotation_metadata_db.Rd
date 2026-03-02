@@ -10,9 +10,9 @@ list_annotation_metadata_db(db_path)
 \item{db_path}{Path to the SQLite database file}
 }
 \value{
-A list with character vectors: \code{years}, \code{months}, and
-  \code{instruments}. Returns empty vectors if the database does not exist
-  or has no annotations.
+A list with character vectors: \code{years}, \code{months},
+  \code{instruments}, and \code{annotators}. Returns empty vectors if the
+  database does not exist or has no annotations.
 }
 \description{
 Extracts metadata from sample names in the annotations table for use as
@@ -26,5 +26,6 @@ meta <- list_annotation_metadata_db(db_path)
 meta$years       # e.g. c("2022", "2023")
 meta$months      # e.g. c("01", "06", "12")
 meta$instruments # e.g. c("IFCB134", "IFCB135")
+meta$annotators  # e.g. c("Jane", "imported")
 }
 }

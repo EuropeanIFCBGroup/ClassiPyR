@@ -2991,8 +2991,11 @@ server <- function(input, output, session) {
     month <- input$cr_month_select
     instrument <- input$cr_instrument_select
 
+    annotator <- input$cr_annotator_select
+
     classes_df <- list_classes_db(db_path, year = year, month = month,
-                                  instrument = instrument)
+                                  instrument = instrument,
+                                  annotator = annotator)
 
     if (nrow(classes_df) == 0) {
       updateSelectizeInput(session, "class_review_select",
@@ -3077,6 +3080,9 @@ server <- function(input, output, session) {
       updateSelectInput(session, "cr_instrument_select",
                         choices = c("All" = "all", setNames(meta$instruments, meta$instruments)),
                         selected = "all")
+      updateSelectInput(session, "cr_annotator_select",
+                        choices = c("All" = "all", setNames(meta$annotators, meta$annotators)),
+                        selected = "all")
 
       update_cr_class_list()
     } else {
@@ -3101,6 +3107,11 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
 
   observeEvent(input$cr_instrument_select, {
+    req(input$app_mode == "class_review")
+    update_cr_class_list()
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$cr_annotator_select, {
     req(input$app_mode == "class_review")
     update_cr_class_list()
   }, ignoreInit = TRUE)
@@ -3150,7 +3161,8 @@ server <- function(input, output, session) {
     annotations <- load_class_annotations_db(db_path, class_name,
                                               year = input$cr_year_select,
                                               month = input$cr_month_select,
-                                              instrument = input$cr_instrument_select)
+                                              instrument = input$cr_instrument_select,
+                                              annotator = input$cr_annotator_select)
 
     if (is.null(annotations) || nrow(annotations) == 0) {
       showNotification(paste("No annotations found for class:", class_name),

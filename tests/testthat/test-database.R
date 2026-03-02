@@ -1409,6 +1409,13 @@ test_that("list_classes_db filters by year, month, instrument", {
   all2 <- list_classes_db(db_path, year = "all", month = "all", instrument = "all")
   expect_equal(sum(all2$count), 5L)
 
+  # Filter by annotator
+  by_test <- list_classes_db(db_path, annotator = "test")
+  expect_equal(sum(by_test$count), 5L)
+
+  by_nobody <- list_classes_db(db_path, annotator = "nobody")
+  expect_equal(nrow(by_nobody), 0)
+
   unlink(db_dir, recursive = TRUE)
 })
 
@@ -1423,12 +1430,12 @@ test_that("load_class_annotations_db filters by year, month, instrument", {
                       data.frame(file_name = sprintf("D20230615T120000_IFCB134_%05d.png", 1:2),
                                  class_name = c("Diatom", "Diatom"),
                                  stringsAsFactors = FALSE),
-                      class2use, "test")
+                      class2use, "alice")
   save_annotations_db(db_path, "D20240815T120000_IFCB135",
                       data.frame(file_name = sprintf("D20240815T120000_IFCB135_%05d.png", 1:3),
                                  class_name = c("Diatom", "Diatom", "Diatom"),
                                  stringsAsFactors = FALSE),
-                      class2use, "test")
+                      class2use, "bob")
 
   # No filter — all 5 Diatom
   all <- load_class_annotations_db(db_path, "Diatom")
@@ -1442,6 +1449,16 @@ test_that("load_class_annotations_db filters by year, month, instrument", {
   # Filter by instrument
   i135 <- load_class_annotations_db(db_path, "Diatom", instrument = "IFCB135")
   expect_equal(nrow(i135), 3)
+
+  # Filter by annotator
+  by_alice <- load_class_annotations_db(db_path, "Diatom", annotator = "alice")
+  expect_equal(nrow(by_alice), 2)
+
+  by_bob <- load_class_annotations_db(db_path, "Diatom", annotator = "bob")
+  expect_equal(nrow(by_bob), 3)
+
+  by_nobody <- load_class_annotations_db(db_path, "Diatom", annotator = "nobody")
+  expect_null(by_nobody)
 
   # Filter with no matches
   none <- load_class_annotations_db(db_path, "Diatom", year = "2025")
@@ -1460,6 +1477,7 @@ test_that("list_annotation_metadata_db returns correct metadata", {
   expect_equal(meta$years, character())
   expect_equal(meta$months, character())
   expect_equal(meta$instruments, character())
+  expect_equal(meta$annotators, character())
 
   class2use <- c("Diatom", "Ciliate")
 
@@ -1467,17 +1485,18 @@ test_that("list_annotation_metadata_db returns correct metadata", {
                       data.frame(file_name = "D20230615T120000_IFCB134_00001.png",
                                  class_name = "Diatom",
                                  stringsAsFactors = FALSE),
-                      class2use, "test")
+                      class2use, "alice")
   save_annotations_db(db_path, "D20240815T120000_IFCB135",
                       data.frame(file_name = "D20240815T120000_IFCB135_00001.png",
                                  class_name = "Ciliate",
                                  stringsAsFactors = FALSE),
-                      class2use, "test")
+                      class2use, "bob")
 
   meta <- list_annotation_metadata_db(db_path)
   expect_equal(meta$years, c("2023", "2024"))
   expect_equal(meta$months, c("06", "08"))
   expect_equal(meta$instruments, c("IFCB134", "IFCB135"))
+  expect_equal(meta$annotators, c("alice", "bob"))
 
   unlink(db_dir, recursive = TRUE)
 })

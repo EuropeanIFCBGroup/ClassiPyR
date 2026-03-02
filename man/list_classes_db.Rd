@@ -4,7 +4,13 @@
 \alias{list_classes_db}
 \title{List all classes with counts in the annotations database}
 \usage{
-list_classes_db(db_path, year = NULL, month = NULL, instrument = NULL)
+list_classes_db(
+  db_path,
+  year = NULL,
+  month = NULL,
+  instrument = NULL,
+  annotator = NULL
+)
 }
 \arguments{
 \item{db_path}{Path to the SQLite database file}
@@ -18,6 +24,9 @@ or \code{NULL}, restricts to sample names with that month at positions 6-7.}
 \item{instrument}{Optional instrument filter (e.g. \code{"IFCB134"}). When
 not \code{"all"} or \code{NULL}, restricts to sample names ending with
 \code{_INSTRUMENT}.}
+
+\item{annotator}{Optional annotator name filter (e.g. \code{"Jane"}). When
+not \code{"all"} or \code{NULL}, restricts to annotations by that annotator.}
 }
 \value{
 Data frame with columns \code{class_name} and \code{count}, ordered

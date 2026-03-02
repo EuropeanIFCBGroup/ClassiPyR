@@ -488,6 +488,9 @@ ui <- page_sidebar(
                         choices = c("All" = "all"), width = "100%"))
       ),
 
+      selectInput("cr_annotator_select", "Annotator",
+                  choices = c("All" = "all"), width = "100%"),
+
       selectizeInput("class_review_select", "Select Class",
                      choices = NULL, width = "100%",
                      options = list(maxOptions = 1000)),

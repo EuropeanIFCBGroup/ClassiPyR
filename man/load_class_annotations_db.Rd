@@ -9,7 +9,8 @@ load_class_annotations_db(
   class_name,
   year = NULL,
   month = NULL,
-  instrument = NULL
+  instrument = NULL,
+  annotator = NULL
 )
 }
 \arguments{
@@ -22,6 +23,8 @@ load_class_annotations_db(
 \item{month}{Optional month filter (e.g. \code{"03"})}
 
 \item{instrument}{Optional instrument filter (e.g. \code{"IFCB134"})}
+
+\item{annotator}{Optional annotator name filter (e.g. \code{"Jane"})}
 }
 \value{
 Data frame with columns \code{sample_name}, \code{roi_number},

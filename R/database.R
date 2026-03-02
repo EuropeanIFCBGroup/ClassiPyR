@@ -738,6 +738,8 @@ export_all_db_to_png <- function(db_path, png_folder, roi_path_map,
 #' @param instrument Optional instrument filter (e.g. \code{"IFCB134"}). When
 #'   not \code{"all"} or \code{NULL}, restricts to sample names ending with
 #'   \code{_INSTRUMENT}.
+#' @param annotator Optional annotator name filter (e.g. \code{"Jane"}). When
+#'   not \code{"all"} or \code{NULL}, restricts to annotations by that annotator.
 #' @return Data frame with columns \code{class_name} and \code{count}, ordered
 #'   alphabetically by class name. Returns an empty data frame if the database
 #'   does not exist or has no annotations.
@@ -749,7 +751,7 @@ export_all_db_to_png <- function(db_path, png_folder, roi_path_map,
 #' classes_2023 <- list_classes_db(db_path, year = "2023")
 #' }
 list_classes_db <- function(db_path, year = NULL, month = NULL,
-                            instrument = NULL) {
+                            instrument = NULL, annotator = NULL) {
   empty <- data.frame(class_name = character(), count = integer(),
                       stringsAsFactors = FALSE)
 
@@ -765,7 +767,8 @@ list_classes_db <- function(db_path, year = NULL, month = NULL,
     return(empty)
   }
 
-  where <- build_sample_filter_clause(year, month, instrument)
+  where <- build_sample_filter_clause(year, month, instrument,
+                                       annotator = annotator)
 
   sql <- paste0(
     "SELECT class_name, COUNT(*) AS count FROM annotations",
@@ -791,6 +794,7 @@ list_classes_db <- function(db_path, year = NULL, month = NULL,
 #' @param year Optional year filter (e.g. \code{"2023"})
 #' @param month Optional month filter (e.g. \code{"03"})
 #' @param instrument Optional instrument filter (e.g. \code{"IFCB134"})
+#' @param annotator Optional annotator name filter (e.g. \code{"Jane"})
 #' @return Data frame with columns \code{sample_name}, \code{roi_number},
 #'   \code{class_name}, and \code{file_name}. Returns \code{NULL} if no
 #'   annotations match.
@@ -802,7 +806,8 @@ list_classes_db <- function(db_path, year = NULL, month = NULL,
 #' diatoms_2023 <- load_class_annotations_db(db_path, "Diatom", year = "2023")
 #' }
 load_class_annotations_db <- function(db_path, class_name, year = NULL,
-                                      month = NULL, instrument = NULL) {
+                                      month = NULL, instrument = NULL,
+                                      annotator = NULL) {
   if (!file.exists(db_path)) {
     return(NULL)
   }
@@ -810,7 +815,8 @@ load_class_annotations_db <- function(db_path, class_name, year = NULL,
   con <- dbConnect(SQLite(), db_path)
   on.exit(dbDisconnect(con), add = TRUE)
 
-  where <- build_sample_filter_clause(year, month, instrument)
+  where <- build_sample_filter_clause(year, month, instrument,
+                                       annotator = annotator)
   params <- c(list(class_name), where$params)
 
   rows <- dbGetQuery(con, paste0(
@@ -895,9 +901,9 @@ save_class_review_changes_db <- function(db_path, changes_df, annotator) {
 #' \code{DYYYYMMDDTHHMMSS_INSTRUMENT}.
 #'
 #' @param db_path Path to the SQLite database file
-#' @return A list with character vectors: \code{years}, \code{months}, and
-#'   \code{instruments}. Returns empty vectors if the database does not exist
-#'   or has no annotations.
+#' @return A list with character vectors: \code{years}, \code{months},
+#'   \code{instruments}, and \code{annotators}. Returns empty vectors if the
+#'   database does not exist or has no annotations.
 #' @export
 #' @examples
 #' \dontrun{
@@ -906,10 +912,11 @@ save_class_review_changes_db <- function(db_path, changes_df, annotator) {
 #' meta$years       # e.g. c("2022", "2023")
 #' meta$months      # e.g. c("01", "06", "12")
 #' meta$instruments # e.g. c("IFCB134", "IFCB135")
+#' meta$annotators  # e.g. c("Jane", "imported")
 #' }
 list_annotation_metadata_db <- function(db_path) {
   empty <- list(years = character(), months = character(),
-                instruments = character())
+                instruments = character(), annotators = character())
 
   if (!file.exists(db_path)) {
     return(empty)
@@ -927,15 +934,21 @@ list_annotation_metadata_db <- function(db_path) {
     "SELECT DISTINCT sample_name FROM annotations"
   )$sample_name
 
+  annotators <- sort(dbGetQuery(con,
+    "SELECT DISTINCT annotator FROM annotations WHERE annotator IS NOT NULL"
+  )$annotator)
+
   if (length(samples) == 0) {
-    return(empty)
+    return(list(years = character(), months = character(),
+                instruments = character(), annotators = annotators))
   }
 
   years <- sort(unique(substr(samples, 2, 5)))
   months <- sort(unique(substr(samples, 6, 7)))
   instruments <- sort(unique(sub(".*_", "", samples)))
 
-  list(years = years, months = months, instruments = instruments)
+  list(years = years, months = months, instruments = instruments,
+       annotators = annotators)
 }
 
 # Build WHERE clause fragments for sample_name filtering
@@ -947,7 +960,8 @@ list_annotation_metadata_db <- function(db_path) {
 #   `params` (list of bind values)
 # @keywords internal
 build_sample_filter_clause <- function(year = NULL, month = NULL,
-                                       instrument = NULL) {
+                                       instrument = NULL,
+                                       annotator = NULL) {
   conditions <- character()
   params <- list()
 
@@ -964,6 +978,11 @@ build_sample_filter_clause <- function(year = NULL, month = NULL,
   if (!is.null(instrument) && instrument != "all") {
     conditions <- c(conditions, "sample_name LIKE ?")
     params <- c(params, list(paste0("%_", instrument)))
+  }
+
+  if (!is.null(annotator) && annotator != "all") {
+    conditions <- c(conditions, "annotator = ?")
+    params <- c(params, list(annotator))
   }
 
   clause <- if (length(conditions) > 0) {
