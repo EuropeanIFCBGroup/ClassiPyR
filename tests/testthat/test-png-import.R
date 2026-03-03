@@ -279,17 +279,13 @@ test_that("import_png_folder_to_db handles empty folder", {
 # ===========================================================================
 
 test_that("scan_png_class_folder parses example_data/png correctly", {
-  example_png <- system.file("../example_data/png", package = "ClassiPyR")
 
-  # Fallback for development (not installed)
-  if (!nzchar(example_png) || !dir.exists(example_png)) {
-    example_png <- file.path(
-      testthat::test_path(), "..", "..", "example_data", "png"
-    )
-  }
-
+  example_png <- file.path(
+    testthat::test_path(), "test_data", "example_png"
+  )
+  
   skip_if_not(dir.exists(example_png), "example_data/png not available")
-
+  
   result <- scan_png_class_folder(example_png)
 
   expect_true(nrow(result$annotations) > 0)
