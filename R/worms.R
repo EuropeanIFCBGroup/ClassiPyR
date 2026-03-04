@@ -112,9 +112,11 @@ get_worms_col <- function(df, col) {
 pick_worms_match <- function(records_df) {
   if (is.null(records_df) || !nrow(records_df)) {
     return(list(
+      scientific_name = NA_character_,
       matched_name = NA_character_,
       accepted_name = NA_character_,
       aphia_id = NA_character_,
+      accepted_aphia_id = NA_character_,
       status = "unmatched",
       note = "No WoRMS match"
     ))
@@ -136,10 +138,16 @@ pick_worms_match <- function(records_df) {
   selected_sci <- sci[idx]
   selected_status <- status_col[idx]
 
+  query_aphia <- if (!is.na(selected_aphia) && selected_aphia > 0) {
+    as.character(as.integer(selected_aphia))
+  } else {
+    NA_character_
+  }
+
   accepted_aphia <- if (!is.na(selected_valid_aphia) && selected_valid_aphia > 0) {
     as.character(as.integer(selected_valid_aphia))
-  } else if (!is.na(selected_aphia) && selected_aphia > 0) {
-    as.character(as.integer(selected_aphia))
+  } else if (!is.na(query_aphia) && nzchar(query_aphia)) {
+    query_aphia
   } else {
     NA_character_
   }
@@ -154,9 +162,11 @@ pick_worms_match <- function(records_df) {
 
   if (is.na(accepted_aphia) || !nzchar(accepted_aphia)) {
     return(list(
+      scientific_name = selected_sci,
       matched_name = selected_sci,
       accepted_name = accepted_name,
       aphia_id = NA_character_,
+      accepted_aphia_id = NA_character_,
       status = "unmatched",
       note = "Matched record lacks AphiaID"
     ))
@@ -176,9 +186,11 @@ pick_worms_match <- function(records_df) {
   }
 
   list(
+    scientific_name = selected_sci,
     matched_name = selected_sci,
     accepted_name = accepted_name,
-    aphia_id = accepted_aphia,
+    aphia_id = if (!is.na(query_aphia) && nzchar(query_aphia)) query_aphia else accepted_aphia,
+    accepted_aphia_id = accepted_aphia,
     status = match_status,
     note = note
   )
@@ -195,8 +207,9 @@ pick_worms_match <- function(records_df) {
 #' @param raw_queries Character vector of query strings (same length as
 #'   \code{class_names}), typically class names or manual overrides.
 #' @return Data frame with columns:
-#'   \code{class_name}, \code{query_name}, \code{matched_name},
-#'   \code{accepted_name}, \code{aphia_id}, \code{status}, and \code{note}.
+#'   \code{class_name}, \code{query_name}, \code{scientific_name},
+#'   \code{matched_name}, \code{accepted_name}, \code{aphia_id}
+#'   (query AphiaID), \code{accepted_aphia_id}, \code{status}, and \code{note}.
 #' @export
 #' @examples
 #' \dontrun{
@@ -229,9 +242,11 @@ build_worms_match_rows <- function(class_names, raw_queries) {
       return(data.frame(
         class_name = cls,
         query_name = qry,
+        scientific_name = NA_character_,
         matched_name = NA_character_,
         accepted_name = NA_character_,
         aphia_id = NA_character_,
+        accepted_aphia_id = NA_character_,
         status = if (too_long) "skipped" else "unmatched",
         note = if (too_long) "Skipped: query longer than 80 characters" else "Empty query after sanitization",
         stringsAsFactors = FALSE
@@ -247,16 +262,18 @@ build_worms_match_rows <- function(class_names, raw_queries) {
       }
     }, error = function(e) NULL)
 
-    picked <- pick_worms_match(rec_df)
-    data.frame(
-      class_name = cls,
-      query_name = qry,
-      matched_name = picked$matched_name,
-      accepted_name = picked$accepted_name,
-      aphia_id = picked$aphia_id,
-      status = picked$status,
-      note = picked$note,
-      stringsAsFactors = FALSE
-    )
+      picked <- pick_worms_match(rec_df)
+      data.frame(
+        class_name = cls,
+        query_name = qry,
+        scientific_name = picked$scientific_name,
+        matched_name = picked$matched_name,
+        accepted_name = picked$accepted_name,
+        aphia_id = picked$aphia_id,
+        accepted_aphia_id = picked$accepted_aphia_id,
+        status = picked$status,
+        note = picked$note,
+        stringsAsFactors = FALSE
+      )
   }))
 }

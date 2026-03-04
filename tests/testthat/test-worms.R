@@ -51,7 +51,8 @@ test_that("pick_worms_match handles empty, accepted, and synonym records", {
   )
   synonym_res <- ClassiPyR:::pick_worms_match(synonym_df)
   expect_equal(synonym_res$status, "synonym")
-  expect_equal(synonym_res$aphia_id, "123")
+  expect_equal(synonym_res$aphia_id, "50")
+  expect_equal(synonym_res$accepted_aphia_id, "123")
   expect_equal(synonym_res$accepted_name, "Accepted name")
 })
 
@@ -154,8 +155,10 @@ test_that("build_worms_match_rows returns expected statuses", {
   rows <- build_worms_match_rows(class_names, raw_queries)
 
   expect_equal(nrow(rows), 3)
+  expect_true(all(c("scientific_name", "aphia_id", "accepted_aphia_id") %in% names(rows)))
   expect_equal(rows$status[1], "accepted")
   expect_equal(rows$aphia_id[1], "7")
+  expect_equal(rows$accepted_aphia_id[1], "7")
   expect_equal(rows$status[2], "unmatched")
   expect_equal(rows$status[3], "skipped")
 })

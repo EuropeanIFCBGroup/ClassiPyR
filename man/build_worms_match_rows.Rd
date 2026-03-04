@@ -14,8 +14,9 @@ build_worms_match_rows(class_names, raw_queries)
 }
 \value{
 Data frame with columns:
-  \code{class_name}, \code{query_name}, \code{matched_name},
-  \code{accepted_name}, \code{aphia_id}, \code{status}, and \code{note}.
+  \code{class_name}, \code{query_name}, \code{scientific_name},
+  \code{matched_name}, \code{accepted_name}, \code{aphia_id}
+  (query AphiaID), \code{accepted_aphia_id}, \code{status}, and \code{note}.
 }
 \description{
 Runs WoRMS lookup for one or more class names and returns a standardized

@@ -1674,19 +1674,30 @@ test_that("integration: WoRMS match rows round-trip into class_taxonomy table", 
   matched <- rows[!is.na(rows$aphia_id) & nzchar(rows$aphia_id), , drop = FALSE]
   map <- setNames(as.character(matched$aphia_id), as.character(matched$class_name))
   accepted <- setNames(as.character(matched$accepted_name), as.character(matched$class_name))
+  accepted_ids <- setNames(as.character(matched$accepted_aphia_id), as.character(matched$class_name))
+  scientific <- setNames(as.character(matched$scientific_name), as.character(matched$class_name))
 
-  ok <- save_class_taxonomy_db(db_path, map, accepted)
+  ok <- save_class_taxonomy_db(
+    db_path, map, accepted,
+    scientific_name_map = scientific,
+    accepted_aphia_map = accepted_ids
+  )
   expect_true(ok)
 
   loaded <- load_class_taxonomy_db(db_path)
-  expect_equal(loaded[["OldName"]], "20")
+  expect_equal(loaded[["OldName"]], "10")
   expect_equal(loaded[["Prorocentrum_micans"]], "30")
   expect_false("NoMatch" %in% names(loaded))
 
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
-  tax_rows <- DBI::dbGetQuery(con, "SELECT class_name, accepted_name FROM class_taxonomy")
+  tax_rows <- DBI::dbGetQuery(
+    con,
+    "SELECT class_name, accepted_name, accepted_aphia_id, scientific_name FROM class_taxonomy"
+  )
   expect_true(any(tax_rows$class_name == "OldName" & tax_rows$accepted_name == "AcceptedName"))
+  expect_true(any(tax_rows$class_name == "OldName" & tax_rows$accepted_aphia_id == "20"))
+  expect_true(any(tax_rows$class_name == "OldName" & tax_rows$scientific_name == "OldName"))
 
   unlink(db_dir, recursive = TRUE)
 })

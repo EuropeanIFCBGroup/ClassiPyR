@@ -245,6 +245,8 @@ server <- function(input, output, session) {
       if (length(x) == 0) return(invisible(TRUE))
 
       accepted_lookup <- setNames(character(0), character(0))
+      scientific_lookup <- setNames(character(0), character(0))
+      accepted_aphia_lookup <- setNames(character(0), character(0))
       if (!is.null(matches_df) && nrow(matches_df) > 0 &&
           all(c("class_name", "accepted_name") %in% names(matches_df))) {
         accepted_lookup <- setNames(
@@ -252,11 +254,33 @@ server <- function(input, output, session) {
           as.character(matches_df$class_name)
         )
       }
+      if (!is.null(matches_df) && nrow(matches_df) > 0 &&
+          all(c("class_name", "scientific_name") %in% names(matches_df))) {
+        scientific_lookup <- setNames(
+          as.character(matches_df$scientific_name),
+          as.character(matches_df$class_name)
+        )
+      } else if (!is.null(matches_df) && nrow(matches_df) > 0 &&
+                 all(c("class_name", "matched_name") %in% names(matches_df))) {
+        scientific_lookup <- setNames(
+          as.character(matches_df$matched_name),
+          as.character(matches_df$class_name)
+        )
+      }
+      if (!is.null(matches_df) && nrow(matches_df) > 0 &&
+          all(c("class_name", "accepted_aphia_id") %in% names(matches_df))) {
+        accepted_aphia_lookup <- setNames(
+          as.character(matches_df$accepted_aphia_id),
+          as.character(matches_df$class_name)
+        )
+      }
 
       ok <- ClassiPyR::save_class_taxonomy_db(
         db_path = db_path,
         class_aphia_map = x,
-        accepted_name_map = accepted_lookup
+        accepted_name_map = accepted_lookup,
+        scientific_name_map = scientific_lookup,
+        accepted_aphia_map = accepted_aphia_lookup
       )
       if (!isTRUE(ok)) {
         message("Could not save WoRMS map to database")

@@ -4,7 +4,13 @@
 \alias{save_class_taxonomy_db}
 \title{Save class taxonomy mappings to SQLite}
 \usage{
-save_class_taxonomy_db(db_path, class_aphia_map, accepted_name_map = NULL)
+save_class_taxonomy_db(
+  db_path,
+  class_aphia_map,
+  accepted_name_map = NULL,
+  scientific_name_map = NULL,
+  accepted_aphia_map = NULL
+)
 }
 \arguments{
 \item{db_path}{Path to the SQLite database file.}
@@ -13,6 +19,12 @@ save_class_taxonomy_db(db_path, class_aphia_map, accepted_name_map = NULL)
 
 \item{accepted_name_map}{Optional named character vector mapping class names
 to WoRMS accepted names.}
+
+\item{scientific_name_map}{Optional named character vector mapping class
+names to matched scientific names (query record).}
+
+\item{accepted_aphia_map}{Optional named character vector mapping class names
+to accepted WoRMS AphiaID values.}
 }
 \value{
 Logical \code{TRUE} on success, \code{FALSE} on failure.

@@ -66,7 +66,9 @@ init_db_schema <- function(con) {
     CREATE TABLE IF NOT EXISTS class_taxonomy (
       class_name TEXT PRIMARY KEY,
       aphia_id TEXT NOT NULL,
+      scientific_name TEXT,
       accepted_name TEXT,
+      accepted_aphia_id TEXT,
       updated_at TEXT DEFAULT (datetime('now'))
     )
   ")
@@ -75,6 +77,16 @@ init_db_schema <- function(con) {
   cols <- dbGetQuery(con, "PRAGMA table_info(annotations)")
   if (!"is_manual" %in% cols$name) {
     dbExecute(con, "ALTER TABLE annotations ADD COLUMN is_manual INTEGER NOT NULL DEFAULT 1")
+  }
+
+  tax_cols <- dbGetQuery(con, "PRAGMA table_info(class_taxonomy)")
+  if (nrow(tax_cols) > 0) {
+    if (!"scientific_name" %in% tax_cols$name) {
+      dbExecute(con, "ALTER TABLE class_taxonomy ADD COLUMN scientific_name TEXT")
+    }
+    if (!"accepted_aphia_id" %in% tax_cols$name) {
+      dbExecute(con, "ALTER TABLE class_taxonomy ADD COLUMN accepted_aphia_id TEXT")
+    }
   }
 
   invisible(NULL)
@@ -89,6 +101,10 @@ init_db_schema <- function(con) {
 #' @param class_aphia_map Named character vector mapping class names to AphiaID.
 #' @param accepted_name_map Optional named character vector mapping class names
 #'   to WoRMS accepted names.
+#' @param scientific_name_map Optional named character vector mapping class
+#'   names to matched scientific names (query record).
+#' @param accepted_aphia_map Optional named character vector mapping class names
+#'   to accepted WoRMS AphiaID values.
 #' @return Logical \code{TRUE} on success, \code{FALSE} on failure.
 #' @export
 #' @examples
@@ -99,7 +115,8 @@ init_db_schema <- function(con) {
 #'   class_aphia_map = c("Prorocentrum micans" = "109636")
 #' )
 #' }
-save_class_taxonomy_db <- function(db_path, class_aphia_map, accepted_name_map = NULL) {
+save_class_taxonomy_db <- function(db_path, class_aphia_map, accepted_name_map = NULL,
+                                   scientific_name_map = NULL, accepted_aphia_map = NULL) {
   if (length(class_aphia_map) == 0) {
     return(TRUE)
   }
@@ -132,18 +149,46 @@ save_class_taxonomy_db <- function(db_path, class_aphia_map, accepted_name_map =
         }
       }
 
+      scientific_name <- NA_character_
+      if (!is.null(scientific_name_map) && !is.null(names(scientific_name_map))) {
+        idx <- match(nm, names(scientific_name_map))
+        if (!is.na(idx)) {
+          scientific_name <- as.character(scientific_name_map[idx])[1]
+        }
+      }
+
+      accepted_aphia_id <- NA_character_
+      if (!is.null(accepted_aphia_map) && !is.null(names(accepted_aphia_map))) {
+        idx <- match(nm, names(accepted_aphia_map))
+        if (!is.na(idx)) {
+          accepted_aphia_id <- as.character(accepted_aphia_map[idx])[1]
+        }
+      }
+
       dbExecute(con, "
-        INSERT INTO class_taxonomy (class_name, aphia_id, accepted_name, updated_at)
-        VALUES (?, ?, ?, datetime('now'))
+        INSERT INTO class_taxonomy (
+          class_name, aphia_id, scientific_name, accepted_name, accepted_aphia_id, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
         ON CONFLICT(class_name) DO UPDATE SET
           aphia_id = excluded.aphia_id,
+          scientific_name = CASE
+            WHEN excluded.scientific_name IS NULL OR excluded.scientific_name = ''
+            THEN class_taxonomy.scientific_name
+            ELSE excluded.scientific_name
+          END,
           accepted_name = CASE
             WHEN excluded.accepted_name IS NULL OR excluded.accepted_name = ''
             THEN class_taxonomy.accepted_name
             ELSE excluded.accepted_name
           END,
+          accepted_aphia_id = CASE
+            WHEN excluded.accepted_aphia_id IS NULL OR excluded.accepted_aphia_id = ''
+            THEN class_taxonomy.accepted_aphia_id
+            ELSE excluded.accepted_aphia_id
+          END,
           updated_at = datetime('now')
-      ", params = list(nm, aphia, accepted_name))
+      ", params = list(nm, aphia, scientific_name, accepted_name, accepted_aphia_id))
     }
 
     dbExecute(con, "COMMIT")
