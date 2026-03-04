@@ -479,6 +479,7 @@ server <- function(input, output, session) {
 
       footer = tagList(
         modalButton("Cancel"),
+        actionButton("apply_settings", "Apply", class = "btn-outline-primary"),
         actionButton("save_settings", "Save Settings", class = "btn-primary")
       )
     ))
@@ -836,7 +837,7 @@ server <- function(input, output, session) {
     }
   )
   
-  observeEvent(input$save_settings, {
+  apply_settings <- function(close_modal = FALSE, notification = "Settings saved.") {
     # Check if folder paths actually changed (to avoid spurious resets)
     roi_changed <- !identical(config$roi_folder, input$cfg_roi_folder)
     csv_changed <- !identical(config$csv_folder, input$cfg_csv_folder)
@@ -892,8 +893,10 @@ server <- function(input, output, session) {
       prediction_model = input$cfg_prediction_model
     ))
 
-    removeModal()
-    showNotification("Settings saved.", type = "message")
+    if (close_modal) {
+      removeModal()
+    }
+    showNotification(notification, type = "message")
 
     # Only trigger sample rescan if folder paths actually changed
     if (paths_changed) {
@@ -903,6 +906,14 @@ server <- function(input, output, session) {
       }
       rescan_trigger(rescan_trigger() + 1)
     }
+  }
+
+  observeEvent(input$apply_settings, {
+    apply_settings(close_modal = FALSE, notification = "Settings applied.")
+  })
+
+  observeEvent(input$save_settings, {
+    apply_settings(close_modal = TRUE, notification = "Settings saved.")
   })
 
   # ============================================================================

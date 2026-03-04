@@ -21,6 +21,7 @@
 ## UI improvements
 
 - The **class list editor** now shows the number of annotated images per class in parentheses, queried from the SQLite database.
+- Added an **Apply** button in Settings to activate changes immediately without closing the dialog.
 
 # ClassiPyR 0.1.1
 
