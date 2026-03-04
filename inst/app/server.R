@@ -95,6 +95,31 @@ server <- function(input, output, session) {
     f <- function() get_browse_volumes(input[[input_id]])
     structure(f, class = c("dynamic_roots", "function"))
   }
+
+  # Disable browse buttons and notify when paths are invalid to prevent
+  # shinyFiles from opening on non-existent folders.
+  setup_path_validation <- function(input_id, button_id, label, notify_invalid = TRUE) {
+    last_invalid <- reactiveVal(NULL)
+    observeEvent(input[[input_id]], {
+      path <- input[[input_id]]
+      has_path <- !is.null(path) && nzchar(path)
+      is_valid <- !has_path || dir.exists(path)
+
+      if (is_valid) {
+        shinyjs::enable(button_id)
+        last_invalid(NULL)
+      } else {
+        shinyjs::disable(button_id)
+        if (notify_invalid && !identical(last_invalid(), path)) {
+          showNotification(
+            paste0(label, " does not exist. Please enter a valid folder."),
+            type = "error"
+          )
+          last_invalid(path)
+        }
+      }
+    }, ignoreInit = TRUE)
+  }
   
   # Load saved settings or use defaults
   load_settings <- function() {
@@ -497,6 +522,15 @@ server <- function(input, output, session) {
                  roots = make_dynamic_roots("cfg_db_folder"), session = session)
   shinyDirChoose(input, "browse_png_folder",
                  roots = make_dynamic_roots("cfg_png_output_folder"), session = session)
+  shinyDirChoose(input, "browse_png_import_folder",
+                 roots = make_dynamic_roots("cfg_png_import_folder"), session = session)
+
+  setup_path_validation("cfg_csv_folder", "browse_csv_folder", "Classification Folder")
+  setup_path_validation("cfg_roi_folder", "browse_roi_folder", "ROI Data Folder")
+  setup_path_validation("cfg_output_folder", "browse_output_folder", "Output Folder", notify_invalid = FALSE)
+  setup_path_validation("cfg_db_folder", "browse_db_folder", "Database Folder", notify_invalid = FALSE)
+  setup_path_validation("cfg_png_output_folder", "browse_png_folder", "PNG Output Folder", notify_invalid = FALSE)
+  setup_path_validation("cfg_png_import_folder", "browse_png_import_folder", "PNG Import Folder")
   
   # Browse button observers - parse selection and update text input
   observeEvent(input$browse_csv_folder, {
@@ -1310,10 +1344,6 @@ server <- function(input, output, session) {
       )
     ))
   })
-
-  # Set up shinyFiles dir chooser for PNG import folder
-  shinyDirChoose(input, "browse_png_import_folder",
-                 roots = make_dynamic_roots("cfg_png_import_folder"), session = session)
 
   observeEvent(input$browse_png_import_folder, {
     if (!is.integer(input$browse_png_import_folder)) {
