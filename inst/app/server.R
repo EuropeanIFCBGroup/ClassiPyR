@@ -24,7 +24,12 @@
 # - R/sample_saving.R: Saving annotations and statistics
 
 server <- function(input, output, session) {
-  
+
+  # Shared constant for month abbreviation lookups
+  MONTH_NAMES <- c("01" = "Jan", "02" = "Feb", "03" = "Mar", "04" = "Apr",
+                   "05" = "May", "06" = "Jun", "07" = "Jul", "08" = "Aug",
+                   "09" = "Sep", "10" = "Oct", "11" = "Nov", "12" = "Dec")
+
   # ============================================================================
   # REACTIVE VALUES
   # Core application state managed as reactive values
@@ -2835,11 +2840,7 @@ server <- function(input, output, session) {
       months <- unique(substr(year_samples, 6, 7))
       months <- sort(months)
 
-      # Create month names
-      month_names <- c("01" = "Jan", "02" = "Feb", "03" = "Mar", "04" = "Apr",
-                       "05" = "May", "06" = "Jun", "07" = "Jul", "08" = "Aug",
-                       "09" = "Sep", "10" = "Oct", "11" = "Nov", "12" = "Dec")
-      month_labels <- month_names[months]
+      month_labels <- MONTH_NAMES[months]
 
       # Auto-select first month for better UX with large sample lists
       first_month <- if (length(months) > 0) months[1] else "all"
@@ -3186,229 +3187,228 @@ server <- function(input, output, session) {
     }
   }
   
-  # Main sample loading function
+  # Main sample loading function (dispatches to dashboard or local mode)
   load_sample_data <- function(sample_name) {
     req(rv$class2use)
+    if (identical(config$data_source, "dashboard")) {
+      load_sample_dashboard(sample_name)
+    } else {
+      load_sample_local(sample_name)
+    }
+  }
 
-    is_dashboard <- identical(config$data_source, "dashboard")
+  # Helper: update class filter and store common state after loading
+  finalize_sample_load <- function(classifications, sample_name, mode_message) {
+    rv$original_classifications <- classifications
+    rv$classifications <- classifications
+    rv$current_sample <- sample_name
+    rv$selected_images <- character()
+    rv$current_page <- 1
+    rv$changes_log <- create_empty_changes_log()
 
-    # --- Dashboard mode ---
-    if (is_dashboard) {
-      # Check session cache first
-      if (sample_name %in% names(rv$session_cache)) {
-        return(load_from_cache(sample_name, NULL))
+    available_classes <- sort(unique(classifications$class_name))
+    unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
+    display_names <- sapply(available_classes, function(cls) {
+      if (cls %in% unmatched) paste0("\u26A0 ", cls) else cls
+    })
+    updateSelectInput(session, "class_filter",
+                      choices = c("All" = "all", setNames(available_classes, display_names)))
+
+    if (!is.null(mode_message)) {
+      actual_count <- nrow(rv$classifications)
+      showNotification(paste0(mode_message, ": ", actual_count, " images"), type = "message")
+    }
+  }
+
+  # Dashboard mode sample loading
+  load_sample_dashboard <- function(sample_name) {
+    if (sample_name %in% names(rv$session_cache)) {
+      return(load_from_cache(sample_name, NULL))
+    }
+
+    tryCatch({
+      parsed <- parse_dashboard_url(config$dashboard_url)
+      cache_dir <- get_dashboard_cache_dir()
+      db_path <- get_db_path(config$db_folder)
+      has_db_annotation <- sample_name %in% list_annotated_samples_db(db_path)
+
+      # Download PNG images from dashboard
+      png_folder <- withProgress(message = "Downloading images...", {
+        download_dashboard_images(parsed$base_url, sample_name, cache_dir,
+                                  parallel_downloads = config$dashboard_parallel_downloads,
+                                  sleep_time = config$dashboard_sleep_time,
+                                  multi_timeout = config$dashboard_multi_timeout,
+                                  max_retries = config$dashboard_max_retries)
+      })
+
+      if (is.null(png_folder)) {
+        showNotification(paste("Failed to download images for:", sample_name), type = "error")
+        return(FALSE)
       }
 
-      tryCatch({
-        parsed <- parse_dashboard_url(config$dashboard_url)
-        cache_dir <- get_dashboard_cache_dir()
-        db_path <- get_db_path(config$db_folder)
-        has_db_annotation <- sample_name %in% list_annotated_samples_db(db_path)
+      # Download ADC on demand for dimensions (graceful fallback to NA)
+      adc_path <- download_dashboard_adc(parsed$base_url, sample_name, cache_dir,
+                                         parallel_downloads = config$dashboard_parallel_downloads,
+                                         sleep_time = config$dashboard_sleep_time,
+                                         multi_timeout = config$dashboard_multi_timeout,
+                                         max_retries = config$dashboard_max_retries)
+      roi_dims <- if (!is.null(adc_path) && file.exists(adc_path)) {
+        tryCatch(read_roi_dimensions(adc_path), error = function(e) NULL)
+      } else {
+        NULL
+      }
 
-        # Download PNG images from dashboard
-        png_folder <- withProgress(message = "Downloading images...", {
-          download_dashboard_images(parsed$base_url, sample_name, cache_dir,
-                                    parallel_downloads = config$dashboard_parallel_downloads,
-                                    sleep_time = config$dashboard_sleep_time,
-                                    multi_timeout = config$dashboard_multi_timeout,
-                                    max_retries = config$dashboard_max_retries)
-        })
+      mode_message <- NULL
+      classifications <- NULL
 
-        if (is.null(png_folder)) {
-          showNotification(paste("Failed to download images for:", sample_name), type = "error")
-          return(FALSE)
+      if (has_db_annotation) {
+        if (is.null(roi_dims)) {
+          png_files <- list.files(file.path(png_folder, sample_name), pattern = "\\.png$")
+          roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", png_files))
+          roi_dims <- data.frame(
+            roi_number = roi_numbers,
+            width = NA_real_, height = NA_real_, area = NA_real_
+          )
         }
+        classifications <- load_from_db(db_path, sample_name, roi_dims)
+        rv$is_annotation_mode <- TRUE
+        rv$has_both_modes <- isTRUE(config$dashboard_autoclass)
+        rv$using_manual_mode <- TRUE
+        mode_message <- if (rv$has_both_modes) "Manual mode (switch available)" else "Resumed"
+      }
 
-        # Download ADC on demand for dimensions (graceful fallback to NA)
-        adc_path <- download_dashboard_adc(parsed$base_url, sample_name, cache_dir,
-                                           parallel_downloads = config$dashboard_parallel_downloads,
-                                           sleep_time = config$dashboard_sleep_time,
-                                           multi_timeout = config$dashboard_multi_timeout,
-                                           max_retries = config$dashboard_max_retries)
-        roi_dims <- if (!is.null(adc_path) && file.exists(adc_path)) {
-          tryCatch(read_roi_dimensions(adc_path), error = function(e) NULL)
-        } else {
-          NULL
-        }
+      # Try local classification files if csv_folder is configured
+      if (is.null(classifications)) {
+        csv_folder <- config$csv_folder
+        has_csv_folder <- !is.null(csv_folder) && nzchar(csv_folder) && dir.exists(csv_folder)
 
-        mode_message <- NULL
-        classifications <- NULL
+        if (has_csv_folder) {
+          local_csv <- list.files(csv_folder, pattern = paste0("^", sample_name, "\\.csv$"),
+                                  recursive = TRUE, full.names = TRUE)
+          local_h5 <- list.files(csv_folder, pattern = paste0("^", sample_name, ".*\\.h5$"),
+                                 recursive = TRUE, full.names = TRUE)
+          local_mat <- list.files(csv_folder, pattern = paste0("^", sample_name, ".*\\.mat$"),
+                                  recursive = TRUE, full.names = TRUE)
 
-        if (has_db_annotation) {
-          # Load from existing DB annotations
-          if (is.null(roi_dims)) {
-            # Build minimal roi_dims from PNG files
-            png_files <- list.files(file.path(png_folder, sample_name), pattern = "\\.png$")
-            roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", png_files))
-            roi_dims <- data.frame(
-              roi_number = roi_numbers,
-              width = NA_real_, height = NA_real_, area = NA_real_
-            )
-          }
-          classifications <- load_from_db(db_path, sample_name, roi_dims)
-          rv$is_annotation_mode <- TRUE
-          rv$has_both_modes <- isTRUE(config$dashboard_autoclass)
-          rv$using_manual_mode <- TRUE
-          mode_message <- if (rv$has_both_modes) "Manual mode (switch available)" else "Resumed"
-
-        }
-
-        # Try local classification files if csv_folder is configured
-        if (is.null(classifications)) {
-          csv_folder <- config$csv_folder
-          has_csv_folder <- !is.null(csv_folder) && nzchar(csv_folder) && dir.exists(csv_folder)
-
-          if (has_csv_folder) {
-            # Search for classification files in csv_folder (recursive)
-            local_csv <- list.files(csv_folder, pattern = paste0("^", sample_name, "\\.csv$"),
-                                    recursive = TRUE, full.names = TRUE)
-            local_h5 <- list.files(csv_folder, pattern = paste0("^", sample_name, ".*\\.h5$"),
-                                   recursive = TRUE, full.names = TRUE)
-            local_mat <- list.files(csv_folder, pattern = paste0("^", sample_name, ".*\\.mat$"),
-                                    recursive = TRUE, full.names = TRUE)
-
-            if (length(local_csv) > 0) {
-              classifications <- load_from_csv(local_csv[1], use_threshold = config$use_threshold)
-              rv$is_annotation_mode <- FALSE
-              rv$has_both_modes <- FALSE
-              rv$using_manual_mode <- FALSE
-              threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
-              mode_message <- paste0("Validation mode (Local CSV, ", threshold_text, ")")
-            } else if (length(local_h5) > 0) {
-              classifications <- load_from_h5(
-                local_h5[1], sample_name, roi_dims,
-                use_threshold = config$use_threshold
-              )
-              rv$is_annotation_mode <- FALSE
-              rv$has_both_modes <- FALSE
-              rv$using_manual_mode <- FALSE
-              threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
-              mode_message <- paste0("Validation mode (Local H5, ", threshold_text, ")")
-            } else if (length(local_mat) > 0) {
-              classifications <- load_from_classifier_mat(
-                local_mat[1], sample_name, rv$class2use, roi_dims,
-                use_threshold = config$use_threshold
-              )
-              rv$is_annotation_mode <- FALSE
-              rv$has_both_modes <- FALSE
-              rv$using_manual_mode <- FALSE
-              threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
-              mode_message <- paste0("Validation mode (Local MAT, ", threshold_text, ")")
-            }
-          }
-        }
-
-        if (is.null(classifications) && isTRUE(config$dashboard_autoclass)) {
-          # Try dashboard autoclass for validation mode (fallback)
-          autoclass <- withProgress(message = "Downloading auto-classifications...", {
-            download_dashboard_autoclass(parsed$base_url, sample_name, cache_dir,
-                                        parallel_downloads = config$dashboard_parallel_downloads,
-                                        sleep_time = config$dashboard_sleep_time,
-                                        multi_timeout = config$dashboard_multi_timeout,
-                                        max_retries = config$dashboard_max_retries)
-          })
-
-          if (!is.null(autoclass) && nrow(autoclass) > 0) {
-            # Merge with ROI dimensions if available
-            if (!is.null(roi_dims)) {
-              roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", autoclass$file_name))
-              dim_data <- lapply(roi_numbers, function(rn) {
-                idx <- which(roi_dims$roi_number == rn)
-                if (length(idx) > 0) {
-                  list(width = roi_dims$width[idx], height = roi_dims$height[idx],
-                       area = roi_dims$area[idx])
-                } else {
-                  list(width = NA_real_, height = NA_real_, area = NA_real_)
-                }
-              })
-              autoclass$width <- vapply(dim_data, `[[`, numeric(1), "width")
-              autoclass$height <- vapply(dim_data, `[[`, numeric(1), "height")
-              autoclass$roi_area <- vapply(dim_data, `[[`, numeric(1), "area")
-            } else {
-              autoclass$width <- NA_real_
-              autoclass$height <- NA_real_
-              autoclass$roi_area <- NA_real_
-            }
-
-            classifications <- autoclass
+          if (length(local_csv) > 0) {
+            classifications <- load_from_csv(local_csv[1], use_threshold = config$use_threshold)
             rv$is_annotation_mode <- FALSE
             rv$has_both_modes <- FALSE
             rv$using_manual_mode <- FALSE
-            mode_message <- "Validation mode (Dashboard autoclass)"
-          }
-        }
-
-        if (is.null(classifications)) {
-          # NEW ANNOTATION - no existing annotations or autoclass
-          png_files <- list.files(file.path(png_folder, sample_name), pattern = "\\.png$")
-          if (length(png_files) == 0) {
-            showNotification(paste("No images found for:", sample_name), type = "error")
-            return(FALSE)
-          }
-
-          roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", png_files))
-
-          if (is.null(roi_dims)) {
-            roi_dims <- data.frame(
-              roi_number = roi_numbers,
-              width = NA_real_, height = NA_real_, area = NA_real_
+            threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
+            mode_message <- paste0("Validation mode (Local CSV, ", threshold_text, ")")
+          } else if (length(local_h5) > 0) {
+            classifications <- load_from_h5(
+              local_h5[1], sample_name, roi_dims,
+              use_threshold = config$use_threshold
             )
+            rv$is_annotation_mode <- FALSE
+            rv$has_both_modes <- FALSE
+            rv$using_manual_mode <- FALSE
+            threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
+            mode_message <- paste0("Validation mode (Local H5, ", threshold_text, ")")
+          } else if (length(local_mat) > 0) {
+            classifications <- load_from_classifier_mat(
+              local_mat[1], sample_name, rv$class2use, roi_dims,
+              use_threshold = config$use_threshold
+            )
+            rv$is_annotation_mode <- FALSE
+            rv$has_both_modes <- FALSE
+            rv$using_manual_mode <- FALSE
+            threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
+            mode_message <- paste0("Validation mode (Local MAT, ", threshold_text, ")")
+          }
+        }
+      }
+
+      if (is.null(classifications) && isTRUE(config$dashboard_autoclass)) {
+        autoclass <- withProgress(message = "Downloading auto-classifications...", {
+          download_dashboard_autoclass(parsed$base_url, sample_name, cache_dir,
+                                      parallel_downloads = config$dashboard_parallel_downloads,
+                                      sleep_time = config$dashboard_sleep_time,
+                                      multi_timeout = config$dashboard_multi_timeout,
+                                      max_retries = config$dashboard_max_retries)
+        })
+
+        if (!is.null(autoclass) && nrow(autoclass) > 0) {
+          if (!is.null(roi_dims)) {
+            roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", autoclass$file_name))
+            dim_data <- lapply(roi_numbers, function(rn) {
+              idx <- which(roi_dims$roi_number == rn)
+              if (length(idx) > 0) {
+                list(width = roi_dims$width[idx], height = roi_dims$height[idx],
+                     area = roi_dims$area[idx])
+              } else {
+                list(width = NA_real_, height = NA_real_, area = NA_real_)
+              }
+            })
+            autoclass$width <- vapply(dim_data, `[[`, numeric(1), "width")
+            autoclass$height <- vapply(dim_data, `[[`, numeric(1), "height")
+            autoclass$roi_area <- vapply(dim_data, `[[`, numeric(1), "area")
+          } else {
+            autoclass$width <- NA_real_
+            autoclass$height <- NA_real_
+            autoclass$roi_area <- NA_real_
           }
 
-          classifications <- create_new_classifications(sample_name, roi_dims)
-          rv$is_annotation_mode <- TRUE
+          classifications <- autoclass
+          rv$is_annotation_mode <- FALSE
           rv$has_both_modes <- FALSE
-          rv$using_manual_mode <- TRUE
-          mode_message <- "New annotation"
+          rv$using_manual_mode <- FALSE
+          mode_message <- "Validation mode (Dashboard autoclass)"
+        }
+      }
+
+      if (is.null(classifications)) {
+        png_files <- list.files(file.path(png_folder, sample_name), pattern = "\\.png$")
+        if (length(png_files) == 0) {
+          showNotification(paste("No images found for:", sample_name), type = "error")
+          return(FALSE)
         }
 
-        # Store state
-        rv$original_classifications <- classifications
-        rv$classifications <- classifications
-        rv$current_sample <- sample_name
-        rv$selected_images <- character()
-        rv$current_page <- 1
-        rv$changes_log <- create_empty_changes_log()
+        roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", png_files))
 
-        # Set temp_png_folder to the parent (preserves path structure for gallery)
-        if (!is.null(rv$temp_png_folder) && dir.exists(rv$temp_png_folder) &&
-            !startsWith(rv$temp_png_folder, cache_dir)) {
-          unlink(rv$temp_png_folder, recursive = TRUE)
-        }
-        rv$temp_png_folder <- png_folder
-
-        # Filter to actually extracted PNGs
-        extracted_folder <- file.path(png_folder, sample_name)
-        if (dir.exists(extracted_folder)) {
-          extracted_files <- list.files(extracted_folder, pattern = "\\.png$")
-          rv$classifications <- rv$classifications[rv$classifications$file_name %in% extracted_files, ]
-          rv$original_classifications <- rv$original_classifications[
-            rv$original_classifications$file_name %in% extracted_files, ]
+        if (is.null(roi_dims)) {
+          roi_dims <- data.frame(
+            roi_number = roi_numbers,
+            width = NA_real_, height = NA_real_, area = NA_real_
+          )
         }
 
-        # Update class filter
-        available_classes <- sort(unique(rv$classifications$class_name))
-        unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
-        display_names <- sapply(available_classes, function(cls) {
-          if (cls %in% unmatched) paste0("\u26A0 ", cls) else cls
-        })
-        updateSelectInput(session, "class_filter",
-                          choices = c("All" = "all", setNames(available_classes, display_names)))
+        classifications <- create_new_classifications(sample_name, roi_dims)
+        rv$is_annotation_mode <- TRUE
+        rv$has_both_modes <- FALSE
+        rv$using_manual_mode <- TRUE
+        mode_message <- "New annotation"
+      }
 
-        if (!is.null(mode_message)) {
-          actual_count <- nrow(rv$classifications)
-          showNotification(paste0(mode_message, ": ", actual_count, " images"), type = "message")
-        }
+      finalize_sample_load(classifications, sample_name, mode_message)
 
-        return(TRUE)
-      }, error = function(e) {
-        showNotification(paste("Error loading sample:", e$message), type = "error")
-        return(FALSE)
-      })
-    }
+      # Set temp_png_folder to the parent (preserves path structure for gallery)
+      if (!is.null(rv$temp_png_folder) && dir.exists(rv$temp_png_folder) &&
+          !startsWith(rv$temp_png_folder, cache_dir)) {
+        unlink(rv$temp_png_folder, recursive = TRUE)
+      }
+      rv$temp_png_folder <- png_folder
 
-    # --- Local mode ---
+      # Filter to actually extracted PNGs
+      extracted_folder <- file.path(png_folder, sample_name)
+      if (dir.exists(extracted_folder)) {
+        extracted_files <- list.files(extracted_folder, pattern = "\\.png$")
+        rv$classifications <- rv$classifications[rv$classifications$file_name %in% extracted_files, ]
+        rv$original_classifications <- rv$original_classifications[
+          rv$original_classifications$file_name %in% extracted_files, ]
+      }
 
+      return(TRUE)
+    }, error = function(e) {
+      showNotification(paste("Error loading sample:", e$message), type = "error")
+      return(FALSE)
+    })
+  }
+
+  # Local mode sample loading
+  load_sample_local <- function(sample_name) {
     # Find classification files (priority: CSV > H5 > MAT)
     csv_path <- find_csv_file(sample_name)
     classifier_h5_path <- find_classifier_h5(sample_name)
@@ -3438,17 +3438,13 @@ server <- function(input, output, session) {
       has_existing_annotation <- has_db_annotation || has_mat_annotation
       has_classification <- has_csv || has_classifier_h5 || has_classifier_mat
 
-      # Track if sample has both modes available
       rv$has_both_modes <- has_existing_annotation && has_classification
-      rv$using_manual_mode <- has_existing_annotation  # Default to manual if available
+      rv$using_manual_mode <- has_existing_annotation
 
-      # Variable to hold mode message for notification (shown after filtering)
       mode_message <- NULL
 
       # Priority: Manual annotation > Classification > New annotation
-      # Within manual annotations: SQLite first (faster), then .mat fallback
       if (has_existing_annotation) {
-        # ANNOTATION MODE - from existing manual annotation (priority when both exist)
         if (!file.exists(adc_path)) {
           showNotification(paste("ADC file not found:", adc_path), type = "error")
           return(FALSE)
@@ -3466,14 +3462,12 @@ server <- function(input, output, session) {
         mode_message <- if (rv$has_both_modes) "Manual mode (switch available)" else "Resumed"
 
       } else if (has_csv) {
-        # VALIDATION MODE - from CSV
         classifications <- load_from_csv(csv_path, use_threshold = config$use_threshold)
         rv$is_annotation_mode <- FALSE
         threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
         mode_message <- paste0("Validation mode (CSV, ", threshold_text, ")")
 
       } else if (has_classifier_h5) {
-        # VALIDATION MODE - from classifier H5 file
         if (!file.exists(adc_path)) {
           showNotification(paste("ADC file not found:", adc_path), type = "error")
           return(FALSE)
@@ -3490,7 +3484,6 @@ server <- function(input, output, session) {
         mode_message <- paste0("Validation mode (H5, ", threshold_text, ")")
 
       } else if (has_classifier_mat) {
-        # VALIDATION MODE - from classifier MAT file
         if (!file.exists(adc_path)) {
           showNotification(paste("ADC file not found:", adc_path), type = "error")
           return(FALSE)
@@ -3507,7 +3500,6 @@ server <- function(input, output, session) {
         mode_message <- paste0("Validation mode (MAT, ", threshold_text, ")")
 
       } else {
-        # NEW ANNOTATION
         if (!file.exists(adc_path)) {
           showNotification(paste("ADC file not found:", adc_path), type = "error")
           return(FALSE)
@@ -3520,22 +3512,7 @@ server <- function(input, output, session) {
         mode_message <- "New annotation"
       }
 
-      # Store state
-      rv$original_classifications <- classifications
-      rv$classifications <- classifications
-      rv$current_sample <- sample_name
-      rv$selected_images <- character()
-      rv$current_page <- 1
-      rv$changes_log <- create_empty_changes_log()
-
-      # Update class filter with warnings for unmatched classes
-      available_classes <- sort(unique(classifications$class_name))
-      unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
-      display_names <- sapply(available_classes, function(cls) {
-        if (cls %in% unmatched) paste0("\u26A0 ", cls) else cls
-      })
-      updateSelectInput(session, "class_filter",
-                        choices = c("All" = "all", setNames(available_classes, display_names)))
+      finalize_sample_load(classifications, sample_name, mode_message)
 
       # Extract images (notification shown after filtering with correct count)
       extract_sample_images(sample_name, roi_path, classifications, mode_message = mode_message)
@@ -4134,10 +4111,6 @@ server <- function(input, output, session) {
 
     year_val <- input$cr_year_select
 
-    month_names <- c("01" = "Jan", "02" = "Feb", "03" = "Mar", "04" = "Apr",
-                     "05" = "May", "06" = "Jun", "07" = "Jul", "08" = "Aug",
-                     "09" = "Sep", "10" = "Oct", "11" = "Nov", "12" = "Dec")
-
     if (!is.null(year_val) && year_val != "all") {
       # Get samples for this year to extract available months/instruments
       con <- DBI::dbConnect(RSQLite::SQLite(), get_db_path(config$db_folder))
@@ -4148,7 +4121,7 @@ server <- function(input, output, session) {
       )$sample_name
 
       months <- sort(unique(substr(year_samples, 6, 7)))
-      month_labels <- month_names[months]
+      month_labels <- MONTH_NAMES[months]
       updateSelectInput(session, "cr_month_select",
                         choices = c("All" = "all", setNames(months, month_labels)),
                         selected = "all")
@@ -4165,7 +4138,7 @@ server <- function(input, output, session) {
                         selected = selected_instrument)
     } else {
       months <- meta$months
-      month_labels <- month_names[months]
+      month_labels <- MONTH_NAMES[months]
       updateSelectInput(session, "cr_month_select",
                         choices = c("All" = "all", setNames(months, month_labels)),
                         selected = "all")
@@ -4183,14 +4156,10 @@ server <- function(input, output, session) {
       db_path <- get_db_path(config$db_folder)
       meta <- list_annotation_metadata_db(db_path)
 
-      month_names <- c("01" = "Jan", "02" = "Feb", "03" = "Mar", "04" = "Apr",
-                       "05" = "May", "06" = "Jun", "07" = "Jul", "08" = "Aug",
-                       "09" = "Sep", "10" = "Oct", "11" = "Nov", "12" = "Dec")
-
       updateSelectInput(session, "cr_year_select",
                         choices = c("All" = "all", setNames(meta$years, meta$years)),
                         selected = "all")
-      month_labels <- month_names[meta$months]
+      month_labels <- MONTH_NAMES[meta$months]
       updateSelectInput(session, "cr_month_select",
                         choices = c("All" = "all", setNames(meta$months, month_labels)),
                         selected = "all")

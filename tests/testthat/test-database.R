@@ -12,6 +12,7 @@ test_that("get_db_path returns correct path", {
 test_that("save_annotations_db creates database with correct schema", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   classifications <- data.frame(
@@ -49,13 +50,12 @@ test_that("save_annotations_db creates database with correct schema", {
   expect_equal(nrow(class_list), length(class2use))
   expect_equal(class_list$class_name, class2use)
   expect_equal(class_list$class_index, seq_along(class2use))
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("save_annotations_db returns FALSE for empty classifications", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   result <- save_annotations_db(db_path, "sample",
@@ -66,13 +66,12 @@ test_that("save_annotations_db returns FALSE for empty classifications", {
 
   result2 <- save_annotations_db(db_path, "sample", NULL, c("unclassified"), "TestUser")
   expect_false(result2)
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("save_annotations_db upserts (re-saving replaces data)", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   sample_name <- "D20230101T120000_IFCB134"
@@ -104,13 +103,12 @@ test_that("save_annotations_db upserts (re-saving replaces data)", {
   expect_equal(nrow(annotations), 1)
   expect_equal(annotations$class_name, "Ciliate")
   expect_equal(annotations$annotator, "User2")
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("load_annotations_db returns correct data frame format", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   sample_name <- "D20230101T120000_IFCB134"
@@ -142,13 +140,12 @@ test_that("load_annotations_db returns correct data frame format", {
   # Should be sorted by area descending
   expect_equal(result$roi_area, c(15000, 8000, 4800))
   expect_equal(result$class_name, c("Ciliate", "Diatom", "Diatom"))
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("load_annotations_db returns NULL for missing sample", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   roi_dims <- data.frame(
@@ -169,13 +166,12 @@ test_that("load_annotations_db returns NULL for missing sample", {
 
   result2 <- load_annotations_db(db_path, "nonexistent_sample", roi_dims)
   expect_null(result2)
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("list_annotated_samples_db returns correct sample names", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   # Empty / non-existent database
@@ -196,13 +192,12 @@ test_that("list_annotated_samples_db returns correct sample names", {
 
   samples <- list_annotated_samples_db(db_path)
   expect_equal(sort(samples), c("sample_A", "sample_B"))
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("round-trip: save then load returns identical data", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   sample_name <- "D20230101T120000_IFCB134"
@@ -240,13 +235,12 @@ test_that("round-trip: save then load returns identical data", {
   expect_equal(loaded$width, expected$width)
   expect_equal(loaded$height, expected$height)
   expect_equal(loaded$roi_area, expected$roi_area)
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("load_from_db delegates to load_annotations_db", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   sample_name <- "D20230101T120000_IFCB134"
@@ -268,13 +262,12 @@ test_that("load_from_db delegates to load_annotations_db", {
   expect_s3_class(result, "data.frame")
   expect_equal(nrow(result), 1)
   expect_equal(result$class_name, "Diatom")
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("update_annotator changes annotator for a single sample", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   sample_name <- "D20230101T120000_IFCB134"
@@ -297,13 +290,12 @@ test_that("update_annotator changes annotator for a single sample", {
     "SELECT DISTINCT annotator FROM annotations WHERE sample_name = ?",
     params = list(sample_name))
   expect_equal(rows$annotator, "NewUser")
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("update_annotator changes multiple samples", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   class2use <- c("unclassified", "Diatom")
@@ -327,13 +319,12 @@ test_that("update_annotator changes multiple samples", {
   on.exit(DBI::dbDisconnect(con))
   rows <- DBI::dbGetQuery(con, "SELECT DISTINCT annotator FROM annotations")
   expect_equal(rows$annotator, "SharedUser")
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("update_annotator returns 0 for non-existent sample", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   save_annotations_db(db_path, "existing",
@@ -348,13 +339,12 @@ test_that("update_annotator returns 0 for non-existent sample", {
   # Mix of existing and non-existing
   counts2 <- update_annotator(db_path, c("existing", "nonexistent"), "NewUser")
   expect_equal(counts2, c(existing = 1L, nonexistent = 0L))
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("update_annotator validates inputs", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   save_annotations_db(db_path, "sample",
@@ -376,8 +366,6 @@ test_that("update_annotator validates inputs", {
   # Empty sample_names returns empty vector
   counts <- update_annotator(db_path, character(0), "X")
   expect_length(counts, 0)
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("import_mat_to_db migrates data correctly", {
@@ -411,6 +399,7 @@ test_that("import_mat_to_db migrates data correctly", {
   # Now import the MAT file into a fresh database
   db_dir2 <- tempfile("db_import_")
   dir.create(db_dir2)
+  on.exit(unlink(c(db_dir, db_dir2, mat_dir), recursive = TRUE), add = TRUE)
   db_path2 <- get_db_path(db_dir2)
 
   result <- import_mat_to_db(test_mat, db_path2, sample_name, "migrated")
@@ -419,8 +408,6 @@ test_that("import_mat_to_db migrates data correctly", {
   # Verify data was imported
   samples <- list_annotated_samples_db(db_path2)
   expect_true(sample_name %in% samples)
-
-  unlink(c(db_dir, db_dir2, mat_dir), recursive = TRUE)
 })
 
 test_that("import_mat_to_db returns FALSE for missing file", {
@@ -456,6 +443,7 @@ test_that("export_db_to_mat creates valid .mat file", {
 
   mat_dir <- tempfile("mat_")
   dir.create(mat_dir)
+  on.exit(unlink(c(db_dir, mat_dir), recursive = TRUE), add = TRUE)
 
   result <- export_db_to_mat(db_path, sample_name, mat_dir)
   expect_true(result)
@@ -468,13 +456,12 @@ test_that("export_db_to_mat creates valid .mat file", {
   expect_equal(nrow(classlist), 4)
   # class indices: Diatom=2, Ciliate=3, Diatom=2, Dinoflagellate=4
   expect_equal(classlist[, 2], c(2, 3, 2, 4))
-
-  unlink(c(db_dir, mat_dir), recursive = TRUE)
 })
 
 test_that("export_db_to_mat returns FALSE for missing sample", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   # Create DB with one sample
@@ -489,8 +476,6 @@ test_that("export_db_to_mat returns FALSE for missing sample", {
     "No annotations found for sample"
   )
   expect_false(result)
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("export_db_to_mat returns FALSE for non-existent database", {
@@ -505,6 +490,7 @@ test_that("export_db_to_mat returns FALSE when class list is missing", {
   # Create a DB with annotations but manually remove the class_lists entries
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   sample_name <- "D20230101T120000_IFCB134"
@@ -528,8 +514,6 @@ test_that("export_db_to_mat returns FALSE when class list is missing", {
     "No class list found"
   )
   expect_false(result)
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("import_all_mat_to_db returns zero counts for empty folder", {
@@ -537,14 +521,13 @@ test_that("import_all_mat_to_db returns zero counts for empty folder", {
   dir.create(mat_dir)
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(c(mat_dir, db_dir), recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   result <- import_all_mat_to_db(mat_dir, db_path)
   expect_equal(result$success, 0L)
   expect_equal(result$failed, 0L)
   expect_equal(result$skipped, 0L)
-
-  unlink(c(mat_dir, db_dir), recursive = TRUE)
 })
 
 test_that("import_all_mat_to_db excludes _class and class2use files", {
@@ -557,19 +540,19 @@ test_that("import_all_mat_to_db excludes _class and class2use files", {
   # Create files that should be excluded
   file.create(file.path(mat_dir, "sample_A_class_v1.mat"))
   file.create(file.path(mat_dir, "class2use_manual.mat"))
+  on.exit(unlink(c(mat_dir, db_dir), recursive = TRUE), add = TRUE)
 
   result <- import_all_mat_to_db(mat_dir, db_path)
   # All files are filtered out, so nothing to import
   expect_equal(result$success, 0L)
   expect_equal(result$failed, 0L)
   expect_equal(result$skipped, 0L)
-
-  unlink(c(mat_dir, db_dir), recursive = TRUE)
 })
 
 test_that("export_all_db_to_mat returns zero counts for empty database", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   # Create empty database (no annotations)
@@ -579,13 +562,12 @@ test_that("export_all_db_to_mat returns zero counts for empty database", {
   result <- export_all_db_to_mat(db_path, tempdir())
   expect_equal(result$success, 0L)
   expect_equal(result$failed, 0L)
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("export_all_db_to_png returns zero counts for empty database", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   # Create empty database
@@ -596,8 +578,6 @@ test_that("export_all_db_to_png returns zero counts for empty database", {
   expect_equal(result$success, 0L)
   expect_equal(result$failed, 0L)
   expect_equal(result$skipped, 0L)
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("export_db_to_png returns FALSE for missing database", {
@@ -618,6 +598,7 @@ test_that("import_all_mat_to_db imports multiple files and returns correct count
   dir.create(mat_dir)
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(c(mat_dir, db_dir), recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   class2use <- c("unclassified", "Diatom", "Ciliate")
@@ -656,8 +637,6 @@ test_that("import_all_mat_to_db imports multiple files and returns correct count
   result2 <- import_all_mat_to_db(mat_dir, db_path, "test")
   expect_equal(result2$success, 0L)
   expect_equal(result2$skipped, 2L)
-
-  unlink(c(mat_dir, db_dir), recursive = TRUE)
 })
 
 test_that("export_all_db_to_mat exports multiple samples", {
@@ -684,6 +663,7 @@ test_that("export_all_db_to_mat exports multiple samples", {
 
   mat_dir <- tempfile("mat_")
   dir.create(mat_dir)
+  on.exit(unlink(c(db_dir, mat_dir), recursive = TRUE), add = TRUE)
 
   result <- export_all_db_to_mat(db_path, mat_dir)
 
@@ -691,8 +671,6 @@ test_that("export_all_db_to_mat exports multiple samples", {
   expect_equal(result$failed, 0L)
   expect_true(file.exists(file.path(mat_dir, "sample_X.mat")))
   expect_true(file.exists(file.path(mat_dir, "sample_Y.mat")))
-
-  unlink(c(db_dir, mat_dir), recursive = TRUE)
 })
 
 test_that("round-trip: DB -> .mat -> DB produces matching data", {
@@ -722,6 +700,7 @@ test_that("round-trip: DB -> .mat -> DB produces matching data", {
   # Import back to a fresh DB
   db_dir2 <- tempfile("db2_")
   dir.create(db_dir2)
+  on.exit(unlink(c(db_dir, db_dir2, mat_dir), recursive = TRUE), add = TRUE)
   db_path2 <- get_db_path(db_dir2)
 
   mat_path <- file.path(mat_dir, paste0(sample_name, ".mat"))
@@ -742,8 +721,6 @@ test_that("round-trip: DB -> .mat -> DB produces matching data", {
 
   expect_equal(nrow(rows1), nrow(rows2))
   expect_equal(rows1$class_name, rows2$class_name)
-
-  unlink(c(db_dir, db_dir2, mat_dir), recursive = TRUE)
 })
 
 test_that("export_db_to_png extracts images into class subfolders", {
@@ -768,6 +745,7 @@ test_that("export_db_to_png extracts images into class subfolders", {
 
   png_dir <- tempfile("png_")
   dir.create(png_dir)
+  on.exit(unlink(c(db_dir, png_dir), recursive = TRUE), add = TRUE)
 
   result <- export_db_to_png(db_path, sample_name, roi_path, png_dir)
   expect_true(result)
@@ -781,8 +759,6 @@ test_that("export_db_to_png extracts images into class subfolders", {
   ciliate_files <- list.files(file.path(png_dir, "Ciliate"), pattern = "\\.png$")
   expect_equal(length(diatom_files), 2)
   expect_equal(length(ciliate_files), 2)
-
-  unlink(c(db_dir, png_dir), recursive = TRUE)
 })
 
 test_that("export_db_to_png skip_class excludes specified classes", {
@@ -807,6 +783,7 @@ test_that("export_db_to_png skip_class excludes specified classes", {
 
   png_dir <- tempfile("png_")
   dir.create(png_dir)
+  on.exit(unlink(c(db_dir, png_dir), recursive = TRUE), add = TRUE)
 
   result <- export_db_to_png(db_path, sample_name, roi_path, png_dir,
                              skip_class = "unclassified")
@@ -822,8 +799,6 @@ test_that("export_db_to_png skip_class excludes specified classes", {
   ciliate_files <- list.files(file.path(png_dir, "Ciliate"), pattern = "\\.png$")
   expect_equal(length(diatom_files), 2)
   expect_equal(length(ciliate_files), 1)
-
-  unlink(c(db_dir, png_dir), recursive = TRUE)
 })
 
 test_that("export_db_to_png skip_class with all ROIs skipped returns TRUE", {
@@ -848,6 +823,7 @@ test_that("export_db_to_png skip_class with all ROIs skipped returns TRUE", {
 
   png_dir <- tempfile("png_")
   dir.create(png_dir)
+  on.exit(unlink(c(db_dir, png_dir, roi_path), recursive = TRUE), add = TRUE)
 
   result <- export_db_to_png(db_path, sample_name, roi_path, png_dir,
                              skip_class = "unclassified")
@@ -855,8 +831,6 @@ test_that("export_db_to_png skip_class with all ROIs skipped returns TRUE", {
 
   # No class subfolders should be created
   expect_equal(length(list.dirs(png_dir, recursive = FALSE)), 0)
-
-  unlink(c(db_dir, png_dir, roi_path), recursive = TRUE)
 })
 
 test_that("export_db_to_png returns FALSE for missing sample", {
@@ -874,19 +848,19 @@ test_that("export_db_to_png returns FALSE for missing sample", {
   # Need a real file for roi_path since the function checks existence first
   roi_path <- tempfile(fileext = ".roi")
   file.create(roi_path)
+  on.exit(unlink(c(db_dir, roi_path), recursive = TRUE), add = TRUE)
 
   expect_warning(
     result <- export_db_to_png(db_path, "nonexistent_sample", roi_path, tempdir()),
     "No annotations found for sample"
   )
   expect_false(result)
-
-  unlink(c(db_dir, roi_path), recursive = TRUE)
 })
 
 test_that("export_db_to_png returns FALSE for missing ROI file", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   save_annotations_db(db_path, "sample_A",
@@ -900,8 +874,6 @@ test_that("export_db_to_png returns FALSE for missing ROI file", {
     "ROI file not found"
   )
   expect_false(result)
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("export_all_db_to_png exports multiple samples and skips missing ROIs", {
@@ -931,6 +903,7 @@ test_that("export_all_db_to_png exports multiple samples and skips missing ROIs"
 
   png_dir <- tempfile("png_")
   dir.create(png_dir)
+  on.exit(unlink(c(db_dir, png_dir), recursive = TRUE), add = TRUE)
 
   roi_map <- list("D20220522T000439_IFCB134" = roi_path)
 
@@ -940,8 +913,6 @@ test_that("export_all_db_to_png exports multiple samples and skips missing ROIs"
   expect_equal(result$failed, 0L)
   expect_equal(result$skipped, 1L)
   expect_true(dir.exists(file.path(png_dir, "Diatom")))
-
-  unlink(c(db_dir, png_dir), recursive = TRUE)
 })
 
 test_that("create_ecotaxa_inventory_txt writes inventory with required columns", {
@@ -969,6 +940,7 @@ test_that("create_ecotaxa_inventory_txt writes inventory with required columns",
 
   png_dir <- tempfile("png_")
   dir.create(png_dir)
+  on.exit(unlink(c(db_dir, png_dir), recursive = TRUE), add = TRUE)
   export_db_to_png(db_path, sample_name, roi_path, png_dir)
 
   written <- ClassiPyR:::create_ecotaxa_inventory_txt(png_dir, db_path)
@@ -999,8 +971,6 @@ test_that("create_ecotaxa_inventory_txt writes inventory with required columns",
   expect_equal(inv$object_aphiaid[2], "12345")
   expect_equal(inv$object_annotation_hierarchy[2], "Bacillariophyceae")
   expect_equal(inv$object_roi_number[2], "2")
-
-  unlink(c(db_dir, png_dir), recursive = TRUE)
 })
 
 test_that("export_all_db_to_zip exports PNGs and calls ifcb_zip_pngs with txt", {
@@ -1024,6 +994,7 @@ test_that("export_all_db_to_zip exports PNGs and calls ifcb_zip_pngs with txt", 
   roi_map <- list("D20220522T000439_IFCB134" = roi_path)
   zip_path <- file.path(tempdir(), paste0("classipyr_test_", as.integer(Sys.time()), ".zip"))
   if (file.exists(zip_path)) file.remove(zip_path)
+  on.exit(unlink(c(db_dir, zip_path), recursive = TRUE), add = TRUE)
 
   got_include_txt <- NA
   got_readme <- NA_character_
@@ -1053,13 +1024,12 @@ test_that("export_all_db_to_zip exports PNGs and calls ifcb_zip_pngs with txt", 
   expect_true(isTRUE(got_include_txt))
   expect_true(nzchar(got_readme))
   expect_true(any(grepl("^Diatom/ecotaxa_Diatom\\.tsv$", got_tsv)))
-
-  unlink(c(db_dir, zip_path), recursive = TRUE)
 })
 
 test_that("save_annotations_db stores is_manual flags", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   sample_name <- "D20230101T120000_IFCB134"
@@ -1085,13 +1055,12 @@ test_that("save_annotations_db stores is_manual flags", {
 
   expect_equal(rows$is_manual, c(1L, 0L, 1L))
   expect_equal(rows$class_name, c("Diatom", "unclassified", "Ciliate"))
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("save_annotations_db defaults is_manual to 1", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   sample_name <- "D20230101T120000_IFCB134"
@@ -1113,13 +1082,12 @@ test_that("save_annotations_db defaults is_manual to 1", {
     params = list(sample_name))
 
   expect_true(all(rows$is_manual == 1L))
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("schema migration adds is_manual to existing DB", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   # Create a database with the OLD schema (no is_manual column)
@@ -1161,8 +1129,6 @@ test_that("schema migration adds is_manual to existing DB", {
   row <- DBI::dbGetQuery(con2,
     "SELECT is_manual FROM annotations WHERE sample_name = 'sample_old'")
   expect_equal(row$is_manual, 1L)
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("import_mat_to_db reads class2use_manual from .mat", {
@@ -1184,6 +1150,7 @@ test_that("import_mat_to_db reads class2use_manual from .mat", {
 
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(c(mat_dir, db_dir), recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   result <- import_mat_to_db(mat_path, db_path, "test_sample")
@@ -1201,8 +1168,6 @@ test_that("import_mat_to_db reads class2use_manual from .mat", {
   ann <- DBI::dbGetQuery(con,
     "SELECT roi_number, class_name FROM annotations WHERE sample_name = 'test_sample' ORDER BY roi_number")
   expect_equal(ann$class_name, c("Diatom", "Ciliate", "unclassified"))
-
-  unlink(c(mat_dir, db_dir), recursive = TRUE)
 })
 
 test_that("import_mat_to_db preserves NaN as is_manual=0", {
@@ -1224,6 +1189,7 @@ test_that("import_mat_to_db preserves NaN as is_manual=0", {
 
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(c(mat_dir, db_dir), recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   result <- import_mat_to_db(mat_path, db_path, "test_nan")
@@ -1237,8 +1203,6 @@ test_that("import_mat_to_db preserves NaN as is_manual=0", {
 
   expect_equal(rows$is_manual, c(1L, 0L, 1L, 0L))
   expect_equal(rows$class_name, c("Diatom", "unclassified", "Ciliate", "unclassified"))
-
-  unlink(c(mat_dir, db_dir), recursive = TRUE)
 })
 
 test_that("export_db_to_mat restores NaN for is_manual=0 rows", {
@@ -1264,6 +1228,7 @@ test_that("export_db_to_mat restores NaN for is_manual=0 rows", {
 
   mat_dir <- tempfile("mat_")
   dir.create(mat_dir)
+  on.exit(unlink(c(db_dir, mat_dir), recursive = TRUE), add = TRUE)
 
   result <- export_db_to_mat(db_path, sample_name, mat_dir)
   expect_true(result)
@@ -1276,8 +1241,6 @@ test_that("export_db_to_mat restores NaN for is_manual=0 rows", {
   expect_true(is.nan(classlist[2, 2]))  # unreviewed -> NaN
   expect_equal(classlist[3, 2], 3)   # Ciliate
   expect_true(is.nan(classlist[4, 2]))  # unreviewed -> NaN
-
-  unlink(c(db_dir, mat_dir), recursive = TRUE)
 })
 
 test_that("full roundtrip: .mat -> SQLite -> .mat preserves NaN and class list", {
@@ -1308,6 +1271,7 @@ test_that("full roundtrip: .mat -> SQLite -> .mat preserves NaN and class list",
   # Export back to .mat
   export_dir <- tempfile("mat_export_")
   dir.create(export_dir)
+  on.exit(unlink(c(mat_dir, db_dir, export_dir), recursive = TRUE), add = TRUE)
   export_db_to_mat(db_path, "roundtrip_sample", export_dir)
 
   # Read back and compare
@@ -1331,8 +1295,6 @@ test_that("full roundtrip: .mat -> SQLite -> .mat preserves NaN and class list",
                    info = paste("ROI", i, "index mismatch"))
     }
   }
-
-  unlink(c(mat_dir, db_dir, export_dir), recursive = TRUE)
 })
 
 # ============================================================================
@@ -1342,6 +1304,7 @@ test_that("full roundtrip: .mat -> SQLite -> .mat preserves NaN and class list",
 test_that("list_classes_db returns correct class counts", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   # Non-existent database returns empty data frame
@@ -1368,13 +1331,12 @@ test_that("list_classes_db returns correct class counts", {
   expect_equal(nrow(result), 2)  # Ciliate and Diatom
   expect_equal(result$class_name, c("Ciliate", "Diatom"))  # alphabetical
   expect_equal(result$count, c(2L, 3L))
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("load_class_annotations_db returns correct file_names", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   class2use <- c("unclassified", "Diatom", "Ciliate")
@@ -1408,13 +1370,12 @@ test_that("load_class_annotations_db returns correct file_names", {
   # Non-existent database returns NULL
   result3 <- load_class_annotations_db("/nonexistent/db.sqlite", "Diatom")
   expect_null(result3)
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("save_class_review_changes_db updates only targeted rows", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   class2use <- c("unclassified", "Diatom", "Ciliate", "Dinoflagellate")
@@ -1465,13 +1426,12 @@ test_that("save_class_review_changes_db updates only targeted rows", {
     "SELECT class_name, annotator FROM annotations WHERE sample_name = 'sample_B' AND roi_number = 2")
   expect_equal(row_b2$class_name, "Diatom")
   expect_equal(row_b2$annotator, "Reviewer")
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("list_classes_db filters by year, month, instrument", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   class2use <- c("Diatom", "Ciliate")
@@ -1528,13 +1488,12 @@ test_that("list_classes_db filters by year, month, instrument", {
 
   by_nobody <- list_classes_db(db_path, annotator = "nobody")
   expect_equal(nrow(by_nobody), 0)
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("load_class_annotations_db filters by year, month, instrument", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   class2use <- c("Diatom", "Ciliate")
@@ -1576,13 +1535,12 @@ test_that("load_class_annotations_db filters by year, month, instrument", {
   # Filter with no matches
   none <- load_class_annotations_db(db_path, "Diatom", year = "2025")
   expect_null(none)
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("list_annotation_metadata_db returns correct metadata", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   # Non-existent database
@@ -1610,13 +1568,12 @@ test_that("list_annotation_metadata_db returns correct metadata", {
   expect_equal(meta$months, c("06", "08"))
   expect_equal(meta$instruments, c("IFCB134", "IFCB135"))
   expect_equal(meta$annotators, c("alice", "bob"))
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("save_class_review_changes_db handles empty input", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   # NULL input
@@ -1626,25 +1583,23 @@ test_that("save_class_review_changes_db handles empty input", {
   empty_df <- data.frame(sample_name = character(), roi_number = integer(),
                          new_class_name = character(), stringsAsFactors = FALSE)
   expect_equal(save_class_review_changes_db(db_path, empty_df, "test"), 0L)
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("load_class_taxonomy_db returns empty map for missing database", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   out <- load_class_taxonomy_db(db_path)
   expect_type(out, "character")
   expect_length(out, 0)
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("save_class_taxonomy_db creates and persists class taxonomy mappings", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   map <- c(
@@ -1670,13 +1625,12 @@ test_that("save_class_taxonomy_db creates and persists class taxonomy mappings",
   expect_equal(nrow(rows), 2)
   expect_true("accepted_name" %in% names(rows))
   expect_true(any(rows$class_name == "Alexandrium tamarense" & rows$accepted_name == "Alexandrium catenella"))
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("save_class_taxonomy_db upserts and preserves accepted_name when new one is empty", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   ok1 <- save_class_taxonomy_db(
@@ -1700,13 +1654,12 @@ test_that("save_class_taxonomy_db upserts and preserves accepted_name when new o
   expect_equal(nrow(row), 1)
   expect_equal(as.character(row$aphia_id[1]), "222")
   expect_equal(as.character(row$accepted_name[1]), "Accepted A")
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("save_class_taxonomy_db handles duplicate class names by keeping last", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   dup_map <- c("Taxon B" = "100", "Taxon B" = "200")
@@ -1720,13 +1673,12 @@ test_that("save_class_taxonomy_db handles duplicate class names by keeping last"
   on.exit(DBI::dbDisconnect(con), add = TRUE)
   n_rows <- DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM class_taxonomy WHERE class_name = 'Taxon B'")$n[1]
   expect_equal(as.integer(n_rows), 1L)
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("save_class_taxonomy_db returns TRUE for empty map and does not error", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   ok <- save_class_taxonomy_db(db_path, setNames(character(0), character(0)))
@@ -1735,13 +1687,12 @@ test_that("save_class_taxonomy_db returns TRUE for empty map and does not error"
   # DB may or may not exist; loading should still be safe and empty.
   loaded <- load_class_taxonomy_db(db_path)
   expect_length(loaded, 0)
-
-  unlink(db_dir, recursive = TRUE)
 })
 
 test_that("integration: WoRMS match rows round-trip into class_taxonomy table", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
   db_path <- get_db_path(db_dir)
 
   mock_api <- function(query, marine_only = FALSE) {
@@ -1811,6 +1762,4 @@ test_that("integration: WoRMS match rows round-trip into class_taxonomy table", 
   expect_true(any(tax_rows$class_name == "OldName" & tax_rows$accepted_name == "AcceptedName"))
   expect_true(any(tax_rows$class_name == "OldName" & tax_rows$accepted_aphia_id == "20"))
   expect_true(any(tax_rows$class_name == "OldName" & tax_rows$scientific_name == "OldName"))
-
-  unlink(db_dir, recursive = TRUE)
 })

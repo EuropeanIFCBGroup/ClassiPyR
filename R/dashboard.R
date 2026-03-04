@@ -192,6 +192,16 @@ download_dashboard_images <- function(base_url, sample_name,
     dir.create(png_subfolder, recursive = TRUE, showWarnings = FALSE)
     utils::unzip(zip_path, exdir = png_subfolder)
 
+    # Validate extracted paths stay within exdir (ZIP Slip prevention)
+    extracted <- list.files(png_subfolder, recursive = TRUE, full.names = TRUE)
+    resolved_exdir <- normalizePath(png_subfolder, mustWork = FALSE)
+    for (f in extracted) {
+      if (!startsWith(normalizePath(f, mustWork = FALSE), resolved_exdir)) {
+        unlink(png_subfolder, recursive = TRUE)
+        stop("ZIP archive contains path traversal entry")
+      }
+    }
+
     # Clean up zip file
     unlink(zip_path)
     # Also clean up the date folder if empty
@@ -422,7 +432,18 @@ download_dashboard_images_bulk <- function(base_url, sample_names,
 
       png_subfolder <- file.path(cache_dir, sn, sn)
       dir.create(png_subfolder, recursive = TRUE, showWarnings = FALSE)
-      tryCatch(utils::unzip(zip_path, exdir = png_subfolder), error = function(e) NULL)
+      tryCatch({
+        utils::unzip(zip_path, exdir = png_subfolder)
+        # Validate extracted paths stay within exdir (ZIP Slip prevention)
+        extracted <- list.files(png_subfolder, recursive = TRUE, full.names = TRUE)
+        resolved_exdir <- normalizePath(png_subfolder, mustWork = FALSE)
+        for (f in extracted) {
+          if (!startsWith(normalizePath(f, mustWork = FALSE), resolved_exdir)) {
+            unlink(png_subfolder, recursive = TRUE)
+            stop("ZIP archive contains path traversal entry")
+          }
+        }
+      }, error = function(e) NULL)
       unlink(zip_path)
 
       # Clean up empty date folder
@@ -459,6 +480,13 @@ download_dashboard_images_bulk <- function(base_url, sample_names,
 download_dashboard_image_single <- function(base_url, sample_name, roi_number,
                                             dest_dir, max_retries = 3,
                                             timeout = 15) {
+  if (!grepl("^D\\d{8}T\\d{6}_IFCB\\d+$", sample_name)) {
+    stop("Invalid sample_name format: ", sample_name)
+  }
+  roi_number <- as.integer(roi_number)
+  if (is.na(roi_number) || roi_number < 0L) {
+    stop("roi_number must be a non-negative integer")
+  }
   file_name <- sprintf("%s_%05d.png", sample_name, roi_number)
   dest_folder <- file.path(dest_dir, sample_name)
   dest_path <- file.path(dest_folder, file_name)
