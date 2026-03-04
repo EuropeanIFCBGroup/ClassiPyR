@@ -149,7 +149,16 @@ server <- function(input, output, session) {
       dashboard_parallel_downloads = 5,
       dashboard_sleep_time = 2,
       dashboard_multi_timeout = 120,
-      dashboard_max_retries = 3
+      dashboard_max_retries = 3,
+      zip_readme_author = "",
+      zip_readme_contact_email = "",
+      zip_readme_doi = "",
+      zip_readme_license = "",
+      zip_readme_version = "",
+      zip_readme_citation = "",
+      zip_readme_institute = "",
+      zip_split_zip = FALSE,
+      zip_max_size = 500
     )
     
     if (file.exists(settings_file)) {
@@ -215,8 +224,114 @@ server <- function(input, output, session) {
     dashboard_parallel_downloads = saved_settings$dashboard_parallel_downloads,
     dashboard_sleep_time = saved_settings$dashboard_sleep_time,
     dashboard_multi_timeout = saved_settings$dashboard_multi_timeout,
-    dashboard_max_retries = saved_settings$dashboard_max_retries
+    dashboard_max_retries = saved_settings$dashboard_max_retries,
+    zip_readme_author = saved_settings$zip_readme_author,
+    zip_readme_contact_email = saved_settings$zip_readme_contact_email,
+    zip_readme_doi = saved_settings$zip_readme_doi,
+    zip_readme_license = saved_settings$zip_readme_license,
+    zip_readme_version = saved_settings$zip_readme_version,
+    zip_readme_citation = saved_settings$zip_readme_citation,
+    zip_readme_institute = saved_settings$zip_readme_institute,
+    zip_split_zip = isTRUE(saved_settings$zip_split_zip),
+    zip_max_size = if (!is.null(saved_settings$zip_max_size)) as.numeric(saved_settings$zip_max_size) else 500
   )
+
+  get_classipyr_citation_text <- function() {
+    tryCatch({
+      cit <- utils::citation("ClassiPyR")
+      txt <- paste(format(cit[1], style = "text"), collapse = " ")
+      trimws(gsub("\\s+", " ", txt))
+    }, error = function(e) {
+      paste0(
+        "Torstensson A. ClassiPyR (R package), version ",
+        as.character(utils::packageVersion("ClassiPyR"))
+      )
+    })
+  }
+
+  build_zip_readme <- function(template_path, png_folder, zip_path, fields) {
+    if (!file.exists(template_path)) {
+      return(NULL)
+    }
+
+    lines <- readLines(template_path, warn = FALSE)
+
+    png_files <- list.files(png_folder, pattern = "\\.png$", recursive = TRUE, full.names = FALSE)
+    class_dirs <- list.dirs(png_folder, recursive = FALSE, full.names = FALSE)
+    class_dirs <- class_dirs[class_dirs != ""]
+
+    years <- character(0)
+    if (length(png_files) > 0) {
+      mm <- regexec("^D([0-9]{4})[0-9]{4}T[0-9]{6}_", basename(png_files))
+      years <- vapply(regmatches(basename(png_files), mm), function(x) {
+        if (length(x) >= 2) x[2] else NA_character_
+      }, character(1))
+      years <- years[!is.na(years) & nzchar(years)]
+    }
+    year_start <- if (length(years) > 0) min(years) else as.character(format(Sys.Date(), "%Y"))
+    year_end <- if (length(years) > 0) max(years) else as.character(format(Sys.Date(), "%Y"))
+
+    replacements <- c(
+      "<E-MAIL>" = ifelse(nzchar(fields$contact_email), fields$contact_email, ""),
+      "<VERSION>" = ifelse(nzchar(fields$version), fields$version, ""),
+      "<DATE>" = as.character(Sys.Date()),
+      "<YEAR>" = ifelse(nzchar(fields$citation), fields$citation, ""),
+      "<YEAR_START>" = year_start,
+      "<YEAR_END>" = year_end,
+      "<N_IMAGES>" = as.character(length(png_files)),
+      "<CLASSES>" = as.character(length(class_dirs)),
+      "<ZIP_NAME>" = basename(zip_path),
+      "XXXX" = ifelse(nzchar(fields$institute), fields$institute, "")
+    )
+
+    # Fill labeled bullet values if placeholders are not present.
+    set_field <- function(pattern, value) {
+      idx <- grep(pattern, lines)
+      if (length(idx) > 0) {
+        lines[idx[1]] <<- sub(":.*$", paste0(": ", value), lines[idx[1]])
+      }
+    }
+
+    set_field("^- Author:", ifelse(nzchar(fields$author), fields$author, ""))
+    set_field("^- DOI:", ifelse(nzchar(fields$doi), fields$doi, ""))
+    set_field("^- License:", ifelse(nzchar(fields$license), fields$license, ""))
+
+    for (ph in names(replacements)) {
+      lines <- gsub(ph, replacements[[ph]], lines, fixed = TRUE)
+    }
+
+    # Drop optional README fields completely when user leaves them empty.
+    drop_line <- function(pattern, keep) {
+      if (!isTRUE(keep)) {
+        lines <<- lines[!grepl(pattern, lines)]
+      }
+    }
+    drop_line("^- Author:\\s*$", nzchar(fields$author))
+    drop_line("^- Contact e-mail:\\s*$", nzchar(fields$contact_email))
+    drop_line("^- DOI:\\s*$", nzchar(fields$doi))
+    drop_line("^- Licen[cs]e:\\s*$", nzchar(fields$license))
+    drop_line("^- Version:\\s*$", nzchar(fields$version))
+    drop_line("^Please cite as:\\s*$", nzchar(fields$citation))
+
+    # If institute is not set, remove the dangling "at the ." fragment.
+    if (!nzchar(fields$institute)) {
+      lines <- gsub("\\s+at the\\s*\\.", ".", lines)
+    }
+
+    classipyr_version <- as.character(utils::packageVersion("ClassiPyR"))
+    classipyr_citation <- get_classipyr_citation_text()
+    classipyr_footer <- c(
+      "",
+      "## Archive creation metadata",
+      "",
+      paste0("This archive was created using ClassiPyR version ", classipyr_version, "."),
+      paste0("Please cite ClassiPyR as: ", classipyr_citation)
+    )
+
+    out <- tempfile("classipyr_readme_", fileext = ".md")
+    writeLines(c(lines, classipyr_footer), out)
+    out
+  }
 
   # Persist class -> AphiaID mappings in SQLite (project DB)
   # Legacy JSON fallback is kept for backward compatibility and one-time migration.
@@ -558,6 +673,8 @@ server <- function(input, output, session) {
         actionButton("export_db_to_mat_btn", "SQLite \u2192 .mat",
                      icon = icon("file-export"), class = "btn-outline-secondary btn-sm"),
         actionButton("export_db_to_png_btn", "SQLite \u2192 PNG",
+                     icon = icon("file-export"), class = "btn-outline-secondary btn-sm"),
+        actionButton("export_db_to_zip_btn", "SQLite \u2192 ZIP",
                      icon = icon("file-export"), class = "btn-outline-secondary btn-sm")
       ),
       div(
@@ -1269,7 +1386,16 @@ server <- function(input, output, session) {
       dashboard_multi_timeout = config$dashboard_multi_timeout,
       dashboard_max_retries = config$dashboard_max_retries,
       gradio_url = input$cfg_gradio_url,
-      prediction_model = input$cfg_prediction_model
+      prediction_model = input$cfg_prediction_model,
+      zip_readme_author = config$zip_readme_author,
+      zip_readme_contact_email = config$zip_readme_contact_email,
+      zip_readme_doi = config$zip_readme_doi,
+      zip_readme_license = config$zip_readme_license,
+      zip_readme_version = config$zip_readme_version,
+      zip_readme_citation = config$zip_readme_citation,
+      zip_readme_institute = config$zip_readme_institute,
+      zip_split_zip = config$zip_split_zip,
+      zip_max_size = config$zip_max_size
     ))
 
     if (close_modal) {
@@ -1518,6 +1644,286 @@ server <- function(input, output, session) {
       sprintf("Export complete: %d exported, %d failed.", result$success, result$failed),
       type = if (result$failed > 0) "warning" else "message",
       duration = 8
+    )
+  })
+
+  observeEvent(input$export_db_to_zip_btn, {
+    default_dir <- if (!is.null(config$output_folder) && nzchar(config$output_folder)) {
+      config$output_folder
+    } else {
+      getwd()
+    }
+    default_zip <- file.path(
+      default_dir,
+      paste0("ifcb_ecotaxa_export_", format(Sys.Date(), "%Y%m%d"), ".zip")
+    )
+
+    showModal(modalDialog(
+      title = "Export SQLite -> ZIP",
+      size = "l",
+      textInput("zip_export_path", "ZIP file path", value = default_zip, width = "100%"),
+      tags$small(class = "text-muted", "Optional fields used only when generating the README file."),
+      div(
+        style = "display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px;",
+        textInput("zip_readme_author", "Author", value = config$zip_readme_author),
+        textInput("zip_readme_contact_email", "Contact e-mail", value = config$zip_readme_contact_email),
+        textInput("zip_readme_doi", "DOI", value = config$zip_readme_doi),
+        textInput("zip_readme_license", "Licence", value = config$zip_readme_license),
+        textInput("zip_readme_version", "Version", value = config$zip_readme_version),
+        textInput("zip_readme_institute", "Institute", value = config$zip_readme_institute)
+      ),
+      textAreaInput("zip_readme_citation", "Citation", value = config$zip_readme_citation, width = "100%", rows = 3),
+      checkboxInput("zip_split_zip", "Split ZIP archive", value = isTRUE(config$zip_split_zip)),
+      conditionalPanel(
+        condition = "input.zip_split_zip == true",
+        numericInput(
+          "zip_max_size",
+          "Max part size (MB)",
+          value = if (isTRUE(config$zip_split_zip)) config$zip_max_size else 500,
+          min = 1,
+          step = 50
+        )
+      ),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("confirm_export_zip_btn", "Export", class = "btn-primary")
+      ),
+      easyClose = TRUE
+    ))
+  })
+
+  observeEvent(input$confirm_export_zip_btn, {
+    removeModal()
+    zip_path <- trimws(input$zip_export_path)
+    readme_fields <- list(
+      author = trimws(input$zip_readme_author),
+      contact_email = trimws(input$zip_readme_contact_email),
+      doi = trimws(input$zip_readme_doi),
+      license = trimws(input$zip_readme_license),
+      version = trimws(input$zip_readme_version),
+      citation = trimws(input$zip_readme_citation),
+      institute = trimws(input$zip_readme_institute)
+    )
+    split_zip <- isTRUE(input$zip_split_zip)
+    max_size <- if (split_zip) {
+      as.numeric(if (!is.null(input$zip_max_size)) input$zip_max_size else 500)
+    } else {
+      config$zip_max_size
+    }
+    if (is.na(max_size) || max_size <= 0) {
+      max_size <- 500
+    }
+
+    if (!nzchar(zip_path)) {
+      showNotification("ZIP file path is empty.", type = "error")
+      return()
+    }
+
+    db_path <- get_db_path(config$db_folder)
+    if (!file.exists(db_path)) {
+      showNotification("Database not found. Save annotations first.", type = "error")
+      return()
+    }
+
+    zip_dir <- dirname(zip_path)
+    if (!dir.exists(zip_dir)) {
+      dir.create(zip_dir, recursive = TRUE, showWarnings = FALSE)
+    }
+
+    # Persist ZIP README metadata so user does not need to retype every export.
+    config$zip_readme_author <- readme_fields$author
+    config$zip_readme_contact_email <- readme_fields$contact_email
+    config$zip_readme_doi <- readme_fields$doi
+    config$zip_readme_license <- readme_fields$license
+    config$zip_readme_version <- readme_fields$version
+    config$zip_readme_citation <- readme_fields$citation
+    config$zip_readme_institute <- readme_fields$institute
+    config$zip_split_zip <- split_zip
+    config$zip_max_size <- max_size
+    persist_settings(list(
+      csv_folder = config$csv_folder,
+      roi_folder = config$roi_folder,
+      output_folder = config$output_folder,
+      png_output_folder = config$png_output_folder,
+      db_folder = config$db_folder,
+      use_threshold = config$use_threshold,
+      pixels_per_micron = config$pixels_per_micron,
+      auto_sync = config$auto_sync,
+      save_format = config$save_format,
+      export_statistics = config$export_statistics,
+      skip_class_png = config$skip_class_png,
+      class2use_path = rv$class2use_path,
+      python_venv_path = config$python_venv_path,
+      data_source = config$data_source,
+      dashboard_url = config$dashboard_url,
+      dashboard_autoclass = config$dashboard_autoclass,
+      dashboard_parallel_downloads = config$dashboard_parallel_downloads,
+      dashboard_sleep_time = config$dashboard_sleep_time,
+      dashboard_multi_timeout = config$dashboard_multi_timeout,
+      dashboard_max_retries = config$dashboard_max_retries,
+      gradio_url = config$gradio_url,
+      prediction_model = config$prediction_model,
+      zip_readme_author = config$zip_readme_author,
+      zip_readme_contact_email = config$zip_readme_contact_email,
+      zip_readme_doi = config$zip_readme_doi,
+      zip_readme_license = config$zip_readme_license,
+      zip_readme_version = config$zip_readme_version,
+      zip_readme_citation = config$zip_readme_citation,
+      zip_readme_institute = config$zip_readme_institute,
+      zip_split_zip = config$zip_split_zip,
+      zip_max_size = config$zip_max_size
+    ))
+
+    temp_png <- tempfile("zip_export_png_")
+    dir.create(temp_png, recursive = TRUE, showWarnings = FALSE)
+    on.exit(unlink(temp_png, recursive = TRUE, force = TRUE), add = TRUE)
+
+    skip <- if (!is.null(config$skip_class_png) && nzchar(config$skip_class_png)) {
+      config$skip_class_png
+    } else {
+      NULL
+    }
+
+    is_dashboard <- identical(config$data_source, "dashboard")
+    export_counts <- list(success = 0L, failed = 0L, skipped = 0L)
+
+    if (is_dashboard) {
+      samples <- list_annotated_samples_db(db_path)
+      if (length(samples) == 0) {
+        showNotification("No annotated samples in database.", type = "warning")
+        return()
+      }
+
+      cache_dir <- get_dashboard_cache_dir()
+      parsed <- parse_dashboard_url(config$dashboard_url)
+
+      withProgress(message = "Downloading images from dashboard...", value = 0, {
+        cached_samples <- download_dashboard_images_bulk(
+          parsed$base_url, samples, cache_dir,
+          parallel_downloads = config$dashboard_parallel_downloads,
+          sleep_time = config$dashboard_sleep_time,
+          multi_timeout = config$dashboard_multi_timeout,
+          max_retries = config$dashboard_max_retries
+        )
+      })
+
+      withProgress(message = "Copying PNGs to class folders...", value = 0, {
+        con <- dbConnect(SQLite(), db_path)
+        on.exit(dbDisconnect(con), add = TRUE)
+
+        for (sn in samples) {
+          rows <- dbGetQuery(con,
+            "SELECT roi_number, class_name FROM annotations WHERE sample_name = ? ORDER BY roi_number",
+            params = list(sn))
+
+          if (nrow(rows) == 0) {
+            export_counts$skipped <- export_counts$skipped + 1L
+            next
+          }
+
+          if (!is.null(skip)) {
+            rows <- rows[!rows$class_name %in% skip, ]
+            if (nrow(rows) == 0) next
+          }
+
+          src_dir <- file.path(cache_dir, sn, sn)
+          if (!sn %in% cached_samples || !dir.exists(src_dir)) {
+            export_counts$skipped <- export_counts$skipped + 1L
+            next
+          }
+
+          ok <- tryCatch({
+            for (cls in unique(rows$class_name)) {
+              cls_rois <- rows$roi_number[rows$class_name == cls]
+              dest <- file.path(temp_png, cls)
+              dir.create(dest, recursive = TRUE, showWarnings = FALSE)
+              for (rn in cls_rois) {
+                fname <- sprintf("%s_%05d.png", sn, rn)
+                src <- file.path(src_dir, fname)
+                if (file.exists(src)) {
+                  file.copy(src, file.path(dest, fname), overwrite = TRUE)
+                }
+              }
+            }
+            TRUE
+          }, error = function(e) FALSE)
+
+          if (isTRUE(ok)) {
+            export_counts$success <- export_counts$success + 1L
+          } else {
+            export_counts$failed <- export_counts$failed + 1L
+          }
+
+          incProgress(1 / length(samples))
+        }
+      })
+    } else {
+      current_roi_map <- roi_path_map()
+
+      if (length(current_roi_map) == 0) {
+        showNotification("No ROI file index available. Click Sync first.", type = "error")
+        return()
+      }
+
+      withProgress(message = "Exporting PNGs from SQLite...", value = 0, {
+        export_counts <- export_all_db_to_png(db_path, temp_png, current_roi_map, skip_class = skip)
+      })
+    }
+
+    png_count <- length(list.files(temp_png, pattern = "\\.png$", recursive = TRUE))
+    if (png_count == 0) {
+      showNotification("No PNG files were exported. ZIP not created.", type = "warning")
+      return()
+    }
+
+    inventory_files <- 0L
+    withProgress(message = "Creating inventory text files...", value = 0, {
+      inventory_files <- ClassiPyR:::create_ecotaxa_inventory_txt(temp_png, db_path)
+      incProgress(1)
+    })
+
+    readme_template <- system.file("exdata/README-template.md", package = "ClassiPyR")
+    if (!nzchar(readme_template)) {
+      readme_template <- system.file("exdata/README-template.md", package = "iRfcb")
+    }
+    readme_path <- build_zip_readme(
+      template_path = readme_template,
+      png_folder = temp_png,
+      zip_path = zip_path,
+      fields = readme_fields
+    )
+
+    zip_ok <- tryCatch({
+      withProgress(message = "Creating ZIP archive...", value = 0, {
+        iRfcb::ifcb_zip_pngs(
+          png_folder = temp_png,
+          zip_filename = zip_path,
+          readme_file = if (!is.null(readme_path) && nzchar(readme_path)) readme_path else NULL,
+          include_txt = TRUE,
+          split_zip = split_zip,
+          max_size = max_size,
+          quiet = TRUE
+        )
+        incProgress(1)
+      })
+      TRUE
+    }, error = function(e) {
+      showNotification(paste("ZIP export failed:", e$message), type = "error", duration = 8)
+      FALSE
+    })
+
+    if (!isTRUE(zip_ok)) {
+      return()
+    }
+
+    showNotification(
+      sprintf(
+        "ZIP export complete: %d samples exported, %d failed, %d skipped, %d inventory files. ZIP: %s",
+        export_counts$success, export_counts$failed, export_counts$skipped,
+        inventory_files, zip_path
+      ),
+      type = if (export_counts$failed > 0) "warning" else "message",
+      duration = 10
     )
   })
 
@@ -2241,7 +2647,16 @@ server <- function(input, output, session) {
         png_output_folder = config$png_output_folder,
         db_folder = config$db_folder,
         use_threshold = config$use_threshold,
-        class2use_path = persistent_path
+        class2use_path = persistent_path,
+        zip_readme_author = config$zip_readme_author,
+        zip_readme_contact_email = config$zip_readme_contact_email,
+        zip_readme_doi = config$zip_readme_doi,
+        zip_readme_license = config$zip_readme_license,
+        zip_readme_version = config$zip_readme_version,
+        zip_readme_citation = config$zip_readme_citation,
+        zip_readme_institute = config$zip_readme_institute,
+        zip_split_zip = config$zip_split_zip,
+        zip_max_size = config$zip_max_size
       ))
       
       sorted_classes <- sort(rv$class2use)

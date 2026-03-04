@@ -6,7 +6,7 @@
 
 #' @importFrom DBI dbConnect dbDisconnect dbWriteTable dbGetQuery dbExecute
 #' @importFrom RSQLite SQLite
-#' @importFrom iRfcb ifcb_create_manual_file ifcb_extract_pngs
+#' @importFrom iRfcb ifcb_create_manual_file ifcb_extract_pngs ifcb_get_ecotaxa_example ifcb_zip_pngs
 NULL
 
 #' Get path to the annotations SQLite database
@@ -887,6 +887,228 @@ export_all_db_to_png <- function(db_path, png_folder, roi_path_map,
   }
 
   counts
+}
+
+# Parse IFCB PNG filename into date/time/ROI components
+#
+# @param file_name Basename of IFCB PNG file
+# @return List with `object_id`, `object_date`, `object_time`, and
+#   `object_roi_number` (integer-like character), or `NA_character_` values
+#   when parsing fails.
+# @keywords internal
+parse_ifcb_png_name <- function(file_name) {
+  object_id <- tools::file_path_sans_ext(file_name)
+  m <- regexec("^D([0-9]{8})T([0-9]{6})_.*_([0-9]+)\\.png$", file_name)
+  hit <- regmatches(file_name, m)[[1]]
+
+  if (length(hit) != 4) {
+    return(list(
+      object_id = object_id,
+      object_date = NA_character_,
+      object_time = NA_character_,
+      object_roi_number = NA_character_
+    ))
+  }
+
+  roi_number <- suppressWarnings(as.integer(hit[4]))
+  list(
+    object_id = object_id,
+    object_date = hit[2],
+    object_time = hit[3],
+    object_roi_number = if (is.na(roi_number)) NA_character_ else as.character(roi_number)
+  )
+}
+
+# Create per-class EcoTaxa inventory text files for exported PNG folders
+#
+# Writes one tab-separated `.txt` file inside each class subdirectory with
+# column headers and the iRfcb type row (`[t]`/`[f]`), plus one row per PNG.
+#
+# @param png_folder Path to top-level folder containing class subdirectories
+# @param db_path Path to SQLite database for annotation metadata
+# @param txt_file_name Name of inventory file to write in each class folder
+# @return Integer count of written inventory files
+# @keywords internal
+create_ecotaxa_inventory_txt <- function(png_folder, db_path,
+                                         txt_file_name = NULL) {
+  if (!dir.exists(png_folder) || !file.exists(db_path)) {
+    return(0L)
+  }
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+  init_db_schema(con)
+
+  meta <- dbGetQuery(con, "
+    SELECT
+      printf('%s_%05d.png', a.sample_name, a.roi_number) AS img_file_name,
+      a.class_name AS object_annotation_category,
+      a.annotator AS object_annotation_person_name,
+      t.aphia_id AS object_aphiaid,
+      t.scientific_name AS object_annotation_hierarchy
+    FROM annotations a
+    LEFT JOIN class_taxonomy t
+      ON a.class_name = t.class_name
+  ")
+
+  if (!nrow(meta)) {
+    return(0L)
+  }
+
+  example <- ifcb_get_ecotaxa_example()
+  cols <- c(
+    "img_file_name",
+    "object_id",
+    "object_date",
+    "object_time",
+    "object_annotation_status",
+    "object_annotation_person_name",
+    "object_annotation_category",
+    "object_aphiaid",
+    "object_annotation_hierarchy",
+    "object_roi_number"
+  )
+
+  type_row <- example[1, cols, drop = FALSE]
+  class_dirs <- list.dirs(png_folder, recursive = FALSE, full.names = TRUE)
+  written <- 0L
+
+  for (dir_path in class_dirs) {
+    png_files <- list.files(dir_path, pattern = "\\.png$", full.names = FALSE)
+    if (!length(png_files)) {
+      next
+    }
+
+    png_files <- sort(png_files)
+    rows <- data.frame(
+      img_file_name = png_files,
+      object_id = character(length(png_files)),
+      object_date = character(length(png_files)),
+      object_time = character(length(png_files)),
+      object_annotation_status = rep("validated", length(png_files)),
+      object_annotation_person_name = rep(NA_character_, length(png_files)),
+      object_annotation_category = rep(NA_character_, length(png_files)),
+      object_aphiaid = rep(NA_character_, length(png_files)),
+      object_annotation_hierarchy = rep(NA_character_, length(png_files)),
+      object_roi_number = rep(NA_character_, length(png_files)),
+      stringsAsFactors = FALSE
+    )
+
+    parsed <- lapply(png_files, parse_ifcb_png_name)
+    rows$object_id <- vapply(parsed, `[[`, character(1), "object_id")
+    rows$object_date <- vapply(parsed, `[[`, character(1), "object_date")
+    rows$object_time <- vapply(parsed, `[[`, character(1), "object_time")
+    rows$object_roi_number <- vapply(parsed, `[[`, character(1), "object_roi_number")
+
+    idx <- match(rows$img_file_name, meta$img_file_name)
+    has_meta <- !is.na(idx)
+
+    rows$object_annotation_person_name[has_meta] <- meta$object_annotation_person_name[idx[has_meta]]
+    rows$object_annotation_category[has_meta] <- meta$object_annotation_category[idx[has_meta]]
+    rows$object_aphiaid[has_meta] <- meta$object_aphiaid[idx[has_meta]]
+    rows$object_annotation_hierarchy[has_meta] <- meta$object_annotation_hierarchy[idx[has_meta]]
+
+    out <- rbind(type_row, rows[, cols, drop = FALSE])
+    file_name <- if (!is.null(txt_file_name) && nzchar(txt_file_name)) {
+      txt_file_name
+    } else {
+      paste0("ecotaxa_", basename(dir_path), ".tsv")
+    }
+    out_path <- file.path(dir_path, file_name)
+    utils::write.table(
+      out,
+      file = out_path,
+      sep = "\t",
+      row.names = FALSE,
+      col.names = TRUE,
+      quote = FALSE,
+      na = ""
+    )
+    written <- written + 1L
+  }
+
+  written
+}
+
+#' Bulk export all annotated samples from SQLite to EcoTaxa-ready ZIP
+#'
+#' Exports annotated samples to class-organized PNG folders, writes one
+#' inventory \code{.txt} file per class folder, and then zips the result using
+#' \code{iRfcb::ifcb_zip_pngs(include_txt = TRUE)}.
+#'
+#' @param db_path Path to the SQLite database file
+#' @param zip_path Full output path for the resulting ZIP archive
+#' @param roi_path_map Named list mapping sample names to \code{.roi} file
+#'   paths. Samples without an entry are skipped.
+#' @param skip_class Character vector of class names to exclude from export
+#'   (e.g. \code{"unclassified"}). Default \code{NULL} exports all classes.
+#' @param readme_file Optional README markdown file included in ZIP. Defaults to
+#'   \code{system.file("exdata/README-template.md", package = "iRfcb")}.
+#' @return Named list with counts: \code{success}, \code{failed},
+#'   \code{skipped}, \code{inventory_files}, and \code{zip_path}.
+#' @export
+export_all_db_to_zip <- function(db_path, zip_path, roi_path_map,
+                                 skip_class = NULL,
+                                 readme_file = system.file("exdata/README-template.md",
+                                                           package = "iRfcb")) {
+  if (!nzchar(zip_path)) {
+    warning("zip_path is empty")
+    return(list(success = 0L, failed = 0L, skipped = 0L,
+                inventory_files = 0L, zip_path = zip_path))
+  }
+
+  out_dir <- dirname(zip_path)
+  if (!dir.exists(out_dir)) {
+    dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  }
+
+  temp_png <- tempfile("classipyr_zip_export_")
+  dir.create(temp_png, recursive = TRUE, showWarnings = FALSE)
+  on.exit(unlink(temp_png, recursive = TRUE, force = TRUE), add = TRUE)
+
+  counts <- export_all_db_to_png(
+    db_path = db_path,
+    png_folder = temp_png,
+    roi_path_map = roi_path_map,
+    skip_class = skip_class
+  )
+
+  inventory_files <- create_ecotaxa_inventory_txt(temp_png, db_path)
+  has_png <- length(list.files(temp_png, pattern = "\\.png$", recursive = TRUE)) > 0
+  if (!has_png) {
+    warning("No PNG files were exported; ZIP archive was not created")
+    return(list(success = counts$success, failed = counts$failed,
+                skipped = counts$skipped, inventory_files = inventory_files,
+                zip_path = zip_path))
+  }
+
+  zip_ok <- tryCatch({
+    ifcb_zip_pngs(
+      png_folder = temp_png,
+      zip_filename = zip_path,
+      readme_file = readme_file,
+      include_txt = TRUE,
+      quiet = TRUE
+    )
+    TRUE
+  }, error = function(e) {
+    warning("Failed to create ZIP archive: ", e$message)
+    FALSE
+  })
+
+  if (!isTRUE(zip_ok)) {
+    return(list(success = counts$success, failed = counts$failed + 1L,
+                skipped = counts$skipped, inventory_files = inventory_files,
+                zip_path = zip_path))
+  }
+
+  list(
+    success = counts$success,
+    failed = counts$failed,
+    skipped = counts$skipped,
+    inventory_files = inventory_files,
+    zip_path = zip_path
+  )
 }
 
 #' List all classes with counts in the annotations database

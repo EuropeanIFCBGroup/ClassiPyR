@@ -427,6 +427,21 @@ Below the format selector, two buttons allow bulk conversion between formats:
 - **Import PNG → SQLite**: Imports annotations from a folder of PNG images organized in class-name subfolders. Class names are extracted from folder names (trailing `_NNN` suffixes are stripped). Useful for re-importing corrected exports or importing external classification datasets.
 - **Export SQLite → .mat**: Exports all annotated samples from the database to `.mat` files in the specified Output Folder. Requires Python with scipy.
 - **Export SQLite → PNG**: Extracts annotated images from ROI files into class-name subfolders in the PNG Output Folder. Useful for building training datasets for CNN classifiers.
+- **Export SQLite → ZIP**: Builds an EcoTaxa-ready ZIP archive from SQLite annotations that is also suitable for sharing datasets in general repositories (for example Zenodo or Figshare). The export writes class-organized PNGs, per-class inventories (`ecotaxa_<CLASSNAME>.tsv`), and a README file.
+
+The **Export SQLite → ZIP** dialog includes optional README metadata fields:
+
+- Author
+- Contact e-mail
+- DOI
+- Licence
+- Version
+- Citation
+- Institute
+
+These values are saved in settings and reused for future ZIP exports. Empty fields are omitted from the README.
+
+ZIP export also supports archive splitting via `split_zip` and `max_size` (MB), matching `iRfcb::ifcb_zip_pngs()`.
 
 > **Note**: When importing external datasets without corresponding ROI files, the annotations are stored in the database but images cannot be viewed or re-exported through the app. For full round-trip support, ensure ROI files are available in the configured ROI Data Folder or IFCB Dashboard.
 
@@ -481,6 +496,14 @@ When both fields are configured, a **Predict** button appears in the sidebar for
 ### PNG Export Options
 
 **Skip class from PNG export**: Optionally exclude a class (e.g. "unclassified") from the organized PNG output. Set in Settings under the PNG Output Folder section.
+
+### ZIP Export Notes
+
+- ZIP export uses your current SQLite annotations as source.
+- README content is generated from the package template and includes archive provenance:
+  - ClassiPyR version used for export
+  - ClassiPyR citation text
+- Per-class inventory files are named `ecotaxa_<CLASSNAME>.tsv`.
 
 ---
 

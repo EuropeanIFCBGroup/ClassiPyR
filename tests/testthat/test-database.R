@@ -944,6 +944,119 @@ test_that("export_all_db_to_png exports multiple samples and skips missing ROIs"
   unlink(c(db_dir, png_dir), recursive = TRUE)
 })
 
+test_that("create_ecotaxa_inventory_txt writes inventory with required columns", {
+  roi_path <- testthat::test_path("test_data", "raw", "2022", "D20220522",
+                                   "D20220522T000439_IFCB134.roi")
+  skip_if_not(file.exists(roi_path), "Test ROI file not found")
+
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  sample_name <- "D20220522T000439_IFCB134"
+  class2use <- c("unclassified", "Diatom")
+  classifications <- data.frame(
+    file_name = sprintf("%s_%05d.png", sample_name, 2),
+    class_name = "Diatom",
+    stringsAsFactors = FALSE
+  )
+  save_annotations_db(db_path, sample_name, classifications, class2use, "TestAnnotator")
+  save_class_taxonomy_db(
+    db_path,
+    class_aphia_map = c("Diatom" = "12345"),
+    scientific_name_map = c("Diatom" = "Bacillariophyceae")
+  )
+
+  png_dir <- tempfile("png_")
+  dir.create(png_dir)
+  export_db_to_png(db_path, sample_name, roi_path, png_dir)
+
+  written <- ClassiPyR:::create_ecotaxa_inventory_txt(png_dir, db_path)
+  expect_equal(written, 1L)
+
+  txt_path <- file.path(png_dir, "Diatom", "ecotaxa_Diatom.tsv")
+  expect_true(file.exists(txt_path))
+
+  inv <- utils::read.delim(txt_path, sep = "\t", stringsAsFactors = FALSE, check.names = FALSE)
+  expect_equal(
+    names(inv),
+    c(
+      "img_file_name", "object_id", "object_date", "object_time",
+      "object_annotation_status", "object_annotation_person_name",
+      "object_annotation_category", "object_aphiaid",
+      "object_annotation_hierarchy", "object_roi_number"
+    )
+  )
+
+  expect_equal(inv$img_file_name[1], "[t]")
+  expect_equal(inv$img_file_name[2], "D20220522T000439_IFCB134_00002.png")
+  expect_equal(inv$object_id[2], "D20220522T000439_IFCB134_00002")
+  expect_equal(inv$object_date[2], "20220522")
+  expect_equal(inv$object_time[2], "000439")
+  expect_equal(inv$object_annotation_status[2], "validated")
+  expect_equal(inv$object_annotation_person_name[2], "TestAnnotator")
+  expect_equal(inv$object_annotation_category[2], "Diatom")
+  expect_equal(inv$object_aphiaid[2], "12345")
+  expect_equal(inv$object_annotation_hierarchy[2], "Bacillariophyceae")
+  expect_equal(inv$object_roi_number[2], "2")
+
+  unlink(c(db_dir, png_dir), recursive = TRUE)
+})
+
+test_that("export_all_db_to_zip exports PNGs and calls ifcb_zip_pngs with txt", {
+  roi_path <- testthat::test_path("test_data", "raw", "2022", "D20220522",
+                                   "D20220522T000439_IFCB134.roi")
+  skip_if_not(file.exists(roi_path), "Test ROI file not found")
+
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  sample_name <- "D20220522T000439_IFCB134"
+  class2use <- c("unclassified", "Diatom")
+  classifications <- data.frame(
+    file_name = sprintf("%s_%05d.png", sample_name, 2),
+    class_name = "Diatom",
+    stringsAsFactors = FALSE
+  )
+  save_annotations_db(db_path, sample_name, classifications, class2use, "test")
+
+  roi_map <- list("D20220522T000439_IFCB134" = roi_path)
+  zip_path <- file.path(tempdir(), paste0("classipyr_test_", as.integer(Sys.time()), ".zip"))
+  if (file.exists(zip_path)) file.remove(zip_path)
+
+  got_include_txt <- NA
+  got_readme <- NA_character_
+  got_tsv <- character()
+  local_mocked_bindings(
+    ifcb_zip_pngs = function(png_folder, zip_filename, readme_file = NULL,
+                             email_address = "", version = "",
+                             print_progress = TRUE, include_txt = FALSE,
+                             split_zip = FALSE, max_size = 500,
+                             quiet = FALSE) {
+      got_include_txt <<- include_txt
+      got_readme <<- if (is.null(readme_file)) NA_character_ else readme_file
+      got_tsv <<- list.files(png_folder, pattern = "^ecotaxa_.*\\.tsv$", recursive = TRUE)
+      file.create(zip_filename)
+      TRUE
+    },
+    .package = "ClassiPyR"
+  )
+
+  res <- export_all_db_to_zip(db_path, zip_path, roi_map)
+
+  expect_equal(res$success, 1L)
+  expect_equal(res$failed, 0L)
+  expect_equal(res$skipped, 0L)
+  expect_equal(res$inventory_files, 1L)
+  expect_true(file.exists(zip_path))
+  expect_true(isTRUE(got_include_txt))
+  expect_true(nzchar(got_readme))
+  expect_true(any(grepl("^Diatom/ecotaxa_Diatom\\.tsv$", got_tsv)))
+
+  unlink(c(db_dir, zip_path), recursive = TRUE)
+})
+
 test_that("save_annotations_db stores is_manual flags", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)

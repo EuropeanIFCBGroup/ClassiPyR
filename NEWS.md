@@ -2,22 +2,36 @@
 
 ## New features
 
-- **WoRMS class matching**: Added a **Match WoRMS AphiaID** action in the Class List Editor. Class names can now be matched against WoRMS (`worrms::wm_records_names()`), with accepted AphiaIDs stored per class and shown inline in the class list. Matching results distinguish accepted names, synonyms, unmatched classes, and skipped long queries (>80 chars). The results dialog supports manual rematch by editing query text per unmatched class before applying.
-- New exported functions: `sanitize_worms_query()`, `build_worms_match_rows()`, `save_class_taxonomy_db()`, and `load_class_taxonomy_db()` for programmatic WoRMS/taxonomy workflows.
-- **Live Prediction**: Added a "Predict" button in Sample Mode that classifies all images in the loaded sample using a remote CNN model via `iRfcb::ifcb_classify_images()` (#17). Configure the Gradio API URL and model in Settings > Live Prediction. The model dropdown is populated dynamically from the Gradio server. Predictions respect the classification threshold setting, skip manually reclassified images, and new class names from the model are added to the class list automatically. A per-image progress bar shows classification progress.
-- **Local classification files in dashboard mode**: The Classification Folder setting is now available in dashboard mode. When configured, local CSV/H5/MAT classification files take priority over dashboard auto-classifications, with dashboard autoclass as a fallback.
-- New exported functions: `parse_dashboard_url()`, `list_dashboard_bins()`, `download_dashboard_images()`, `download_dashboard_images_bulk()`, `download_dashboard_image_single()`, `download_dashboard_images_individual()`, `download_dashboard_adc()`, `download_dashboard_autoclass()`, and `get_dashboard_cache_dir()` for programmatic dashboard access.
-- **Class Review Mode**: View and reclassify all annotated images of a specific class across the entire database (#16). Switch to class review via the mode toggle in the sidebar, select a class, and load all matching images from all samples at once. Changes are saved as row-level updates to the database.
-- New exported functions: `list_classes_db()`, `load_class_annotations_db()`, and `save_class_review_changes_db()` for programmatic class review operations.
+### Import / Export
+
 - Added **Import PNG → SQLite** button in Settings > Import / Export (#15). Imports annotations from a folder of PNG images organized in class-name subfolders (e.g. exported by ClassiPyR or other tools). Folder names follow the iRfcb convention where trailing `_NNN` suffixes are stripped.
 - When importing PNG folders with class names not in the current class list, a **class mapping dialog** lets users remap unmatched classes to existing ones or add them as new classes.
 - Overwrite warning dialog shown when imported samples already exist in the database.
 - New exported functions: `scan_png_class_folder()` for scanning PNG class folder structures, and `import_png_folder_to_db()` for programmatic bulk import.
+- **Skip class from PNG export**: New option in Settings to exclude a specific class (e.g. "unclassified") from PNG output.
+- **Export SQLite → ZIP (EcoTaxa-ready)**: Added a new export action in Settings > Import / Export to create a ZIP archive directly from SQLite annotations. The flow exports class-organized PNGs, writes per-class inventories as `ecotaxa_<CLASSNAME>.tsv` (with EcoTaxa type row), and zips with `include_txt = TRUE` (#21).
+- **Customizable ZIP README metadata**: The ZIP export dialog now supports optional README fields (Author, Contact e-mail, DOI, Licence, Version, Citation, Institute), persisted in settings. Empty optional fields are omitted from the generated README. The README also appends archive provenance including the current ClassiPyR version and citation.
+- **Optional ZIP splitting**: ZIP export dialog now exposes `split_zip` and `max_size` controls mapped to `iRfcb::ifcb_zip_pngs()`. `max_size` is shown only when split mode is enabled.
+
+### Classification / Review
+
 - **HDF5 classification support**: Load classifications from `.h5` files produced by [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb) (>= 0.8.0) (#14). Requires the optional `hdf5r` package.
 - **Classification threshold toggle**: New "Apply classification threshold" checkbox in Settings controls whether thresholded or raw predictions are used, for all classification formats (CSV, H5, MAT).
-- **Skip class from PNG export**: New option in Settings to exclude a specific class (e.g. "unclassified") from PNG output.
+- **Live Prediction**: Added a "Predict" button in Sample Mode that classifies all images in the loaded sample using a remote CNN model via `iRfcb::ifcb_classify_images()` (#17). Configure the Gradio API URL and model in Settings > Live Prediction. The model dropdown is populated dynamically from the Gradio server. Predictions respect the classification threshold setting, skip manually reclassified images, and new class names from the model are added to the class list automatically. A per-image progress bar shows classification progress.
+- **Class Review Mode**: View and reclassify all annotated images of a specific class across the entire database (#16). Switch to class review via the mode toggle in the sidebar, select a class, and load all matching images from all samples at once. Changes are saved as row-level updates to the database.
+- New exported functions: `list_classes_db()`, `load_class_annotations_db()`, and `save_class_review_changes_db()` for programmatic class review operations.
+
+### Taxonomy / WoRMS
+
+- **WoRMS class matching**: Added a **Match WoRMS AphiaID** action in the Class List Editor. Class names can now be matched against WoRMS (`worrms::wm_records_names()`), with accepted AphiaIDs stored per class and shown inline in the class list. Matching results distinguish accepted names, synonyms, unmatched classes, and skipped long queries (>80 chars). The results dialog supports manual rematch by editing query text per unmatched class before applying.
+- New exported functions: `sanitize_worms_query()`, `build_worms_match_rows()`, `save_class_taxonomy_db()`, and `load_class_taxonomy_db()` for programmatic WoRMS/taxonomy workflows.
+
+### IFCB Dashboard
+
 - **IFCB Dashboard support**: Connect directly to remote IFCB Dashboard instances (e.g. `https://habon-ifcb.whoi.edu/`) without downloading data locally (#13). Toggle between "Local Folders" and "IFCB Dashboard" in Settings, enter a Dashboard URL (with optional `?dataset=` parameter), and browse samples from the API. Images are downloaded on demand and cached locally. Optionally load dashboard auto-classifications for validation mode. Supports MAT export by downloading ADC files on demand, with graceful fallback to SQLite-only when ADC is unavailable.
 - **Configurable dashboard download settings**: Dashboard mode now exposes parallel downloads, sleep time, timeout, and max retries in an "Advanced Download Settings" section in Settings.
+- **Local classification files in dashboard mode**: The Classification Folder setting is now available in dashboard mode. When configured, local CSV/H5/MAT classification files take priority over dashboard auto-classifications, with dashboard autoclass as a fallback.
+- New exported functions: `parse_dashboard_url()`, `list_dashboard_bins()`, `download_dashboard_images()`, `download_dashboard_images_bulk()`, `download_dashboard_image_single()`, `download_dashboard_images_individual()`, `download_dashboard_adc()`, `download_dashboard_autoclass()`, and `get_dashboard_cache_dir()` for programmatic dashboard access.
 
 ## UI improvements
 
