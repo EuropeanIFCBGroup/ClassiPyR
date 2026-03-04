@@ -973,6 +973,14 @@ test_that("create_ecotaxa_inventory_txt writes inventory with required columns",
   expect_equal(inv$object_roi_number[2], "2")
 })
 
+test_that("parse_ifcb_png_name handles legacy IFCB filename format", {
+  parsed <- ClassiPyR:::parse_ifcb_png_name("IFCB134_2023_072_004021_00002.png")
+  expect_equal(parsed$object_id, "IFCB134_2023_072_004021_00002")
+  expect_equal(parsed$object_date, "20230313")
+  expect_equal(parsed$object_time, "004021")
+  expect_equal(parsed$object_roi_number, "2")
+})
+
 test_that("export_all_db_to_zip exports PNGs and calls ifcb_zip_pngs with txt", {
   roi_path <- testthat::test_path("test_data", "raw", "2022", "D20220522",
                                    "D20220522T000439_IFCB134.roi")

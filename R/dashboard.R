@@ -553,12 +553,20 @@ download_dashboard_images_individual <- function(base_url, file_names, dest_dir,
   skipped_samples <- character()
 
   for (fname in file_names) {
-    # Parse sample_name and roi_number from file_name
-    parts <- regmatches(fname, regexec("^(.+)_(\\d+)\\.png$", fname))[[1]]
-    if (length(parts) < 3) next
+    # Parse sample_name and roi_number via iRfcb parser (handles legacy names).
+    parsed <- tryCatch(
+      iRfcb::ifcb_convert_filenames(fname),
+      error = function(e) NULL
+    )
+    if (is.null(parsed) || nrow(parsed) == 0) next
 
-    sample_name <- parts[2]
-    roi_number <- as.integer(parts[3])
+    sample_name <- as.character(parsed$sample[1])
+    roi_number <- if ("roi" %in% names(parsed)) {
+      suppressWarnings(as.integer(parsed$roi[1]))
+    } else {
+      NA_integer_
+    }
+    if (is.na(roi_number)) next
 
     # Skip samples that have already been marked as unavailable
     if (sample_name %in% skipped_samples) next

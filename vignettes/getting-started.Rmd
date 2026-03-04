@@ -21,10 +21,10 @@ This tutorial walks you through your first session with `ClassiPyR`.
 Make sure you have:
 
 1. The package installed (see [Installation](https://europeanifcbgroup.github.io/ClassiPyR/))
-2. Your IFCB data files (ROI, ADC, HDR) — or a remote IFCB Dashboard URL (see [Dashboard Mode](#dashboard-mode) below)
+2. Your local IFCB image source: ROI/ADC/HDR files **or** extracted PNG sample folders — or a remote IFCB Dashboard URL (see [Dashboard Mode](#dashboard-mode) below)
 3. Optionally: a class list file (.mat or .txt) - you can also create one from scratch in the app
-4. Optionally: existing classifications (CSV, H5, or classifier MAT files, see below) — or use [Live Prediction](user-guide.html#live-prediction) to classify on the fly
-5. Optionally: existing PNG-organized datasets can be imported via Settings > Import PNG → SQLite
+4. Optionally: existing classifications (CSV, H5, or classifier MAT files, see below) to start from classified results — or use [Live Prediction](user-guide.html#live-prediction) to classify on the fly
+5. Optionally: existing annotations can be imported into SQLite via Settings > Import .mat → SQLite or Import PNG → SQLite
 
 ### Python Requirements
 
@@ -79,7 +79,7 @@ Configure your folders using the built-in folder browser:
 | Setting | Description | Example |
 |---------|-------------|---------|
 | Classification Folder | Where your CSV/H5/MAT classifications are | `/ifcb/classified/` |
-| ROI Data Folder | Where your IFCB raw files are | `/ifcb/raw/` |
+| ROI/PNG Data Folder | IFCB raw files or extracted PNG sample folders | `/ifcb/raw/` |
 | Output Folder | Where MAT files and statistics go | `/ifcb/manual/` |
 | Database Folder | Where the SQLite database is stored (must be local) | auto-detected |
 | PNG Output Folder | Where images will be organized by class | `/ifcb/png/` |

@@ -91,7 +91,7 @@ Class Review mode lets you view **all annotated images of a specific class** acr
 
 1. Switch to **Class Review** using the mode toggle in the sidebar
 2. The class dropdown is searchable — type to filter. Each class shows its image count in parentheses
-3. Select a class and click **Load** — images are extracted from ROI files across all samples
+3. Select a class and click **Load** — images are loaded from ROI files or discovered PNG sample folders across all samples
 4. Review images in the gallery. Each image label shows the full name (sample + ROI) so you can identify which sample it belongs to
 5. Use the same selection and relabeling tools as in sample mode
 6. Click **Save Changes** to write row-level updates to the database
@@ -399,14 +399,14 @@ The **Classification Folder** setting is available in both local and dashboard m
 3. Dashboard auto-classifications (if enabled)
 4. New annotation mode
 
-> **Note**: In dashboard mode, the ROI Data Folder setting is not used. The Output Folder, Database Folder, and PNG Output Folder still apply for saving annotations and exports.
+> **Note**: In dashboard mode, the ROI/PNG Data Folder setting is not used. The Output Folder, Database Folder, and PNG Output Folder still apply for saving annotations and exports.
 
 ### Folder Paths
 
 | Setting | Description |
 |---------|-------------|
 | Classification Folder | Source of CSV/H5/MAT classifications (both local and dashboard mode) |
-| ROI Data Folder | IFCB raw files (ROI/ADC/HDR) (local mode only) |
+| ROI/PNG Data Folder | IFCB raw files (ROI/ADC/HDR) or extracted PNG sample folders (local mode only) |
 | Output Folder | Where MAT files and statistics go (can be on a network drive) |
 | Database Folder | Where the SQLite database is stored (must be a local drive) |
 | PNG Output Folder | Where organized images go |
@@ -443,7 +443,7 @@ These values are saved in settings and reused for future ZIP exports. Empty fiel
 
 ZIP export also supports archive splitting via `split_zip` and `max_size` (MB), matching `iRfcb::ifcb_zip_pngs()`.
 
-> **Note**: When importing external datasets without corresponding ROI files, the annotations are stored in the database but images cannot be viewed or re-exported through the app. For full round-trip support, ensure ROI files are available in the configured ROI Data Folder or IFCB Dashboard.
+> **Note**: External datasets can be viewed without ROI files when extracted PNGs are available under sample-named folders in the ROI/PNG Data Folder. MAT export still requires ADC data (from local files or IFCB Dashboard).
 
 ### WoRMS (AphiaID) Matching
 

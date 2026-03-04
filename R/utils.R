@@ -135,7 +135,7 @@ load_file_index <- function() {
 #'
 #' If folder paths are not provided, they are read from saved settings.
 #'
-#' @param roi_folder Path to ROI data folder. If NULL, read from saved settings.
+#' @param roi_folder Path to ROI/PNG data folder. If NULL, read from saved settings.
 #' @param csv_folder Path to classification folder (CSV/H5/MAT). If NULL, read from saved settings.
 #' @param output_folder Path to output folder for MAT annotations. If NULL, read from saved settings.
 #' @param verbose If TRUE, print progress messages. Default TRUE.
@@ -146,6 +146,10 @@ load_file_index <- function() {
 #'   or \code{"dashboard"} to fetch the sample list from a remote IFCB Dashboard.
 #' @param dashboard_url When \code{data_source = "dashboard"}, the full Dashboard
 #'   URL (e.g. \code{"https://habon-ifcb.whoi.edu/timeline?dataset=tangosund"}).
+#' @param progress Optional callback function used to report scan progress.
+#'   The callback receives named arguments \code{value} (numeric in [0, 1])
+#'   and \code{detail} (character message). Mainly intended for Shiny
+#'   progress bars.
 #' @return Invisibly returns the file index list, or NULL if roi_folder is invalid.
 #' @export
 #' @examples
@@ -170,7 +174,15 @@ load_file_index <- function() {
 rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
                               output_folder = NULL, verbose = TRUE,
                               db_folder = NULL, data_source = "local",
-                              dashboard_url = NULL) {
+                              dashboard_url = NULL,
+                              progress = NULL) {
+  report_progress <- function(value = NULL, detail = NULL) {
+    if (is.function(progress)) {
+      tryCatch(progress(value = value, detail = detail), error = function(e) NULL)
+    }
+  }
+
+  report_progress(0, "Preparing scan...")
   # Read from saved settings if not provided
   if (is.null(roi_folder) || is.null(csv_folder) || is.null(output_folder) ||
       is.null(db_folder)) {
@@ -200,6 +212,7 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
     }
 
     parsed <- parse_dashboard_url(dashboard_url)
+    report_progress(0.15, "Querying dashboard bins...")
     if (verbose) message("Fetching bin list from: ", parsed$base_url)
 
     bins <- tryCatch(
@@ -211,6 +224,7 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
     )
 
     sample_names <- as.character(bins)
+    report_progress(0.65, paste0("Found ", length(sample_names), " samples"))
     if (verbose) message("  Found ", length(sample_names), " samples")
 
     if (length(sample_names) == 0) {
@@ -222,6 +236,7 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
     db_path <- get_db_path(db_folder)
     annotated_db <- list_annotated_samples_db(db_path)
     annotated <- annotated_db[annotated_db %in% sample_names]
+    report_progress(0.85, "Merging annotation status...")
 
     index_data <- list(
       data_source = "dashboard",
@@ -239,12 +254,13 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
     )
 
     save_file_index(index_data)
+    report_progress(1, "Dashboard sync complete")
     if (verbose) message("File index saved to: ", get_file_index_path())
 
     return(invisible(index_data))
   }
 
-  # Validate ROI folder
+  # Validate source folder (ROI and/or extracted PNG tree)
   roi_valid <- !is.null(roi_folder) && length(roi_folder) == 1 &&
     !isTRUE(is.na(roi_folder)) && nzchar(roi_folder) && dir.exists(roi_folder)
   csv_valid <- !is.null(csv_folder) && length(csv_folder) == 1 &&
@@ -253,9 +269,10 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
     !isTRUE(is.na(output_folder)) && nzchar(output_folder) && dir.exists(output_folder)
 
   if (!roi_valid) {
-    if (verbose) message("ROI folder not set or does not exist: ", roi_folder)
+    if (verbose) message("ROI/PNG source folder not set or does not exist: ", roi_folder)
     return(invisible(NULL))
   }
+  report_progress(0.08, "Scanning ROI files...")
 
   # Scan ROI files
   if (verbose) message("Scanning ROI files in: ", roi_folder)
@@ -272,10 +289,54 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
     }
   }
   sample_names <- unique(sample_names_raw)
-  if (verbose) message("  Found ", length(sample_names), " samples")
+  report_progress(0.22, paste0("Found ", length(sample_names), " ROI samples"))
+
+  # Scan extracted PNG sample folders by directory name.
+  # This avoids recursively listing every PNG file (can be millions).
+  if (verbose) message("Scanning extracted PNG files in: ", roi_folder)
+  png_dirs <- list.dirs(roi_folder, recursive = TRUE, full.names = TRUE)
+  png_map <- list()
+  png_samples <- character()
+  n_png_dirs <- length(png_dirs)
+
+  for (i in seq_along(png_dirs)) {
+    sample_dir <- png_dirs[[i]]
+    sn <- basename(sample_dir)
+    if (!is_valid_sample_name(sn)) next
+
+    # Keep directory only when it actually contains sample PNGs
+    has_png <- length(list.files(
+      sample_dir,
+      pattern = paste0("^", sn, "_\\d+\\.png$"),
+      recursive = FALSE,
+      full.names = FALSE
+    )) > 0
+    if (!has_png) next
+
+    png_samples <- c(png_samples, sn)
+    if (is.null(png_map[[sn]])) {
+      png_map[[sn]] <- sample_dir
+    }
+
+    # Progress through deep directory trees without listing every PNG globally.
+    if (i %% 500 == 0 || i == n_png_dirs) {
+      frac <- if (n_png_dirs > 0) i / n_png_dirs else 1
+      report_progress(0.22 + 0.28 * frac,
+                      paste0("Checking PNG sample folders (", i, "/", n_png_dirs, ")"))
+    }
+  }
+
+  png_samples <- unique(png_samples)
+  sample_names <- unique(c(sample_names, png_samples))
+  if (verbose) {
+    message("  Found ", length(unique(sample_names_raw)), " samples from ROI")
+    message("  Found ", length(png_samples), " samples from PNG folders")
+    message("  Found ", length(sample_names), " total samples")
+  }
+  report_progress(0.52, paste0("Found ", length(sample_names), " total samples"))
 
   if (length(sample_names) == 0) {
-    if (verbose) message("No samples found.")
+    if (verbose) message("No samples found in ROI or PNG folders.")
     return(invisible(NULL))
   }
 
@@ -286,6 +347,7 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
   csv_map <- list()
 
   if (csv_valid) {
+    report_progress(0.56, "Scanning classification files...")
     if (verbose) message("Scanning classification files in: ", csv_folder)
 
     csv_files <- list.files(csv_folder, pattern = "\\.csv$",
@@ -327,10 +389,12 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
     classified <- unique(c(csv_matched, h5_samples, mat_samples))
     if (verbose) message("  Found ", length(classified), " classified samples")
   }
+  report_progress(0.78, "Classification scan complete")
 
   # Scan output folder for manual annotations (.mat files + SQLite database)
   annotated <- character()
   if (output_valid) {
+    report_progress(0.82, "Scanning annotation outputs...")
     if (verbose) message("Scanning output folder: ", output_folder)
 
     # Scan .mat files
@@ -348,6 +412,7 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
     annotated <- unique(c(annotated_mat, annotated_db))
     if (verbose) message("  Found ", length(annotated), " annotated samples")
   }
+  report_progress(0.92, "Saving file index cache...")
 
   # Save to cache
   index_data <- list(
@@ -358,6 +423,7 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
     classified_samples = classified,
     annotated_samples = annotated,
     roi_path_map = roi_map,
+    png_sample_path_map = png_map,
     csv_path_map = csv_map,
     classifier_mat_files = mat_file_map,
     classifier_h5_files = h5_file_map,
@@ -365,6 +431,7 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
   )
 
   save_file_index(index_data)
+  report_progress(1, "Sync complete")
   if (verbose) message("File index saved to: ", get_file_index_path())
 
   invisible(index_data)
@@ -579,6 +646,49 @@ read_roi_dimensions <- function(adc_path) {
   }, error = function(e) {
     stop("Failed to read ADC file: ", e$message)
   })
+}
+
+#' Read PNG dimensions from image header
+#'
+#' Reads width and height from the PNG IHDR chunk without decoding full image
+#' data. Returns `NA` values when the file is missing or not a valid PNG.
+#'
+#' @param png_path Path to PNG file
+#' @return Named list with `width` and `height` (numeric)
+#' @keywords internal
+read_png_dimensions <- function(png_path) {
+  if (!file.exists(png_path)) {
+    return(list(width = NA_real_, height = NA_real_))
+  }
+
+  con <- file(png_path, "rb")
+  on.exit(close(con), add = TRUE)
+
+  sig <- readBin(con, what = "raw", n = 8)
+  png_sig <- as.raw(c(137, 80, 78, 71, 13, 10, 26, 10))
+  if (!identical(sig, png_sig)) {
+    return(list(width = NA_real_, height = NA_real_))
+  }
+
+  raw_to_uint32 <- function(x) {
+    if (length(x) != 4) return(NA_real_)
+    b <- as.numeric(x)
+    (((b[1] * 256 + b[2]) * 256 + b[3]) * 256 + b[4])
+  }
+
+  ihdr_len_raw <- readBin(con, what = "raw", n = 4)
+  ihdr_len <- raw_to_uint32(ihdr_len_raw)
+  ihdr_type_raw <- readBin(con, what = "raw", n = 4)
+  ihdr_type <- rawToChar(ihdr_type_raw)
+
+  if (is.na(ihdr_len) || ihdr_len < 8 || !identical(ihdr_type, "IHDR")) {
+    return(list(width = NA_real_, height = NA_real_))
+  }
+
+  width <- raw_to_uint32(readBin(con, what = "raw", n = 4))
+  height <- raw_to_uint32(readBin(con, what = "raw", n = 4))
+
+  list(width = width, height = height)
 }
 
 #' Create empty changes log data frame

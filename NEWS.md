@@ -12,6 +12,11 @@
 - **Export SQLite → ZIP (EcoTaxa-ready)**: Added a new export action in Settings > Import / Export to create a ZIP archive directly from SQLite annotations. The flow exports class-organized PNGs, writes per-class inventories as `ecotaxa_<CLASSNAME>.tsv` (with EcoTaxa type row), and zips with `include_txt = TRUE` (#21).
 - **Customizable ZIP README metadata**: The ZIP export dialog now supports optional README fields (Author, Contact e-mail, DOI, Licence, Version, Citation, Institute), persisted in settings. Empty optional fields are omitted from the generated README. The README also appends archive provenance including the current ClassiPyR version and citation.
 - **Optional ZIP splitting**: ZIP export dialog now exposes `split_zip` and `max_size` controls mapped to `iRfcb::ifcb_zip_pngs()`. `max_size` is shown only when split mode is enabled.
+- Local sample discovery now supports extracted PNG sample-folder layouts in addition to ROI files. Both simple and hierarchical folder structures are detected, as long as sample directories follow IFCB sample naming.
+- Local sample loading now falls back to PNG sample folders when ROI files are unavailable, enabling image viewing and annotation workflows for PNG-only datasets.
+- PNG-only samples now derive ROI-like dimensions from PNG headers and sort images by area (`width * height`) to match ROI-based ordering behavior.
+- Folder sync progress now reports staged updates (including long directory scans) so the "Syncing folders..." progress bar shows meaningful movement instead of remaining static.
+- Added safeguards to ensure user-managed PNG source folders are never deleted by temporary-folder cleanup logic.
 
 ### Classification / Review
 

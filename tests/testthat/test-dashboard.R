@@ -413,6 +413,39 @@ test_that("download_dashboard_images_individual skips malformed file names", {
   expect_length(result, 0)
 })
 
+test_that("download_dashboard_images_individual parses legacy IFCB file names", {
+  tmp <- file.path(tempdir(), "dashboard_test_indiv_legacy")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+
+  called_sample <- NULL
+  called_roi <- NULL
+
+  local_mocked_bindings(
+    download_dashboard_image_single = function(base_url, sample_name, roi_number,
+                                               dest_dir, max_retries = 3) {
+      called_sample <<- sample_name
+      called_roi <<- roi_number
+      dir.create(file.path(dest_dir, sample_name), recursive = TRUE, showWarnings = FALSE)
+      out <- file.path(dest_dir, sample_name,
+                       "IFCB134_2023_072_004021_00002.png")
+      writeBin(charToRaw("fake"), out)
+      out
+    },
+    .package = "ClassiPyR"
+  )
+
+  result <- download_dashboard_images_individual(
+    base_url = "https://unused.example.com",
+    file_names = "IFCB134_2023_072_004021_00002.png",
+    dest_dir = tmp,
+    max_retries = 1
+  )
+
+  expect_equal(result, "IFCB134_2023_072_004021_00002.png")
+  expect_equal(called_sample, "IFCB134_2023_072_004021")
+  expect_equal(called_roi, 2L)
+})
+
 test_that("download_dashboard_images_individual skips unavailable samples after threshold", {
   tmp <- file.path(tempdir(), "dashboard_test_indiv_skip")
   on.exit(unlink(tmp, recursive = TRUE), add = TRUE)

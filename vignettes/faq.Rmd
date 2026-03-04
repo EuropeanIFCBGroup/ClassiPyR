@@ -126,17 +126,17 @@ install.packages("iRfcb")
 
 A: Check that:
 
-1. ROI Data Folder points to your data
-2. ROI files exist and are readable
+1. ROI/PNG Data Folder points to your data
+2. Either ROI files exist, or extracted PNG sample folders exist (for example `.../D20230313T004021_IFCB134/D20230313T004021_IFCB134_00002.png`)
 3. Click the **Sync** button (circular arrow icon) to rescan folders if you recently added new data
 
 **Q: "ROI file not found" error**
 
-A: The app scans the ROI Data Folder recursively, so any subfolder layout works (including flat). Check that:
+A: The app scans the ROI/PNG Data Folder recursively, so any subfolder layout works (including flat). Check that:
 
-1. The ROI Data Folder path is correct
-2. Each `.roi` file has a matching `.adc` file in the same directory
-3. Filenames follow the IFCB naming convention (`DYYYYMMDDTHHMMSS_IFCBNNN`)
+1. The ROI/PNG Data Folder path is correct
+2. If using ROI files, each `.roi` file has a matching `.adc` file in the same directory
+3. If using extracted PNGs, sample folders are named `DYYYYMMDDTHHMMSS_IFCBNNN` and image files follow `sample_#####.png`
 4. Click the **Sync** button to rescan if you recently moved or added files
 
 **Q: Classifications not loading**
@@ -565,11 +565,11 @@ A: In the same config directory as your settings:
 
 | Error | Solution |
 |-------|----------|
-| "ROI file not found" | Check ROI Data Folder path; ensure `.roi` files use IFCB naming and click Sync |
+| "ROI file not found" | Check ROI/PNG Data Folder path. If no ROI exists, provide extracted PNG sample folders named by sample and click Sync |
 | "ADC file not found" | ADC file must be alongside ROI file |
 | "Python not available" | Only affects `.mat` export. Switch to SQLite in Settings, or run `iRfcb::ifcb_py_install()` |
 | "Error loading class list" | Check file format (.mat or .txt) |
-| "No samples found" | Check ROI Data Folder configuration |
+| "No samples found" | Check ROI/PNG Data Folder configuration and naming |
 | App fails to start | Try `run_app(reset_settings = TRUE)` to clear saved settings |
 
 ---

@@ -898,24 +898,55 @@ export_all_db_to_png <- function(db_path, png_folder, roi_path_map,
 # @keywords internal
 parse_ifcb_png_name <- function(file_name) {
   object_id <- tools::file_path_sans_ext(file_name)
-  m <- regexec("^D([0-9]{8})T([0-9]{6})_.*_([0-9]+)\\.png$", file_name)
-  hit <- regmatches(file_name, m)[[1]]
+  parsed <- tryCatch(
+    iRfcb::ifcb_convert_filenames(file_name),
+    error = function(e) NULL
+  )
 
-  if (length(hit) != 4) {
+  if (!is.null(parsed) && nrow(parsed) > 0) {
+    timestamp <- suppressWarnings(as.POSIXct(parsed$timestamp[1], tz = "UTC"))
+    object_date <- if (!is.na(timestamp)) {
+      format(timestamp, "%Y%m%d", tz = "UTC")
+    } else {
+      NA_character_
+    }
+    object_time <- if (!is.na(timestamp)) {
+      format(timestamp, "%H%M%S", tz = "UTC")
+    } else {
+      NA_character_
+    }
+    roi_number <- if ("roi" %in% names(parsed)) {
+      suppressWarnings(as.integer(parsed$roi[1]))
+    } else {
+      NA_integer_
+    }
+
     return(list(
       object_id = object_id,
-      object_date = NA_character_,
-      object_time = NA_character_,
-      object_roi_number = NA_character_
+      object_date = object_date,
+      object_time = object_time,
+      object_roi_number = if (is.na(roi_number)) NA_character_ else as.character(roi_number)
     ))
   }
 
-  roi_number <- suppressWarnings(as.integer(hit[4]))
+  # Fallback parser for unrecognized names (keeps previous tolerant behavior).
+  m <- regexec("^D([0-9]{8})T([0-9]{6})_.*_([0-9]+)\\.png$", file_name)
+  hit <- regmatches(file_name, m)[[1]]
+  if (length(hit) == 4) {
+    roi_number <- suppressWarnings(as.integer(hit[4]))
+    return(list(
+      object_id = object_id,
+      object_date = hit[2],
+      object_time = hit[3],
+      object_roi_number = if (is.na(roi_number)) NA_character_ else as.character(roi_number)
+    ))
+  }
+
   list(
     object_id = object_id,
-    object_date = hit[2],
-    object_time = hit[3],
-    object_roi_number = if (is.na(roi_number)) NA_character_ else as.character(roi_number)
+    object_date = NA_character_,
+    object_time = NA_character_,
+    object_roi_number = NA_character_
   )
 }
 

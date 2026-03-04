@@ -43,7 +43,7 @@ reference:
   - get_config_dir
   - get_settings_path
 - title: Sample Loading
-  desc: Functions for loading classifications and samples
+  desc: Functions for loading classifications and samples from ROI/PNG sources
   contents:
   - load_class_list
   - load_from_classifier_mat

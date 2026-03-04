@@ -11,11 +11,12 @@ rescan_file_index(
   verbose = TRUE,
   db_folder = NULL,
   data_source = "local",
-  dashboard_url = NULL
+  dashboard_url = NULL,
+  progress = NULL
 )
 }
 \arguments{
-\item{roi_folder}{Path to ROI data folder. If NULL, read from saved settings.}
+\item{roi_folder}{Path to ROI/PNG data folder. If NULL, read from saved settings.}
 
 \item{csv_folder}{Path to classification folder (CSV/H5/MAT). If NULL, read from saved settings.}
 
@@ -32,6 +33,11 @@ or \code{"dashboard"} to fetch the sample list from a remote IFCB Dashboard.}
 
 \item{dashboard_url}{When \code{data_source = "dashboard"}, the full Dashboard
 URL (e.g. \code{"https://habon-ifcb.whoi.edu/timeline?dataset=tangosund"}).}
+
+\item{progress}{Optional callback function used to report scan progress.
+The callback receives named arguments \code{value} (numeric in [0, 1])
+and \code{detail} (character message). Mainly intended for Shiny
+progress bars.}
 }
 \value{
 Invisibly returns the file index list, or NULL if roi_folder is invalid.
