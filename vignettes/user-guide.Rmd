@@ -430,6 +430,25 @@ Below the format selector, two buttons allow bulk conversion between formats:
 
 > **Note**: When importing external datasets without corresponding ROI files, the annotations are stored in the database but images cannot be viewed or re-exported through the app. For full round-trip support, ensure ROI files are available in the configured ROI Data Folder or IFCB Dashboard.
 
+### WoRMS (AphiaID) Matching
+
+Class list entries can be linked to WoRMS AphiaIDs in the Class List Editor:
+
+<a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/worms-match-modal.png">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/worms-match-modal.png" alt="WoRMS match results modal with per-class manual rematch query inputs." style="max-width:80%;">
+</a>
+<p><em>WoRMS match results modal with per-class manual rematch query inputs. Click to enlarge.</em></p>
+
+1. Open **Settings** → **Edit Class List**
+2. Click **Match WoRMS AphiaID**
+3. Review accepted/synonym/unmatched/skipped results
+4. For unresolved classes, edit query fields and click **Rematch Unmatched**
+5. Click **Apply AphiaID Matches**
+
+When applied, AphiaID values are saved in SQLite (`class_taxonomy` table) and shown inline in the class list display as `[AphiaID: ...]`.
+
+> **Note**: AphiaID mappings are database metadata. They are not written into exported `class2use.mat` / `.txt` files.
+
 ### Auto-Sync
 
 | Setting | Description |

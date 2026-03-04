@@ -1516,3 +1516,177 @@ test_that("save_class_review_changes_db handles empty input", {
 
   unlink(db_dir, recursive = TRUE)
 })
+
+test_that("load_class_taxonomy_db returns empty map for missing database", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  out <- load_class_taxonomy_db(db_path)
+  expect_type(out, "character")
+  expect_length(out, 0)
+
+  unlink(db_dir, recursive = TRUE)
+})
+
+test_that("save_class_taxonomy_db creates and persists class taxonomy mappings", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  map <- c(
+    "Prorocentrum micans" = "109636",
+    "Alexandrium tamarense" = "12345"
+  )
+  accepted <- c(
+    "Prorocentrum micans" = "Prorocentrum micans",
+    "Alexandrium tamarense" = "Alexandrium catenella"
+  )
+
+  ok <- save_class_taxonomy_db(db_path, map, accepted)
+  expect_true(ok)
+  expect_true(file.exists(db_path))
+
+  loaded <- load_class_taxonomy_db(db_path)
+  expect_equal(loaded[["Prorocentrum micans"]], "109636")
+  expect_equal(loaded[["Alexandrium tamarense"]], "12345")
+
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  rows <- DBI::dbGetQuery(con, "SELECT class_name, aphia_id, accepted_name FROM class_taxonomy")
+  expect_equal(nrow(rows), 2)
+  expect_true("accepted_name" %in% names(rows))
+  expect_true(any(rows$class_name == "Alexandrium tamarense" & rows$accepted_name == "Alexandrium catenella"))
+
+  unlink(db_dir, recursive = TRUE)
+})
+
+test_that("save_class_taxonomy_db upserts and preserves accepted_name when new one is empty", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  ok1 <- save_class_taxonomy_db(
+    db_path,
+    class_aphia_map = c("Taxon A" = "111"),
+    accepted_name_map = c("Taxon A" = "Accepted A")
+  )
+  expect_true(ok1)
+
+  # Upsert same class with new AphiaID and no accepted_name map -> accepted name should stay.
+  ok2 <- save_class_taxonomy_db(
+    db_path,
+    class_aphia_map = c("Taxon A" = "222"),
+    accepted_name_map = NULL
+  )
+  expect_true(ok2)
+
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  row <- DBI::dbGetQuery(con, "SELECT class_name, aphia_id, accepted_name FROM class_taxonomy WHERE class_name = 'Taxon A'")
+  expect_equal(nrow(row), 1)
+  expect_equal(as.character(row$aphia_id[1]), "222")
+  expect_equal(as.character(row$accepted_name[1]), "Accepted A")
+
+  unlink(db_dir, recursive = TRUE)
+})
+
+test_that("save_class_taxonomy_db handles duplicate class names by keeping last", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  dup_map <- c("Taxon B" = "100", "Taxon B" = "200")
+  ok <- save_class_taxonomy_db(db_path, dup_map)
+  expect_true(ok)
+
+  loaded <- load_class_taxonomy_db(db_path)
+  expect_equal(loaded[["Taxon B"]], "200")
+
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  n_rows <- DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM class_taxonomy WHERE class_name = 'Taxon B'")$n[1]
+  expect_equal(as.integer(n_rows), 1L)
+
+  unlink(db_dir, recursive = TRUE)
+})
+
+test_that("save_class_taxonomy_db returns TRUE for empty map and does not error", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  ok <- save_class_taxonomy_db(db_path, setNames(character(0), character(0)))
+  expect_true(ok)
+
+  # DB may or may not exist; loading should still be safe and empty.
+  loaded <- load_class_taxonomy_db(db_path)
+  expect_length(loaded, 0)
+
+  unlink(db_dir, recursive = TRUE)
+})
+
+test_that("integration: WoRMS match rows round-trip into class_taxonomy table", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  mock_api <- function(query, marine_only = FALSE) {
+    # Return deterministic WoRMS-like records for both vector and scalar queries.
+    mk <- function(q) {
+      if (identical(q, "NoMatch")) return(data.frame())
+      if (identical(q, "OldName")) {
+        return(data.frame(
+          AphiaID = 10,
+          valid_AphiaID = 20,
+          scientificname = "OldName",
+          valid_name = "AcceptedName",
+          status = "unaccepted",
+          stringsAsFactors = FALSE
+        ))
+      }
+      data.frame(
+        AphiaID = 30,
+        valid_AphiaID = 30,
+        scientificname = q,
+        valid_name = q,
+        status = "accepted",
+        stringsAsFactors = FALSE
+      )
+    }
+
+    if (length(query) > 1) {
+      return(lapply(query, mk))
+    }
+    mk(query)
+  }
+
+  local_mocked_bindings(
+    worms_records_names_api = mock_api,
+    .package = "ClassiPyR"
+  )
+
+  rows <- build_worms_match_rows(
+    class_names = c("OldName", "Prorocentrum_micans", "NoMatch"),
+    raw_queries = c("OldName", "Prorocentrum_micans", "NoMatch")
+  )
+
+  matched <- rows[!is.na(rows$aphia_id) & nzchar(rows$aphia_id), , drop = FALSE]
+  map <- setNames(as.character(matched$aphia_id), as.character(matched$class_name))
+  accepted <- setNames(as.character(matched$accepted_name), as.character(matched$class_name))
+
+  ok <- save_class_taxonomy_db(db_path, map, accepted)
+  expect_true(ok)
+
+  loaded <- load_class_taxonomy_db(db_path)
+  expect_equal(loaded[["OldName"]], "20")
+  expect_equal(loaded[["Prorocentrum_micans"]], "30")
+  expect_false("NoMatch" %in% names(loaded))
+
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  tax_rows <- DBI::dbGetQuery(con, "SELECT class_name, accepted_name FROM class_taxonomy")
+  expect_true(any(tax_rows$class_name == "OldName" & tax_rows$accepted_name == "AcceptedName"))
+
+  unlink(db_dir, recursive = TRUE)
+})

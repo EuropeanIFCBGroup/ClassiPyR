@@ -62,6 +62,15 @@ init_db_schema <- function(con) {
     )
   ")
 
+  dbExecute(con, "
+    CREATE TABLE IF NOT EXISTS class_taxonomy (
+      class_name TEXT PRIMARY KEY,
+      aphia_id TEXT NOT NULL,
+      accepted_name TEXT,
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  ")
+
   # Migration: add is_manual column to existing databases that lack it
   cols <- dbGetQuery(con, "PRAGMA table_info(annotations)")
   if (!"is_manual" %in% cols$name) {
@@ -69,6 +78,117 @@ init_db_schema <- function(con) {
   }
 
   invisible(NULL)
+}
+
+#' Save class taxonomy mappings to SQLite
+#'
+#' Stores class-to-AphiaID mappings (with optional accepted names) in the
+#' \code{class_taxonomy} table of the annotations database.
+#'
+#' @param db_path Path to the SQLite database file.
+#' @param class_aphia_map Named character vector mapping class names to AphiaID.
+#' @param accepted_name_map Optional named character vector mapping class names
+#'   to WoRMS accepted names.
+#' @return Logical \code{TRUE} on success, \code{FALSE} on failure.
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path(get_default_db_dir())
+#' save_class_taxonomy_db(
+#'   db_path,
+#'   class_aphia_map = c("Prorocentrum micans" = "109636")
+#' )
+#' }
+save_class_taxonomy_db <- function(db_path, class_aphia_map, accepted_name_map = NULL) {
+  if (length(class_aphia_map) == 0) {
+    return(TRUE)
+  }
+
+  # Keep last value for duplicated class names to avoid ambiguous [[name]] access.
+  if (!is.null(names(class_aphia_map))) {
+    keep_last <- !duplicated(names(class_aphia_map), fromLast = TRUE)
+    class_aphia_map <- class_aphia_map[keep_last]
+  }
+
+  dir.create(dirname(db_path), recursive = TRUE, showWarnings = FALSE)
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+  init_db_schema(con)
+
+  tryCatch({
+    dbExecute(con, "BEGIN TRANSACTION")
+
+    map_names <- names(class_aphia_map)
+    for (i in seq_along(class_aphia_map)) {
+      nm <- if (!is.null(map_names) && length(map_names) >= i) map_names[i] else NA_character_
+      aphia <- as.character(class_aphia_map[i])[1]
+      if (is.na(nm) || !nzchar(nm) || is.na(aphia) || !nzchar(aphia)) next
+
+      accepted_name <- NA_character_
+      if (!is.null(accepted_name_map) && !is.null(names(accepted_name_map))) {
+        idx <- match(nm, names(accepted_name_map))
+        if (!is.na(idx)) {
+          accepted_name <- as.character(accepted_name_map[idx])[1]
+        }
+      }
+
+      dbExecute(con, "
+        INSERT INTO class_taxonomy (class_name, aphia_id, accepted_name, updated_at)
+        VALUES (?, ?, ?, datetime('now'))
+        ON CONFLICT(class_name) DO UPDATE SET
+          aphia_id = excluded.aphia_id,
+          accepted_name = CASE
+            WHEN excluded.accepted_name IS NULL OR excluded.accepted_name = ''
+            THEN class_taxonomy.accepted_name
+            ELSE excluded.accepted_name
+          END,
+          updated_at = datetime('now')
+      ", params = list(nm, aphia, accepted_name))
+    }
+
+    dbExecute(con, "COMMIT")
+    TRUE
+  }, error = function(e) {
+    tryCatch(dbExecute(con, "ROLLBACK"), error = function(e2) NULL)
+    warning("Failed to save class taxonomy to database: ", e$message)
+    FALSE
+  })
+}
+
+#' Load class taxonomy mappings from SQLite
+#'
+#' Reads class-to-AphiaID mappings from the \code{class_taxonomy} table.
+#'
+#' @param db_path Path to the SQLite database file.
+#' @return Named character vector mapping class names to AphiaID.
+#'   Returns empty vector if database/table is missing or empty.
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path(get_default_db_dir())
+#' map <- load_class_taxonomy_db(db_path)
+#' }
+load_class_taxonomy_db <- function(db_path) {
+  if (!file.exists(db_path)) {
+    return(stats::setNames(character(0), character(0)))
+  }
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+  init_db_schema(con)
+
+  rows <- dbGetQuery(con, "
+    SELECT class_name, aphia_id
+    FROM class_taxonomy
+    WHERE aphia_id IS NOT NULL AND aphia_id != ''
+  ")
+
+  if (nrow(rows) == 0) {
+    return(stats::setNames(character(0), character(0)))
+  }
+
+  out <- stats::setNames(as.character(rows$aphia_id), as.character(rows$class_name))
+  out[!is.na(names(out)) & nzchar(names(out)) & !is.na(out) & nzchar(out)]
 }
 
 #' Save annotations to the SQLite database

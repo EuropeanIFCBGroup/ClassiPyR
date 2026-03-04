@@ -266,6 +266,21 @@ A: Class names are used as folder names when exporting PNGs, so certain characte
 
 Common taxonomic characters like hyphens (`-`), underscores (`_`), periods (`.`), and spaces are preserved.
 
+**Q: How do I match class names to WoRMS AphiaID values?**
+
+A: In **Settings → Edit Class List**, click **Match WoRMS AphiaID**.
+
+- The app sanitizes class names before querying WoRMS
+- Long names (>80 characters) are skipped automatically in auto-match
+- Unmatched/skipped classes can be rematched manually by editing query fields and clicking **Rematch Unmatched**
+- Click **Apply AphiaID Matches** to persist results
+
+Matched AphiaIDs are shown in the class list as `[AphiaID: ...]`.
+
+**Q: Where are AphiaID mappings stored?**
+
+A: In the SQLite database (`annotations.sqlite`), table `class_taxonomy`, in the configured **Database Folder**. They are not embedded in `class2use.mat`/`.txt` files.
+
 ---
 
 ## Output

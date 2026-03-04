@@ -35,7 +35,8 @@ Suggests:
     hdf5r,
     knitr,
     rmarkdown,
-    pkgdown
+    pkgdown,
+    worrms
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 URL: https://EuropeanIFCBGroup.github.io/ClassiPyR/, https://github.com/EuropeanIFCBGroup/ClassiPyR, https://europeanifcbgroup.github.io/ClassiPyR/

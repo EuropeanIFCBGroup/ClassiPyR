@@ -163,6 +163,31 @@ Now all your "Ciliate" (index 2) .mat annotations become "Dinoflagellate" when l
 
 ---
 
+## WoRMS Matching (AphiaID)
+
+You can match class names to the World Register of Marine Species directly in the Class List Editor:
+
+<a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/worms-match-modal.png">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/worms-match-modal.png" alt="WoRMS match results modal showing accepted, synonym, unmatched, and manual rematch query fields." style="max-width:80%;">
+</a>
+<p><em>WoRMS match results modal with manual rematch query fields for unresolved classes. Click to enlarge.</em></p>
+
+1. Open **Settings** → **Edit Class List**
+2. Click **Match WoRMS AphiaID**
+3. Review the result table:
+   - `accepted`: direct accepted WoRMS match
+   - `synonym`: class matched through a synonym; accepted AphiaID is returned
+   - `unmatched`: no WoRMS match found
+   - `skipped`: query skipped automatically (e.g. name longer than 80 characters)
+4. For unresolved rows, edit the query text in the manual rematch fields and click **Rematch Unmatched**
+5. Click **Apply AphiaID Matches**
+
+After applying, matched classes show `[AphiaID: ...]` in the class list display.
+
+**Where this is stored:** AphiaID mappings are saved in the SQLite database (`class_taxonomy` table), not in `class2use.mat`/`.txt`.
+
+---
+
 ## Exporting Class Lists
 
 ### Save as MAT

@@ -2,6 +2,8 @@
 
 ## New features
 
+- **WoRMS class matching**: Added a **Match WoRMS AphiaID** action in the Class List Editor. Class names can now be matched against WoRMS (`worrms::wm_records_names()`), with accepted AphiaIDs stored per class and shown inline in the class list. Matching results distinguish accepted names, synonyms, unmatched classes, and skipped long queries (>80 chars). The results dialog supports manual rematch by editing query text per unmatched class before applying.
+- New exported functions: `sanitize_worms_query()`, `build_worms_match_rows()`, `save_class_taxonomy_db()`, and `load_class_taxonomy_db()` for programmatic WoRMS/taxonomy workflows.
 - **Live Prediction**: Added a "Predict" button in Sample Mode that classifies all images in the loaded sample using a remote CNN model via `iRfcb::ifcb_classify_images()` (#17). Configure the Gradio API URL and model in Settings > Live Prediction. The model dropdown is populated dynamically from the Gradio server. Predictions respect the classification threshold setting, skip manually reclassified images, and new class names from the model are added to the class list automatically. A per-image progress bar shows classification progress.
 - **Local classification files in dashboard mode**: The Classification Folder setting is now available in dashboard mode. When configured, local CSV/H5/MAT classification files take priority over dashboard auto-classifications, with dashboard autoclass as a fallback.
 - New exported functions: `parse_dashboard_url()`, `list_dashboard_bins()`, `download_dashboard_images()`, `download_dashboard_images_bulk()`, `download_dashboard_image_single()`, `download_dashboard_images_individual()`, `download_dashboard_adc()`, `download_dashboard_autoclass()`, and `get_dashboard_cache_dir()` for programmatic dashboard access.
@@ -20,6 +22,7 @@
 ## UI improvements
 
 - The **class list editor** now shows the number of annotated images per class in parentheses, queried from the SQLite database.
+- The **class list editor** now optionally shows `[AphiaID: ...]` per class when WoRMS mappings exist.
 - Added an **Apply** button in Settings to activate changes immediately without closing the dialog (#18).
 - Prevented shinyFiles from freezing when an invalid path is entered by disabling Browse and showing a notification for non-existent input folders (#19).
 

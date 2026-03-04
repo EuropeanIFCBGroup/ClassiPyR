@@ -78,8 +78,15 @@ reference:
   - export_all_db_to_png
   - import_png_folder_to_db
   - list_classes_db
+  - save_class_taxonomy_db
+  - load_class_taxonomy_db
   - load_class_annotations_db
   - save_class_review_changes_db
+- title: WoRMS Taxonomy
+  desc: Functions for matching class names to WoRMS AphiaID values
+  contents:
+  - sanitize_worms_query
+  - build_worms_match_rows
 - title: File Index Cache
   desc: Functions for managing the file index cache for faster startup
   contents:
@@ -114,4 +121,3 @@ footer:
   structure:
     left: developed_by
     right: built_with
-
