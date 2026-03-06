@@ -30,7 +30,15 @@ development.
 
 - **Dual Mode**: Validate existing classifications or annotate from
   scratch
+- **Class Review**: Review and reclassify all images of a specific class
+  across the entire database
+- **IFCB Dashboard**: Work directly with remote IFCB Dashboard
+  instances - no local data files needed
+- **Live Prediction**: One-click CNN classification via a remote Gradio
+  API using [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb)
 - **Multiple Formats**: Load from CSV or MATLAB classifier output
+- **Flexible Image Source**: Load samples from ROI files or
+  pre-extracted PNG sample folders
 - **SQLite Storage**: Annotations stored in a local SQLite database by
   default - no Python needed
 - **Efficient Workflow**: Drag-select, batch relabeling, class filtering
@@ -145,7 +153,7 @@ Functions for launching ClassiPyR
 
 ## Sample Loading
 
-Functions for loading classifications and samples
+Functions for loading classifications and samples from ROI/PNG sources
 
 - [`load_class_list()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_class_list.md)
   : Load class list from MAT or TXT file
@@ -153,6 +161,8 @@ Functions for loading classifications and samples
   : Load classifications from MATLAB classifier output file
 - [`load_from_csv()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_from_csv.md)
   : Load classifications from CSV file (validation mode)
+- [`load_from_h5()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_from_h5.md)
+  : Load classifications from HDF5 classifier output file
 - [`load_from_mat()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_from_mat.md)
   : Load classifications from existing MAT annotation file
 - [`load_from_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_from_db.md)
@@ -161,6 +171,8 @@ Functions for loading classifications and samples
   : Create new classifications for annotation mode
 - [`filter_to_extracted()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/filter_to_extracted.md)
   : Filter classifications to only include extracted images
+- [`scan_png_class_folder()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/scan_png_class_folder.md)
+  : Scan a PNG folder with class subfolders
 
 ## Sample Saving
 
@@ -182,11 +194,13 @@ SQLite database functions for annotation storage
 - [`get_db_path()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_db_path.md)
   : Get path to the annotations SQLite database
 - [`save_annotations_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/save_annotations_db.md)
-  : Save annotations to the SQLite database
+  : Save annotations to SQLite
 - [`load_annotations_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_annotations_db.md)
   : Load annotations from the SQLite database
 - [`list_annotated_samples_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/list_annotated_samples_db.md)
   : List samples with annotations in the database
+- [`list_annotation_metadata_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/list_annotation_metadata_db.md)
+  : List distinct years, months, and instruments from annotations
 - [`update_annotator()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/update_annotator.md)
   : Update the annotator name for one or more samples
 - [`import_mat_to_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/import_mat_to_db.md)
@@ -202,6 +216,33 @@ SQLite database functions for annotation storage
 - [`export_all_db_to_png()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/export_all_db_to_png.md)
   : Bulk export all annotated samples from SQLite to class-organized
   PNGs
+- [`export_all_db_to_zip()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/export_all_db_to_zip.md)
+  : Bulk export all annotated samples from SQLite to EcoTaxa-ready ZIP
+- [`import_png_folder_to_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/import_png_folder_to_db.md)
+  : Import annotations from a PNG class folder into the SQLite database
+- [`list_classes_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/list_classes_db.md)
+  : List all classes with counts in the annotations database
+- [`save_class_taxonomy_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/save_class_taxonomy_db.md)
+  : Save class taxonomy mappings to SQLite
+- [`load_class_taxonomy_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_class_taxonomy_db.md)
+  : Load class taxonomy mappings from SQLite
+- [`save_global_class_list_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/save_global_class_list_db.md)
+  : Save annotations to the SQLite database
+- [`load_global_class_list_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_global_class_list_db.md)
+  : Load global class list from SQLite
+- [`load_class_annotations_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_class_annotations_db.md)
+  : Load all annotations for a specific class from the database
+- [`save_class_review_changes_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/save_class_review_changes_db.md)
+  : Save class review changes to the database
+
+## WoRMS Taxonomy
+
+Functions for matching class names to WoRMS AphiaID values
+
+- [`sanitize_worms_query()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/sanitize_worms_query.md)
+  : Sanitize taxon names for WoRMS matching
+- [`build_worms_match_rows()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/build_worms_match_rows.md)
+  : Build WoRMS match rows for class names
 
 ## File Index Cache
 
@@ -215,6 +256,29 @@ Functions for managing the file index cache for faster startup
   : Save file index to disk cache
 - [`rescan_file_index()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/rescan_file_index.md)
   : Rescan folders and rebuild the file index cache
+
+## Dashboard
+
+Functions for working with remote IFCB Dashboard instances
+
+- [`parse_dashboard_url()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/parse_dashboard_url.md)
+  : Parse an IFCB Dashboard URL
+- [`list_dashboard_bins()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/list_dashboard_bins.md)
+  : List bins from an IFCB Dashboard
+- [`download_dashboard_images()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/download_dashboard_images.md)
+  : Download and extract PNG images from the Dashboard
+- [`download_dashboard_images_bulk()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/download_dashboard_images_bulk.md)
+  : Bulk download zip archives for multiple samples from the Dashboard
+- [`download_dashboard_image_single()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/download_dashboard_image_single.md)
+  : Download a single PNG image from the Dashboard
+- [`download_dashboard_images_individual()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/download_dashboard_images_individual.md)
+  : Download individual PNG images from the Dashboard
+- [`download_dashboard_adc()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/download_dashboard_adc.md)
+  : Download ADC file from the Dashboard
+- [`download_dashboard_autoclass()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/download_dashboard_autoclass.md)
+  : Download and parse autoclass scores from the Dashboard
+- [`get_dashboard_cache_dir()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_dashboard_cache_dir.md)
+  : Get persistent cache directory for dashboard downloads
 
 ## Utilities
 

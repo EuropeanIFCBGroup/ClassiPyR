@@ -14,7 +14,10 @@ rescan_file_index(
   csv_folder = NULL,
   output_folder = NULL,
   verbose = TRUE,
-  db_folder = NULL
+  db_folder = NULL,
+  data_source = "local",
+  dashboard_url = NULL,
+  progress = NULL
 )
 ```
 
@@ -22,11 +25,11 @@ rescan_file_index(
 
 - roi_folder:
 
-  Path to ROI data folder. If NULL, read from saved settings.
+  Path to ROI/PNG data folder. If NULL, read from saved settings.
 
 - csv_folder:
 
-  Path to classification folder (CSV/MAT). If NULL, read from saved
+  Path to classification folder (CSV/H5/MAT). If NULL, read from saved
   settings.
 
 - output_folder:
@@ -43,6 +46,22 @@ rescan_file_index(
   Path to the database folder for SQLite annotations. If NULL, read from
   saved settings; if not found in settings, defaults to
   [`get_default_db_dir()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_default_db_dir.md).
+
+- data_source:
+
+  Either `"local"` (default) for local folder scanning, or `"dashboard"`
+  to fetch the sample list from a remote IFCB Dashboard.
+
+- dashboard_url:
+
+  When `data_source = "dashboard"`, the full Dashboard URL (e.g.
+  `"https://habon-ifcb.whoi.edu/timeline?dataset=tangosund"`).
+
+- progress:
+
+  Optional callback function used to report scan progress. The callback
+  receives named arguments `value` (numeric in \[0, 1\]) and `detail`
+  (character message). Mainly intended for Shiny progress bars.
 
 ## Value
 
@@ -65,6 +84,10 @@ rescan_file_index(
   csv_folder = "/data/ifcb/classified",
   output_folder = "/data/ifcb/manual"
 )
+
+# Scan from a remote Dashboard
+rescan_file_index(data_source = "dashboard",
+                  dashboard_url = "https://habon-ifcb.whoi.edu/timeline?dataset=tangosund")
 
 # Use in a cron job:
 # Rscript -e 'ClassiPyR::rescan_file_index()'

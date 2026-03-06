@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">ClassiPyR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,9 +42,83 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.svg" class="logo" alt=""><h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.1.1/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.2.0" id="classipyr-020">ClassiPyR 0.2.0<a class="anchor" aria-label="anchor" href="#classipyr-020"></a></h2>
+<div class="section level3">
+<h3 id="new-features-0-2-0">New features<a class="anchor" aria-label="anchor" href="#new-features-0-2-0"></a></h3>
+<div class="section level4">
+<h4 id="class-list-persistence-0-2-0">Class List Persistence<a class="anchor" aria-label="anchor" href="#class-list-persistence-0-2-0"></a></h4>
+<ul><li>
+<strong>Auto-persist class list in SQLite</strong>: When using SQLite storage (the default), the class list is now automatically saved to a <code>global_class_list</code> table whenever it changes — adding classes, renaming, applying WoRMS matches, uploading a file, or importing from PNGs. On next startup the class list is restored from the database, so no manual file upload is needed. File-based class lists (<code>.mat</code>/<code>.txt</code>) remain supported as a fallback and for sharing.</li>
+<li>New exported functions: <code><a href="../reference/save_global_class_list_db.html">save_global_class_list_db()</a></code> and <code><a href="../reference/load_global_class_list_db.html">load_global_class_list_db()</a></code> for programmatic access to the persisted class list.</li>
+</ul></div>
+<div class="section level4">
+<h4 id="import--export-0-2-0">Import / Export<a class="anchor" aria-label="anchor" href="#import--export-0-2-0"></a></h4>
+<ul><li>Added <strong>Import PNG → SQLite</strong> button in Settings &gt; Import / Export (<a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/15" class="external-link">#15</a>). Imports annotations from a folder of PNG images organized in class-name subfolders (e.g. exported by ClassiPyR or other tools). Folder names follow the iRfcb convention where trailing <code>_NNN</code> suffixes are stripped.</li>
+<li>When importing PNG folders with class names not in the current class list, a <strong>class mapping dialog</strong> lets users remap unmatched classes to existing ones or add them as new classes.</li>
+<li>Overwrite warning dialog shown when imported samples already exist in the database.</li>
+<li>New exported functions: <code><a href="../reference/scan_png_class_folder.html">scan_png_class_folder()</a></code> for scanning PNG class folder structures, and <code><a href="../reference/import_png_folder_to_db.html">import_png_folder_to_db()</a></code> for programmatic bulk import.</li>
+<li>
+<strong>Skip class from PNG export</strong>: New option in Settings to exclude a specific class (e.g. “unclassified”) from PNG output.</li>
+<li>
+<strong>Export SQLite → ZIP (EcoTaxa-ready)</strong>: Added a new export action in Settings &gt; Import / Export to create a ZIP archive directly from SQLite annotations. The flow exports class-organized PNGs, writes per-class inventories as <code>ecotaxa_&lt;CLASSNAME&gt;.tsv</code> (with EcoTaxa type row), and zips with <code>include_txt = TRUE</code> (<a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/21" class="external-link">#21</a>).</li>
+<li>
+<strong>Customizable ZIP README metadata</strong>: The ZIP export dialog now supports optional README fields (Author, Contact e-mail, DOI, Licence, Version, Citation, Institute), persisted in settings. Empty optional fields are omitted from the generated README. The README also appends archive provenance including the current ClassiPyR version and citation.</li>
+<li>
+<strong>Optional ZIP splitting</strong>: ZIP export dialog now exposes <code>split_zip</code> and <code>max_size</code> controls mapped to <code><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_zip_pngs.html" class="external-link">iRfcb::ifcb_zip_pngs()</a></code>. <code>max_size</code> is shown only when split mode is enabled.</li>
+<li>Local sample discovery now supports extracted PNG sample-folder layouts in addition to ROI files. Both simple and hierarchical folder structures are detected, as long as sample directories follow IFCB sample naming.</li>
+<li>Local sample loading now falls back to PNG sample folders when ROI files are unavailable, enabling image viewing and annotation workflows for PNG-only datasets.</li>
+<li>PNG-only samples now derive ROI-like dimensions from PNG headers and sort images by area (<code>width * height</code>) to match ROI-based ordering behavior.</li>
+<li>Folder sync progress now reports staged updates (including long directory scans) so the “Syncing folders…” progress bar shows meaningful movement instead of remaining static.</li>
+<li>Added safeguards to ensure user-managed PNG source folders are never deleted by temporary-folder cleanup logic.</li>
+</ul></div>
+<div class="section level4">
+<h4 id="classification--review-0-2-0">Classification / Review<a class="anchor" aria-label="anchor" href="#classification--review-0-2-0"></a></h4>
+<ul><li>
+<strong>HDF5 classification support</strong>: Load classifications from <code>.h5</code> files produced by <a href="https://github.com/EuropeanIFCBGroup/iRfcb" class="external-link">iRfcb</a> (&gt;= 0.8.0) (<a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/14" class="external-link">#14</a>). Requires the optional <code>hdf5r</code> package.</li>
+<li>
+<strong>Classification threshold toggle</strong>: New “Apply classification threshold” checkbox in Settings controls whether thresholded or raw predictions are used, for all classification formats (CSV, H5, MAT).</li>
+<li>
+<strong>Live Prediction</strong>: Added a “Predict” button in Sample Mode that classifies all images in the loaded sample using a remote CNN model via <code><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_classify_images.html" class="external-link">iRfcb::ifcb_classify_images()</a></code> (<a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/17" class="external-link">#17</a>). Configure the Gradio API URL and model in Settings &gt; Live Prediction. The model dropdown is populated dynamically from the Gradio server. Predictions respect the classification threshold setting, skip manually reclassified images, and new class names from the model are added to the class list automatically. A per-image progress bar shows classification progress.</li>
+<li>
+<strong>Class Review Mode</strong>: View and reclassify all annotated images of a specific class across the entire database (<a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/16" class="external-link">#16</a>). Switch to class review via the mode toggle in the sidebar, select a class, and load all matching images from all samples at once. Changes are saved as row-level updates to the database.</li>
+<li>
+<strong>External PNG folder review</strong>: Class Review mode now supports an <strong>External PNG Folder</strong> source in addition to the database. Load a folder of PNG images, relabel them in the gallery, and export into class-name subfolders. Useful for sorting or correcting a flat folder of images from an external classifier without importing into the database.</li>
+<li>New exported functions: <code><a href="../reference/list_classes_db.html">list_classes_db()</a></code>, <code><a href="../reference/load_class_annotations_db.html">load_class_annotations_db()</a></code>, and <code><a href="../reference/save_class_review_changes_db.html">save_class_review_changes_db()</a></code> for programmatic class review operations.</li>
+</ul></div>
+<div class="section level4">
+<h4 id="taxonomy--worms-0-2-0">Taxonomy / WoRMS<a class="anchor" aria-label="anchor" href="#taxonomy--worms-0-2-0"></a></h4>
+<ul><li>
+<strong>WoRMS class matching</strong>: Added a <strong>Match WoRMS AphiaID</strong> action in the Class List Editor. Class names can now be matched against WoRMS (<code><a href="https://docs.ropensci.org/worrms/reference/wm_records_names.html" class="external-link">worrms::wm_records_names()</a></code>), with accepted AphiaIDs stored per class and shown inline in the class list. Matching results distinguish accepted names, synonyms, unmatched classes, and skipped long queries (&gt;80 chars). The results dialog supports manual rematch by editing query text per unmatched class before applying.</li>
+<li>New exported functions: <code><a href="../reference/sanitize_worms_query.html">sanitize_worms_query()</a></code>, <code><a href="../reference/build_worms_match_rows.html">build_worms_match_rows()</a></code>, <code><a href="../reference/save_class_taxonomy_db.html">save_class_taxonomy_db()</a></code>, and <code><a href="../reference/load_class_taxonomy_db.html">load_class_taxonomy_db()</a></code> for programmatic WoRMS/taxonomy workflows.</li>
+</ul></div>
+<div class="section level4">
+<h4 id="ifcb-dashboard-0-2-0">IFCB Dashboard<a class="anchor" aria-label="anchor" href="#ifcb-dashboard-0-2-0"></a></h4>
+<ul><li>
+<strong>IFCB Dashboard support</strong>: Connect directly to remote IFCB Dashboard instances (e.g. <code>https://habon-ifcb.whoi.edu/</code>) without downloading data locally (<a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/13" class="external-link">#13</a>). Toggle between “Local Folders” and “IFCB Dashboard” in Settings, enter a Dashboard URL (with optional <code>?dataset=</code> parameter), and browse samples from the API. Images are downloaded on demand and cached locally. Optionally load dashboard auto-classifications for validation mode. Supports MAT export by downloading ADC files on demand, with graceful fallback to SQLite-only when ADC is unavailable.</li>
+<li>
+<strong>Configurable dashboard download settings</strong>: Dashboard mode now exposes parallel downloads, sleep time, timeout, and max retries in an “Advanced Download Settings” section in Settings.</li>
+<li>
+<strong>Local classification files in dashboard mode</strong>: The Classification Folder setting is now available in dashboard mode. When configured, local CSV/H5/MAT classification files take priority over dashboard auto-classifications, with dashboard autoclass as a fallback.</li>
+<li>New exported functions: <code><a href="../reference/parse_dashboard_url.html">parse_dashboard_url()</a></code>, <code><a href="../reference/list_dashboard_bins.html">list_dashboard_bins()</a></code>, <code><a href="../reference/download_dashboard_images.html">download_dashboard_images()</a></code>, <code><a href="../reference/download_dashboard_images_bulk.html">download_dashboard_images_bulk()</a></code>, <code><a href="../reference/download_dashboard_image_single.html">download_dashboard_image_single()</a></code>, <code><a href="../reference/download_dashboard_images_individual.html">download_dashboard_images_individual()</a></code>, <code><a href="../reference/download_dashboard_adc.html">download_dashboard_adc()</a></code>, <code><a href="../reference/download_dashboard_autoclass.html">download_dashboard_autoclass()</a></code>, and <code><a href="../reference/get_dashboard_cache_dir.html">get_dashboard_cache_dir()</a></code> for programmatic dashboard access.</li>
+</ul></div>
+</div>
+<div class="section level3">
+<h3 id="ui-improvements-0-2-0">UI improvements<a class="anchor" aria-label="anchor" href="#ui-improvements-0-2-0"></a></h3>
+<ul><li>The <strong>class list editor</strong> now shows the number of annotated images per class in parentheses, queried from the SQLite database.</li>
+<li>The <strong>class list editor</strong> now optionally shows <code>[AphiaID: ...]</code> per class when WoRMS mappings exist.</li>
+<li>Added an <strong>Apply</strong> button in Settings to activate changes immediately without closing the dialog (<a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/18" class="external-link">#18</a>).</li>
+<li>Prevented shinyFiles from freezing when an invalid path is entered by disabling Browse and showing a notification for non-existent input folders (<a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/19" class="external-link">#19</a>).</li>
+<li>
+<strong>Select Page / Select All</strong>: The “Select All” button now uses a two-click workflow — first click selects the current page, second click selects all images across all pages. Resets automatically when navigating pages, changing filters, or loading a new sample.</li>
+<li>In annotation mode, images are now sorted by width (x-dimension, descending) instead of area, for all classes. This groups images with similar widths for a more uniform gallery layout.</li>
+<li>
+<strong>Gallery images at native resolution</strong>: Removed the <code>max-height: 120px</code> CSS constraint so images display at their actual pixel dimensions. This preserves small morphological details and ensures the measuring tool reports accurate distances.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.1" id="classipyr-011">ClassiPyR 0.1.1<a class="anchor" aria-label="anchor" href="#classipyr-011"></a></h2>
 <div class="section level3">

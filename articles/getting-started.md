@@ -8,11 +8,17 @@ Make sure you have:
 
 1.  The package installed (see
     [Installation](https://europeanifcbgroup.github.io/ClassiPyR/))
-2.  Your IFCB data files (ROI, ADC, HDR)
+2.  Your local IFCB image source: ROI/ADC/HDR files **or** extracted PNG
+    sample folders — or a remote IFCB Dashboard URL (see [Dashboard
+    Mode](#dashboard-mode) below)
 3.  Optionally: a class list file (.mat or .txt) - you can also create
     one from scratch in the app
-4.  Optionally: existing classifications (CSV or classifier MAT files,
-    see below)
+4.  Optionally: existing classifications (CSV, H5, or classifier MAT
+    files, see below) to start from classified results — or use [Live
+    Prediction](https://europeanifcbgroup.github.io/ClassiPyR/articles/user-guide.html#live-prediction)
+    to classify on the fly
+5.  Optionally: existing annotations can be imported into SQLite via
+    Settings \> Import .mat → SQLite or Import PNG → SQLite
 
 ### Python Requirements
 
@@ -37,7 +43,9 @@ contain at least these columns:
     D20230101T120000_IFCB134_00002.png,Ciliate
 
 An optional `score` column (confidence values between 0 and 1) can also
-be included. See the [User
+be included. HDF5 (`.h5`) and MATLAB (`.mat`) classifier output files
+from [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb) are also
+supported. See the [User
 Guide](https://europeanifcbgroup.github.io/ClassiPyR/articles/user-guide.md)
 for more details.
 
@@ -48,7 +56,7 @@ the default SQLite storage.
 
 ``` r
 library(iRfcb)
-ifcb_py_install(envname = "./venv")  # Creates venv in current working directory
+ifcb_py_install()  # Creates venv at ~/.virtualenvs/iRfcb by default
 ```
 
 ------------------------------------------------------------------------
@@ -67,18 +75,19 @@ run_app(venv_path = "./venv")
 
 Click the **gear icon** next to your username in the sidebar.
 
-[![Settings dialog showing folder configuration
+[![Settings dialog showing folder paths, classification threshold
+toggle, annotation storage, and import/export
 options.](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/settings-dialog.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/settings-dialog.png)
 
-*Settings dialog showing folder configuration options. Click to
-enlarge.*
+*Settings dialog showing folder paths, classification threshold toggle,
+annotation storage, and import/export options. Click to enlarge.*
 
 Configure your folders using the built-in folder browser:
 
 | Setting               | Description                                         | Example             |
 |-----------------------|-----------------------------------------------------|---------------------|
-| Classification Folder | Where your CSV/MAT classifications are              | `/ifcb/classified/` |
-| ROI Data Folder       | Where your IFCB raw files are                       | `/ifcb/raw/`        |
+| Classification Folder | Where your CSV/H5/MAT classifications are           | `/ifcb/classified/` |
+| ROI/PNG Data Folder   | IFCB raw files or extracted PNG sample folders      | `/ifcb/raw/`        |
 | Output Folder         | Where MAT files and statistics go                   | `/ifcb/manual/`     |
 | Database Folder       | Where the SQLite database is stored (must be local) | auto-detected       |
 | PNG Output Folder     | Where images will be organized by class             | `/ifcb/png/`        |
@@ -206,7 +215,8 @@ Click to enlarge.*
 
 **Batch select**:
 
-- **Select All**: Select all visible images
+- **Select Page** (first click): Select all images on the current page
+- **Select All** (second click): Select all images across all pages
 - **Deselect**: Clear selection
 
 ### Relabeling
@@ -231,7 +241,7 @@ The images will move to their new class group.
 Click **Save Annotations** to save:
 
 - **SQLite database** (default) - annotations are written to
-  `annotations.sqlite` in your Output Folder. This single file stores
+  `annotations.sqlite` in your Database Folder. This single file stores
   annotations for all samples. No Python needed.
 - Statistics CSV with accuracy metrics
 - PNGs organized by class
@@ -260,13 +270,60 @@ Work is automatically saved when:
 
 2.  **Use drag-select** - Much faster than clicking individual images
 
-3.  **Sort by size** - Images are sorted by ROI area, grouping similar
-    organisms
+3.  **Sort by width** - Images are sorted by width (x-dimension),
+    grouping similar organisms
 
 4.  **Check statistics** - The “Validation Statistics” tab shows your
     progress
 
+5.  **Use Live Prediction** - For unannotated samples, use the Predict
+    button to get CNN classifications as a starting point, then correct
+    mistakes manually
+
 ------------------------------------------------------------------------
+
+## Dashboard Mode
+
+If your IFCB data is hosted on a remote Dashboard
+(e.g. [habon-ifcb.whoi.edu](https://habon-ifcb.whoi.edu/)), you can work
+directly with the Dashboard without downloading data locally:
+
+1.  Open **Settings** (gear icon)
+2.  Under **Data Source**, select **IFCB Dashboard**
+3.  Enter the Dashboard URL, e.g.:
+    - `https://habon-ifcb.whoi.edu/` (all datasets)
+    - `https://habon-ifcb.whoi.edu/timeline?dataset=tangosund` (specific
+      dataset)
+4.  Optionally check **Use dashboard auto-classifications** to load the
+    dashboard’s automated classifications for validation
+5.  Optionally set a **Classification Folder** to use local CSV/H5/MAT
+    files instead of (or as fallback to) dashboard auto-classifications
+6.  Click **Save Settings**
+
+The app will fetch the sample list from the Dashboard API. When you load
+a sample, PNG images are downloaded on demand and cached locally for
+fast subsequent access. ADC files (for image dimensions and MAT export)
+are also downloaded as needed. Download parameters (parallel downloads,
+timeout, retries) can be tuned via the **Advanced Download Settings**
+section.
+
+> **Note**: MAT file export in dashboard mode requires downloading the
+> ADC file for each sample. If the download fails, the app falls back to
+> SQLite-only saving.
+
+------------------------------------------------------------------------
+
+## Reviewing Annotations Across Samples
+
+Once you have annotated several samples, you can use **Class Review
+mode** to verify annotations across the entire database. Switch to Class
+Review in the sidebar, use the searchable class dropdown to find a class
+(each class shows its image count), and load all images annotated as
+that class. Image labels show the full name (sample + ROI) so you can
+identify which sample each image belongs to. This makes it easy to spot
+and fix misclassifications. See the [User
+Guide](https://europeanifcbgroup.github.io/ClassiPyR/articles/user-guide.html#class-review-mode)
+for details.
 
 ## Next Steps
 

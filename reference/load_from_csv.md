@@ -7,7 +7,7 @@ classifications. Class names are processed to truncate trailing numbers
 ## Usage
 
 ``` r
-load_from_csv(csv_path)
+load_from_csv(csv_path, use_threshold = TRUE)
 ```
 
 ## Arguments
@@ -15,6 +15,11 @@ load_from_csv(csv_path)
 - csv_path:
 
   Path to classification CSV file
+
+- use_threshold:
+
+  Logical, whether to use the threshold-filtered `class_name` column
+  (default `TRUE`) or the raw `class_name_auto` column when available.
 
 ## Value
 
@@ -34,11 +39,16 @@ The CSV file must contain the following columns:
 
   Predicted class name (e.g., \`Diatom\`).
 
-An optional column may also be included:
+Optional columns may also be included:
 
 - score:
 
   Classification confidence value between 0 and 1.
+
+- class_name_auto:
+
+  Raw (unthresholded) class prediction. When `use_threshold = FALSE` and
+  this column exists, its values are used as `class_name`.
 
 The CSV file must be named after the sample it describes (e.g.,
 \`D20230101T120000_IFCB134.csv\`) and placed inside the Classification

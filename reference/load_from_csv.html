@@ -9,7 +9,7 @@ Class names are processed to truncate trailing numbers (matching iRfcb behavior)
 
     <a class="navbar-brand me-2" href="../index.html">ClassiPyR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -44,7 +44,7 @@ Class names are processed to truncate trailing numbers (matching iRfcb behavior)
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.svg" class="logo" alt=""><h1>Load classifications from CSV file (validation mode)</h1>
-      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.1.1/R/sample_loading.R" class="external-link"><code>R/sample_loading.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/R/sample_loading.R" class="external-link"><code>R/sample_loading.R</code></a></small>
       <div class="d-none name"><code>load_from_csv.Rd</code></div>
     </div>
 
@@ -55,7 +55,7 @@ Class names are processed to truncate trailing numbers (matching iRfcb behavior)
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">load_from_csv</span><span class="op">(</span><span class="va">csv_path</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">load_from_csv</span><span class="op">(</span><span class="va">csv_path</span>, use_threshold <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -64,6 +64,12 @@ Class names are processed to truncate trailing numbers (matching iRfcb behavior)
 
 <dl><dt id="arg-csv-path">csv_path<a class="anchor" aria-label="anchor" href="#arg-csv-path"></a></dt>
 <dd><p>Path to classification CSV file</p></dd>
+
+
+<dt id="arg-use-threshold">use_threshold<a class="anchor" aria-label="anchor" href="#arg-use-threshold"></a></dt>
+<dd><p>Logical, whether to use the threshold-filtered
+<code>class_name</code> column (default <code>TRUE</code>) or the raw
+<code>class_name_auto</code> column when available.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -81,8 +87,13 @@ Class names are processed to truncate trailing numbers (matching iRfcb behavior)
 <dd><p>Predicted class name (e.g., `Diatom`).</p></dd>
 
 
-</dl><p>An optional column may also be included:</p><dl><dt>score</dt>
+</dl><p>Optional columns may also be included:</p><dl><dt>score</dt>
 <dd><p>Classification confidence value between 0 and 1.</p></dd>
+
+  <dt>class_name_auto</dt>
+<dd><p>Raw (unthresholded) class prediction. When
+    <code>use_threshold = FALSE</code> and this column exists, its values are
+    used as <code>class_name</code>.</p></dd>
 
 
 </dl><p>The CSV file must be named after the sample it describes

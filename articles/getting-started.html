@@ -25,7 +25,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">ClassiPyR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -75,7 +75,7 @@
       <img src="../logo.svg" class="logo" alt=""><h1>Getting Started</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.1.1/vignettes/getting-started.Rmd" class="external-link"><code>vignettes/getting-started.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/vignettes/getting-started.Rmd" class="external-link"><code>vignettes/getting-started.Rmd</code></a></small>
       <div class="d-none name"><code>getting-started.Rmd</code></div>
     </div>
 
@@ -89,11 +89,15 @@
 <p>Make sure you have:</p>
 <ol style="list-style-type: decimal">
 <li>The package installed (see <a href="https://europeanifcbgroup.github.io/ClassiPyR/">Installation</a>)</li>
-<li>Your IFCB data files (ROI, ADC, HDR)</li>
+<li>Your local IFCB image source: ROI/ADC/HDR files <strong>or</strong>
+extracted PNG sample folders — or a remote IFCB Dashboard URL (see <a href="#dashboard-mode">Dashboard Mode</a> below)</li>
 <li>Optionally: a class list file (.mat or .txt) - you can also create
 one from scratch in the app</li>
-<li>Optionally: existing classifications (CSV or classifier MAT files,
-see below)</li>
+<li>Optionally: existing classifications (CSV, H5, or classifier MAT
+files, see below) to start from classified results — or use <a href="user-guide.html#live-prediction">Live Prediction</a> to classify
+on the fly</li>
+<li>Optionally: existing annotations can be imported into SQLite via
+Settings &gt; Import .mat → SQLite or Import PNG → SQLite</li>
 </ol>
 <div class="section level3">
 <h3 id="python-requirements">Python Requirements<a class="anchor" aria-label="anchor" href="#python-requirements"></a>
@@ -116,8 +120,10 @@ and contain at least these columns:</p>
 D20230101T120000_IFCB134_00001.png,Diatom
 D20230101T120000_IFCB134_00002.png,Ciliate</code></pre>
 <p>An optional <code>score</code> column (confidence values between 0
-and 1) can also be included. See the <a href="user-guide.html">User
-Guide</a> for more details.</p>
+and 1) can also be included. HDF5 (<code>.h5</code>) and MATLAB
+(<code>.mat</code>) classifier output files from <a href="https://github.com/EuropeanIFCBGroup/iRfcb" class="external-link">iRfcb</a> are also
+supported. See the <a href="user-guide.html">User Guide</a> for more
+details.</p>
 </div>
 <div class="section level3">
 <h3 id="python-setup-optional">Python Setup (optional)<a class="anchor" aria-label="anchor" href="#python-setup-optional"></a>
@@ -126,7 +132,7 @@ Guide</a> for more details.</p>
 step if using the default SQLite storage.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://europeanifcbgroup.github.io/iRfcb/" class="external-link">iRfcb</a></span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">ifcb_py_install</a></span><span class="op">(</span>envname <span class="op">=</span> <span class="st">"./venv"</span><span class="op">)</span>  <span class="co"># Creates venv in current working directory</span></span></code></pre></div>
+<span><span class="fu"><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">ifcb_py_install</a></span><span class="op">(</span><span class="op">)</span>  <span class="co"># Creates venv at ~/.virtualenvs/iRfcb by default</span></span></code></pre></div>
 <hr>
 </div>
 </div>
@@ -143,9 +149,10 @@ step if using the default SQLite storage.</p>
 <p>Click the <strong>gear icon</strong> next to your username in the
 sidebar.</p>
 <a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/settings-dialog.png">
-<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/settings-dialog.png" alt="Settings dialog showing folder configuration options." style="max-width:80%;"></a>
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/settings-dialog.png" alt="Settings dialog showing folder paths, classification threshold toggle, annotation storage, and import/export options." style="max-width:80%;"></a>
 <p>
-<em>Settings dialog showing folder configuration options. Click to
+<em>Settings dialog showing folder paths, classification threshold
+toggle, annotation storage, and import/export options. Click to
 enlarge.</em>
 </p>
 <p>Configure your folders using the built-in folder browser:</p>
@@ -163,12 +170,12 @@ enlarge.</em>
 <tbody>
 <tr class="odd">
 <td>Classification Folder</td>
-<td>Where your CSV/MAT classifications are</td>
+<td>Where your CSV/H5/MAT classifications are</td>
 <td><code>/ifcb/classified/</code></td>
 </tr>
 <tr class="even">
-<td>ROI Data Folder</td>
-<td>Where your IFCB raw files are</td>
+<td>ROI/PNG Data Folder</td>
+<td>IFCB raw files or extracted PNG sample folders</td>
 <td><code>/ifcb/raw/</code></td>
 </tr>
 <tr class="odd">
@@ -336,7 +343,11 @@ Click to enlarge.</em>
 <p><strong>Batch select</strong>:</p>
 <ul>
 <li>
-<strong>Select All</strong>: Select all visible images</li>
+<strong>Select Page</strong> (first click): Select all images on the
+current page</li>
+<li>
+<strong>Select All</strong> (second click): Select all images across
+all pages</li>
 <li>
 <strong>Deselect</strong>: Clear selection</li>
 </ul>
@@ -367,7 +378,7 @@ assigned a new class. Click to enlarge.</em>
 <ul>
 <li>
 <strong>SQLite database</strong> (default) - annotations are written
-to <code>annotations.sqlite</code> in your Output Folder. This single
+to <code>annotations.sqlite</code> in your Database Folder. This single
 file stores annotations for all samples. No Python needed.</li>
 <li>Statistics CSV with accuracy metrics</li>
 <li>PNGs organized by class</li>
@@ -404,12 +415,66 @@ compatibility (requires Python)</li>
 to focus on abundant taxa</p></li>
 <li><p><strong>Use drag-select</strong> - Much faster than clicking
 individual images</p></li>
-<li><p><strong>Sort by size</strong> - Images are sorted by ROI area,
-grouping similar organisms</p></li>
+<li><p><strong>Sort by width</strong> - Images are sorted by width
+(x-dimension), grouping similar organisms</p></li>
 <li><p><strong>Check statistics</strong> - The “Validation Statistics”
 tab shows your progress</p></li>
+<li><p><strong>Use Live Prediction</strong> - For unannotated samples,
+use the Predict button to get CNN classifications as a starting point,
+then correct mistakes manually</p></li>
 </ol>
 <hr>
+</div>
+<div class="section level2">
+<h2 id="dashboard-mode">Dashboard Mode<a class="anchor" aria-label="anchor" href="#dashboard-mode"></a>
+</h2>
+<p>If your IFCB data is hosted on a remote Dashboard (e.g. <a href="https://habon-ifcb.whoi.edu/" class="external-link">habon-ifcb.whoi.edu</a>), you can
+work directly with the Dashboard without downloading data locally:</p>
+<ol style="list-style-type: decimal">
+<li>Open <strong>Settings</strong> (gear icon)</li>
+<li>Under <strong>Data Source</strong>, select <strong>IFCB
+Dashboard</strong>
+</li>
+<li>Enter the Dashboard URL, e.g.:
+<ul>
+<li>
+<code>https://habon-ifcb.whoi.edu/</code> (all datasets)</li>
+<li>
+<code>https://habon-ifcb.whoi.edu/timeline?dataset=tangosund</code>
+(specific dataset)</li>
+</ul>
+</li>
+<li>Optionally check <strong>Use dashboard auto-classifications</strong>
+to load the dashboard’s automated classifications for validation</li>
+<li>Optionally set a <strong>Classification Folder</strong> to use local
+CSV/H5/MAT files instead of (or as fallback to) dashboard
+auto-classifications</li>
+<li>Click <strong>Save Settings</strong>
+</li>
+</ol>
+<p>The app will fetch the sample list from the Dashboard API. When you
+load a sample, PNG images are downloaded on demand and cached locally
+for fast subsequent access. ADC files (for image dimensions and MAT
+export) are also downloaded as needed. Download parameters (parallel
+downloads, timeout, retries) can be tuned via the <strong>Advanced
+Download Settings</strong> section.</p>
+<blockquote>
+<p><strong>Note</strong>: MAT file export in dashboard mode requires
+downloading the ADC file for each sample. If the download fails, the app
+falls back to SQLite-only saving.</p>
+</blockquote>
+<hr>
+</div>
+<div class="section level2">
+<h2 id="reviewing-annotations-across-samples">Reviewing Annotations Across Samples<a class="anchor" aria-label="anchor" href="#reviewing-annotations-across-samples"></a>
+</h2>
+<p>Once you have annotated several samples, you can use <strong>Class
+Review mode</strong> to verify annotations across the entire database.
+Switch to Class Review in the sidebar, use the searchable class dropdown
+to find a class (each class shows its image count), and load all images
+annotated as that class. Image labels show the full name (sample + ROI)
+so you can identify which sample each image belongs to. This makes it
+easy to spot and fix misclassifications. See the <a href="user-guide.html#class-review-mode">User Guide</a> for details.</p>
 </div>
 <div class="section level2">
 <h2 id="next-steps">Next Steps<a class="anchor" aria-label="anchor" href="#next-steps"></a>

@@ -24,6 +24,39 @@ imaging systems, you would need to adapt the data loading functions.
 A: No. The app only reads your original files. All output is written to
 separate folders.
 
+**Q: How can I review all images of a specific class?**
+
+A: Use **Class Review mode**. Switch to “Class Review” using the mode
+toggle in the sidebar, select **Database** as the source, select a class
+from the dropdown, and click Load. This loads all images annotated as
+that class from every sample in the database. You can then reclassify
+any mistakes using the normal relabeling tools.
+
+**Q: Can I reclassify images across multiple samples at once?**
+
+A: Yes. Class Review mode (Database source) loads images from all
+samples and saves changes as row-level updates to the database. This
+means only the images you reclassify are updated — other annotations in
+those samples remain untouched.
+
+**Q: Can I sort a folder of PNG images into class subfolders?**
+
+A: Yes. In Class Review mode, select **External PNG Folder** as the
+source, browse to your PNG folder, and click **Load Folder**. All images
+are loaded with an initial class label (defaulting to the folder name).
+Relabel images in the gallery, then set an export folder and click
+**Export Split Folders** to copy images into class-name subfolders. This
+works independently of the database.
+
+**Q: Can I classify images without pre-computed classifier files?**
+
+A: Yes. Configure a Gradio API URL and model in Settings \> Live
+Prediction, then click the **Predict** button in the sidebar after
+loading a sample. This sends images to a remote CNN model and applies
+the predictions directly. See the [User
+Guide](https://europeanifcbgroup.github.io/ClassiPyR/articles/user-guide.html#live-prediction)
+for details.
+
 ------------------------------------------------------------------------
 
 ## Installation Issues
@@ -54,8 +87,8 @@ with no Python dependency. Python is only needed if you want to export
 
 A: By default,
 [`ifcb_py_install()`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html)
-creates a `venv` folder in your home directory. You can specify a
-different location:
+creates a virtual environment at `~/.virtualenvs/iRfcb`. You can specify
+a different location:
 
 ``` r
 ifcb_py_install("/path/to/your/venv")
@@ -96,7 +129,7 @@ remotes::install_github("EuropeanIFCBGroup/ClassiPyR")
 A: Try reinstalling the package:
 
 ``` r
-install.packages("iRfcb")
+remotes::install_github("EuropeanIFCBGroup/ClassiPyR")
 ```
 
 **Q: iRfcb won’t install**
@@ -117,20 +150,23 @@ install.packages("iRfcb")
 
 A: Check that:
 
-1.  ROI Data Folder points to your data
-2.  ROI files exist and are readable
+1.  ROI/PNG Data Folder points to your data
+2.  Either ROI files exist, or extracted PNG sample folders exist (for
+    example
+    `.../D20230313T004021_IFCB134/D20230313T004021_IFCB134_00002.png`)
 3.  Click the **Sync** button (circular arrow icon) to rescan folders if
     you recently added new data
 
 **Q: “ROI file not found” error**
 
-A: The app scans the ROI Data Folder recursively, so any subfolder
+A: The app scans the ROI/PNG Data Folder recursively, so any subfolder
 layout works (including flat). Check that:
 
-1.  The ROI Data Folder path is correct
-2.  Each `.roi` file has a matching `.adc` file in the same directory
-3.  Filenames follow the IFCB naming convention
-    (`DYYYYMMDDTHHMMSS_IFCBNNN`)
+1.  The ROI/PNG Data Folder path is correct
+2.  If using ROI files, each `.roi` file has a matching `.adc` file in
+    the same directory
+3.  If using extracted PNGs, sample folders are named
+    `DYYYYMMDDTHHMMSS_IFCBNNN` and image files follow `sample_#####.png`
 4.  Click the **Sync** button to rescan if you recently moved or added
     files
 
@@ -140,16 +176,20 @@ A: For CSV files:
 
 - Must have columns named `file_name` and `class_name` (exact names
   required)
-- Optionally include a `score` column (confidence value between 0 and 1)
+- Optionally include `score` and `class_name_auto` columns
 - The CSV file must be named after the sample (e.g.,
   `D20230101T120000_IFCB134.csv`)
 - File should be in the Classification Folder (indexed via file cache;
   click Sync to refresh)
 
+For H5 files:
+
+- Must match pattern `*_class*.h5`
+- Requires the `hdf5r` package (`install.packages("hdf5r")`)
+
 For MAT files:
 
 - Must match pattern `*_class*.mat`
-- Must contain `roinum` and `TBclass` variables
 - Must contain `roinum` and `TBclass` variables
 
 ------------------------------------------------------------------------
@@ -168,12 +208,16 @@ Minimal example:
     D20230101T120000_IFCB134_00001.png,Diatom
     D20230101T120000_IFCB134_00002.png,Ciliate
 
-With optional `score` column (confidence values between 0 and 1):
+With optional `score` and `class_name_auto` columns:
 
-    file_name,class_name,score
-    D20230101T120000_IFCB134_00001.png,Diatom,0.95
-    D20230101T120000_IFCB134_00002.png,Ciliate,0.87
-    D20230101T120000_IFCB134_00003.png,Dinoflagellate,0.72
+    file_name,class_name,class_name_auto,score
+    D20230101T120000_IFCB134_00001.png,unclassified,Diatom,0.45
+    D20230101T120000_IFCB134_00002.png,Ciliate,Ciliate,0.87
+    D20230101T120000_IFCB134_00003.png,Dinoflagellate,Dinoflagellate,0.72
+
+The `class_name_auto` column contains the raw prediction without
+threshold. When “Apply classification threshold” is disabled in
+Settings, ClassiPyR uses `class_name_auto` instead of `class_name`.
 
 **Q: My CNN classifier outputs different column names**
 
@@ -226,7 +270,10 @@ A: No! You can create a class list from scratch directly in the app:
 2.  Add classes one at a time or paste multiple classes in the text area
 3.  Click Apply Changes - a temporary file is created automatically
 4.  Start annotating immediately
-5.  Remember to Save as .mat or .txt for future sessions
+
+With SQLite storage (default), your class list is auto-saved to the
+database and restored on next startup. You can still export as `.mat` or
+`.txt` for sharing or backup.
 
 **Q: How do I create a class list from scratch?**
 
@@ -236,7 +283,17 @@ A:
 2.  Add classes using “Add new class” field, or type/paste classes in
     the text area
 3.  Click Apply Changes
-4.  Save as .mat or .txt for future use
+4.  With SQLite storage, the class list persists automatically.
+    Optionally save as `.mat` or `.txt` for portability.
+
+**Q: Is my class list saved automatically?**
+
+A: Yes, when using SQLite storage (the default). Every change — adding
+classes, renaming, applying WoRMS matches, uploading a file — is
+auto-saved to the `global_class_list` table in the SQLite database. On
+next startup, the class list is restored from the database. If you don’t
+use SQLite storage, save your class list as a `.txt` or `.mat` file to
+preserve it.
 
 **Q: Can I import a class list from MATLAB?**
 
@@ -263,6 +320,24 @@ characters must be sanitized:
 
 Common taxonomic characters like hyphens (`-`), underscores (`_`),
 periods (`.`), and spaces are preserved.
+
+**Q: How do I match class names to WoRMS AphiaID values?**
+
+A: In **Settings → Edit Class List**, click **Match WoRMS AphiaID**.
+
+- The app sanitizes class names before querying WoRMS
+- Long names (\>80 characters) are skipped automatically in auto-match
+- Unmatched/skipped classes can be rematched manually by editing query
+  fields and clicking **Rematch Unmatched**
+- Click **Apply AphiaID Matches** to persist results
+
+Matched AphiaIDs are shown in the class list as `[AphiaID: ...]`.
+
+**Q: Where are AphiaID mappings stored?**
+
+A: In the SQLite database (`annotations.sqlite`), table
+`class_taxonomy`, in the configured **Database Folder**. They are not
+embedded in `class2use.mat`/`.txt` files.
 
 ------------------------------------------------------------------------
 
@@ -341,10 +416,9 @@ Or use the **Export SQLite → .mat** button in Settings.
 
 ``` r
 library(ClassiPyR)
-class2use <- load_class_list("/shared/network/class2use.mat")
 db_path <- get_db_path(get_default_db_dir())
 # Import .mat files from the shared folder into the local database
-result <- import_all_mat_to_db("/shared/network/manual", db_path, class2use)
+result <- import_all_mat_to_db("/shared/network/manual", db_path)
 cat(result$success, "imported,", result$skipped, "skipped\n")
 ```
 
@@ -380,19 +454,17 @@ You can also import programmatically — a single file:
 
 ``` r
 library(ClassiPyR)
-class2use <- load_class_list("/path/to/class2use.mat")
 import_mat_to_db(
   mat_path = "/data/manual/D20230101T120000_IFCB134.mat",
   db_path = get_db_path(get_default_db_dir()),
-  sample_name = "D20230101T120000_IFCB134",
-  class2use = class2use
+  sample_name = "D20230101T120000_IFCB134"
 )
 ```
 
 Or bulk-import all `.mat` files in a folder:
 
 ``` r
-result <- import_all_mat_to_db("/data/manual", get_db_path(get_default_db_dir()), class2use)
+result <- import_all_mat_to_db("/data/manual", get_db_path(get_default_db_dir()))
 cat(result$success, "imported,", result$failed, "failed,", result$skipped, "skipped\n")
 ```
 
@@ -411,6 +483,35 @@ export_db_to_mat(get_db_path(get_default_db_dir()), "D20230101T120000_IFCB134", 
 # All samples
 result <- export_all_db_to_mat(get_db_path(get_default_db_dir()), "/data/manual")
 cat(result$success, "exported,", result$failed, "failed\n")
+```
+
+**Q: Can I import images classified in another tool?**
+
+A: Yes. Organize your PNG images into subfolders named after each class
+(e.g., `Diatom/`, `Ciliate_002/`). Then use **Import PNG → SQLite** in
+Settings \> Import / Export. The app strips trailing `_NNN` suffixes
+from folder names (following the iRfcb convention) and maps images to
+class names based on which subfolder they are in.
+
+If your folder class names don’t match the app’s current class list, a
+mapping dialog will appear letting you remap them to existing classes or
+add them as new classes.
+
+Note: ROI files are needed for viewing images and re-exporting. Without
+ROI files, annotations are stored in the database but images cannot be
+displayed in the gallery.
+
+You can also import programmatically:
+
+``` r
+library(ClassiPyR)
+result <- import_png_folder_to_db(
+  "/data/png_export",
+  get_db_path(get_default_db_dir()),
+  class2use = c("Diatom", "Ciliate", "Dinoflagellate"),
+  annotator = "Jane"
+)
+cat(result$success, "imported,", result$failed, "failed\n")
 ```
 
 **Q: Can I change the annotator name for existing annotations?**
@@ -583,11 +684,11 @@ A: In the same config directory as your settings:
 
 | Error                      | Solution                                                                                                                                                                |
 |----------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| “ROI file not found”       | Check ROI Data Folder path; ensure `.roi` files use IFCB naming and click Sync                                                                                          |
+| “ROI file not found”       | Check ROI/PNG Data Folder path. If no ROI exists, provide extracted PNG sample folders named by sample and click Sync                                                   |
 | “ADC file not found”       | ADC file must be alongside ROI file                                                                                                                                     |
 | “Python not available”     | Only affects `.mat` export. Switch to SQLite in Settings, or run [`iRfcb::ifcb_py_install()`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html) |
 | “Error loading class list” | Check file format (.mat or .txt)                                                                                                                                        |
-| “No samples found”         | Check ROI Data Folder configuration                                                                                                                                     |
+| “No samples found”         | Check ROI/PNG Data Folder configuration and naming                                                                                                                      |
 | App fails to start         | Try `run_app(reset_settings = TRUE)` to clear saved settings                                                                                                            |
 
 ------------------------------------------------------------------------

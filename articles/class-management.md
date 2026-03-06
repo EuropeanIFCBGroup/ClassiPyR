@@ -38,11 +38,12 @@ become invalid for ifcb-analysis!**
 You can create a new class list directly in the app without uploading a
 file:
 
-[![Class list editor for adding, removing, and reordering
-classes.](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-editor.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-editor.png)
+[![Class list editor showing classes with annotation counts, editing
+area, and export
+options.](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-editor.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-editor.png)
 
-*Class list editor for adding, removing, and reordering classes. Click
-to enlarge.*
+*Class list editor showing classes with annotation counts, editing area,
+and export options. Click to enlarge.*
 
 1.  Open **Settings** → **Edit Class List**
 2.  The editor opens with an empty class list
@@ -60,11 +61,12 @@ to enlarge.*
 - Click **Apply Changes**
 
 4.  The app creates a temporary class list file automatically
-5.  **Save your work**: Click **Save as .mat** or **Save as .txt** to
-    keep your class list for future sessions
+5.  If using SQLite storage (default), your class list is **auto-saved
+    to the database** and restored on next startup
 
-> **Note**: The temporary class list works for the current session, but
-> you should save it to a file for future use.
+> **Note**: With SQLite storage, your class list persists automatically.
+> You can still use **Save as .mat** or **Save as .txt** to export a
+> portable copy for sharing or backup.
 
 ------------------------------------------------------------------------
 
@@ -92,7 +94,8 @@ One class per line:
 ## Viewing Classes
 
 1.  Open Settings → **Edit Class List**
-2.  The left panel shows all classes with indices
+2.  The left panel shows all classes with their indices and the number
+    of annotated images per class (queried from the database)
 3.  Toggle **By ID** / **A-Z** to sort the view
 
 **Note**: Sorting is for viewing only - it doesn’t change actual
@@ -157,6 +160,39 @@ Now all your “Ciliate” (index 2) .mat annotations become
 
 ------------------------------------------------------------------------
 
+## WoRMS Matching (AphiaID)
+
+You can match class names to the World Register of Marine Species
+directly in the Class List Editor:
+
+[![WoRMS match results modal showing accepted, synonym, unmatched, and
+manual rematch query
+fields.](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/worms-match-modal.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/worms-match-modal.png)
+
+*WoRMS match results modal with manual rematch query fields for
+unresolved classes. Click to enlarge.*
+
+1.  Open **Settings** → **Edit Class List**
+2.  Click **Match WoRMS AphiaID**
+3.  Review the result table:
+    - `accepted`: direct accepted WoRMS match
+    - `synonym`: class matched through a synonym; accepted AphiaID is
+      returned
+    - `unmatched`: no WoRMS match found
+    - `skipped`: query skipped automatically (e.g. name longer than 80
+      characters)
+4.  For unresolved rows, edit the query text in the manual rematch
+    fields and click **Rematch Unmatched**
+5.  Click **Apply AphiaID Matches**
+
+After applying, matched classes show `[AphiaID: ...]` in the class list
+display.
+
+**Where this is stored:** AphiaID mappings are saved in the SQLite
+database (`class_taxonomy` table), not in `class2use.mat`/`.txt`.
+
+------------------------------------------------------------------------
+
 ## Exporting Class Lists
 
 ### Save as MAT
@@ -175,6 +211,24 @@ Creates simple text file:
 
 1.  Click **Save as .txt**
 2.  Choose location in browser download
+
+------------------------------------------------------------------------
+
+## Auto-persistence in SQLite
+
+When the storage format includes SQLite (the default), the class list is
+automatically saved to the `global_class_list` table in
+`annotations.sqlite` whenever it changes. This means:
+
+- Adding a class, renaming, applying WoRMS matches, or uploading a file
+  all persist instantly
+- On next startup, the class list is restored from the database (no file
+  upload needed)
+- File-based class lists (`.mat`/`.txt`) are still supported as a
+  fallback and for sharing
+
+If you switch away from SQLite storage, class list persistence falls
+back to the file-based workflow (upload or save as `.txt`/`.mat`).
 
 ------------------------------------------------------------------------
 

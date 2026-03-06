@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">ClassiPyR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -84,7 +84,7 @@
       </dl></div><div class="section level2">
       <h2 id="sample-loading">Sample Loading<a class="anchor" aria-label="anchor" href="#sample-loading"></a></h2>
 
-      <div class="section-desc"><p>Functions for loading classifications and samples</p></div>
+      <div class="section-desc"><p>Functions for loading classifications and samples from ROI/PNG sources</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -114,6 +114,13 @@
 
         <dt>
 
+          <code><a href="load_from_h5.html">load_from_h5()</a></code>
+
+        </dt>
+        <dd>Load classifications from HDF5 classifier output file</dd>
+
+        <dt>
+
           <code><a href="load_from_mat.html">load_from_mat()</a></code>
 
         </dt>
@@ -139,6 +146,13 @@
 
         </dt>
         <dd>Filter classifications to only include extracted images</dd>
+
+        <dt>
+
+          <code><a href="scan_png_class_folder.html">scan_png_class_folder()</a></code>
+
+        </dt>
+        <dd>Scan a PNG folder with class subfolders</dd>
       </dl></div><div class="section level2">
       <h2 id="sample-saving">Sample Saving<a class="anchor" aria-label="anchor" href="#sample-saving"></a></h2>
 
@@ -198,7 +212,7 @@
           <code><a href="save_annotations_db.html">save_annotations_db()</a></code>
 
         </dt>
-        <dd>Save annotations to the SQLite database</dd>
+        <dd>Save annotations to SQLite</dd>
 
         <dt>
 
@@ -213,6 +227,13 @@
 
         </dt>
         <dd>List samples with annotations in the database</dd>
+
+        <dt>
+
+          <code><a href="list_annotation_metadata_db.html">list_annotation_metadata_db()</a></code>
+
+        </dt>
+        <dd>List distinct years, months, and instruments from annotations</dd>
 
         <dt>
 
@@ -262,6 +283,92 @@
 
         </dt>
         <dd>Bulk export all annotated samples from SQLite to class-organized PNGs</dd>
+
+        <dt>
+
+          <code><a href="export_all_db_to_zip.html">export_all_db_to_zip()</a></code>
+
+        </dt>
+        <dd>Bulk export all annotated samples from SQLite to EcoTaxa-ready ZIP</dd>
+
+        <dt>
+
+          <code><a href="import_png_folder_to_db.html">import_png_folder_to_db()</a></code>
+
+        </dt>
+        <dd>Import annotations from a PNG class folder into the SQLite database</dd>
+
+        <dt>
+
+          <code><a href="list_classes_db.html">list_classes_db()</a></code>
+
+        </dt>
+        <dd>List all classes with counts in the annotations database</dd>
+
+        <dt>
+
+          <code><a href="save_class_taxonomy_db.html">save_class_taxonomy_db()</a></code>
+
+        </dt>
+        <dd>Save class taxonomy mappings to SQLite</dd>
+
+        <dt>
+
+          <code><a href="load_class_taxonomy_db.html">load_class_taxonomy_db()</a></code>
+
+        </dt>
+        <dd>Load class taxonomy mappings from SQLite</dd>
+
+        <dt>
+
+          <code><a href="save_global_class_list_db.html">save_global_class_list_db()</a></code>
+
+        </dt>
+        <dd>Save annotations to the SQLite database</dd>
+
+        <dt>
+
+          <code><a href="load_global_class_list_db.html">load_global_class_list_db()</a></code>
+
+        </dt>
+        <dd>Load global class list from SQLite</dd>
+
+        <dt>
+
+          <code><a href="load_class_annotations_db.html">load_class_annotations_db()</a></code>
+
+        </dt>
+        <dd>Load all annotations for a specific class from the database</dd>
+
+        <dt>
+
+          <code><a href="save_class_review_changes_db.html">save_class_review_changes_db()</a></code>
+
+        </dt>
+        <dd>Save class review changes to the database</dd>
+      </dl></div><div class="section level2">
+      <h2 id="worms-taxonomy">WoRMS Taxonomy<a class="anchor" aria-label="anchor" href="#worms-taxonomy"></a></h2>
+
+      <div class="section-desc"><p>Functions for matching class names to WoRMS AphiaID values</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="sanitize_worms_query.html">sanitize_worms_query()</a></code>
+
+        </dt>
+        <dd>Sanitize taxon names for WoRMS matching</dd>
+
+        <dt>
+
+          <code><a href="build_worms_match_rows.html">build_worms_match_rows()</a></code>
+
+        </dt>
+        <dd>Build WoRMS match rows for class names</dd>
       </dl></div><div class="section level2">
       <h2 id="file-index-cache">File Index Cache<a class="anchor" aria-label="anchor" href="#file-index-cache"></a></h2>
 
@@ -299,6 +406,78 @@
 
         </dt>
         <dd>Rescan folders and rebuild the file index cache</dd>
+      </dl></div><div class="section level2">
+      <h2 id="dashboard">Dashboard<a class="anchor" aria-label="anchor" href="#dashboard"></a></h2>
+
+      <div class="section-desc"><p>Functions for working with remote IFCB Dashboard instances</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="parse_dashboard_url.html">parse_dashboard_url()</a></code>
+
+        </dt>
+        <dd>Parse an IFCB Dashboard URL</dd>
+
+        <dt>
+
+          <code><a href="list_dashboard_bins.html">list_dashboard_bins()</a></code>
+
+        </dt>
+        <dd>List bins from an IFCB Dashboard</dd>
+
+        <dt>
+
+          <code><a href="download_dashboard_images.html">download_dashboard_images()</a></code>
+
+        </dt>
+        <dd>Download and extract PNG images from the Dashboard</dd>
+
+        <dt>
+
+          <code><a href="download_dashboard_images_bulk.html">download_dashboard_images_bulk()</a></code>
+
+        </dt>
+        <dd>Bulk download zip archives for multiple samples from the Dashboard</dd>
+
+        <dt>
+
+          <code><a href="download_dashboard_image_single.html">download_dashboard_image_single()</a></code>
+
+        </dt>
+        <dd>Download a single PNG image from the Dashboard</dd>
+
+        <dt>
+
+          <code><a href="download_dashboard_images_individual.html">download_dashboard_images_individual()</a></code>
+
+        </dt>
+        <dd>Download individual PNG images from the Dashboard</dd>
+
+        <dt>
+
+          <code><a href="download_dashboard_adc.html">download_dashboard_adc()</a></code>
+
+        </dt>
+        <dd>Download ADC file from the Dashboard</dd>
+
+        <dt>
+
+          <code><a href="download_dashboard_autoclass.html">download_dashboard_autoclass()</a></code>
+
+        </dt>
+        <dd>Download and parse autoclass scores from the Dashboard</dd>
+
+        <dt>
+
+          <code><a href="get_dashboard_cache_dir.html">get_dashboard_cache_dir()</a></code>
+
+        </dt>
+        <dd>Get persistent cache directory for dashboard downloads</dd>
       </dl></div><div class="section level2">
       <h2 id="utilities">Utilities<a class="anchor" aria-label="anchor" href="#utilities"></a></h2>
 

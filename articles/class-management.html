@@ -25,7 +25,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">ClassiPyR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -75,7 +75,7 @@
       <img src="../logo.svg" class="logo" alt=""><h1>Class List Management</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.1.1/vignettes/class-management.Rmd" class="external-link"><code>vignettes/class-management.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/vignettes/class-management.Rmd" class="external-link"><code>vignettes/class-management.Rmd</code></a></small>
       <div class="d-none name"><code>class-management.Rmd</code></div>
     </div>
 
@@ -117,10 +117,10 @@ annotations become invalid for ifcb-analysis!</strong></p>
 <p>You can create a new class list directly in the app without uploading
 a file:</p>
 <a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-editor.png">
-<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-editor.png" alt="Class list editor for adding, removing, and reordering classes." style="max-width:80%;"></a>
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-editor.png" alt="Class list editor showing classes with annotation counts, editing area, and export options." style="max-width:80%;"></a>
 <p>
-<em>Class list editor for adding, removing, and reordering classes.
-Click to enlarge.</em>
+<em>Class list editor showing classes with annotation counts, editing
+area, and export options. Click to enlarge.</em>
 </p>
 <ol style="list-style-type: decimal">
 <li>Open <strong>Settings</strong> → <strong>Edit Class
@@ -144,14 +144,15 @@ List</strong>
 </ul>
 <ol start="4" style="list-style-type: decimal">
 <li>The app creates a temporary class list file automatically</li>
-<li>
-<strong>Save your work</strong>: Click <strong>Save as .mat</strong>
-or <strong>Save as .txt</strong> to keep your class list for future
-sessions</li>
+<li>If using SQLite storage (default), your class list is
+<strong>auto-saved to the database</strong> and restored on next
+startup</li>
 </ol>
 <blockquote>
-<p><strong>Note</strong>: The temporary class list works for the current
-session, but you should save it to a file for future use.</p>
+<p><strong>Note</strong>: With SQLite storage, your class list persists
+automatically. You can still use <strong>Save as .mat</strong> or
+<strong>Save as .txt</strong> to export a portable copy for sharing or
+backup.</p>
 </blockquote>
 <hr>
 </div>
@@ -185,7 +186,8 @@ session, but you should save it to a file for future use.</p>
 <ol style="list-style-type: decimal">
 <li>Open Settings → <strong>Edit Class List</strong>
 </li>
-<li>The left panel shows all classes with indices</li>
+<li>The left panel shows all classes with their indices and the number
+of annotated images per class (queried from the database)</li>
 <li>Toggle <strong>By ID</strong> / <strong>A-Z</strong> to sort the
 view</li>
 </ol>
@@ -264,6 +266,50 @@ below</li>
 </div>
 </div>
 <div class="section level2">
+<h2 id="worms-matching-aphiaid">WoRMS Matching (AphiaID)<a class="anchor" aria-label="anchor" href="#worms-matching-aphiaid"></a>
+</h2>
+<p>You can match class names to the World Register of Marine Species
+directly in the Class List Editor:</p>
+<a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/worms-match-modal.png">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/worms-match-modal.png" alt="WoRMS match results modal showing accepted, synonym, unmatched, and manual rematch query fields." style="max-width:80%;"></a>
+<p>
+<em>WoRMS match results modal with manual rematch query fields for
+unresolved classes. Click to enlarge.</em>
+</p>
+<ol style="list-style-type: decimal">
+<li>Open <strong>Settings</strong> → <strong>Edit Class
+List</strong>
+</li>
+<li>Click <strong>Match WoRMS AphiaID</strong>
+</li>
+<li>Review the result table:
+<ul>
+<li>
+<code>accepted</code>: direct accepted WoRMS match</li>
+<li>
+<code>synonym</code>: class matched through a synonym; accepted
+AphiaID is returned</li>
+<li>
+<code>unmatched</code>: no WoRMS match found</li>
+<li>
+<code>skipped</code>: query skipped automatically (e.g. name longer
+than 80 characters)</li>
+</ul>
+</li>
+<li>For unresolved rows, edit the query text in the manual rematch
+fields and click <strong>Rematch Unmatched</strong>
+</li>
+<li>Click <strong>Apply AphiaID Matches</strong>
+</li>
+</ol>
+<p>After applying, matched classes show <code>[AphiaID: ...]</code> in
+the class list display.</p>
+<p><strong>Where this is stored:</strong> AphiaID mappings are saved in
+the SQLite database (<code>class_taxonomy</code> table), not in
+<code>class2use.mat</code>/<code>.txt</code>.</p>
+<hr>
+</div>
+<div class="section level2">
 <h2 id="exporting-class-lists">Exporting Class Lists<a class="anchor" aria-label="anchor" href="#exporting-class-lists"></a>
 </h2>
 <div class="section level3">
@@ -291,6 +337,25 @@ scipy.</p>
 </ol>
 <hr>
 </div>
+</div>
+<div class="section level2">
+<h2 id="auto-persistence-in-sqlite">Auto-persistence in SQLite<a class="anchor" aria-label="anchor" href="#auto-persistence-in-sqlite"></a>
+</h2>
+<p>When the storage format includes SQLite (the default), the class list
+is automatically saved to the <code>global_class_list</code> table in
+<code>annotations.sqlite</code> whenever it changes. This means:</p>
+<ul>
+<li>Adding a class, renaming, applying WoRMS matches, or uploading a
+file all persist instantly</li>
+<li>On next startup, the class list is restored from the database (no
+file upload needed)</li>
+<li>File-based class lists (<code>.mat</code>/<code>.txt</code>) are
+still supported as a fallback and for sharing</li>
+</ul>
+<p>If you switch away from SQLite storage, class list persistence falls
+back to the file-based workflow (upload or save as
+<code>.txt</code>/<code>.mat</code>).</p>
+<hr>
 </div>
 <div class="section level2">
 <h2 id="best-practices">Best Practices<a class="anchor" aria-label="anchor" href="#best-practices"></a>

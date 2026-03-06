@@ -1,7 +1,7 @@
-# Save annotations to the SQLite database
+# Save annotations to SQLite
 
-Writes (or replaces) annotations for a single sample. The existing rows
-for the sample are deleted first so that re-saving acts as an upsert.
+Saves per-ROI classifications and the sample class list to the SQLite
+database.
 
 ## Usage
 
