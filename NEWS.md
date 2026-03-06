@@ -51,7 +51,8 @@
 - Added an **Apply** button in Settings to activate changes immediately without closing the dialog (#18).
 - Prevented shinyFiles from freezing when an invalid path is entered by disabling Browse and showing a notification for non-existent input folders (#19).
 - **Select Page / Select All**: The "Select All" button now uses a two-click workflow — first click selects the current page, second click selects all images across all pages. Resets automatically when navigating pages, changing filters, or loading a new sample.
-- In annotation mode, single-class filtered images are now sorted by area (descending) for all classes, not just "unclassified".
+- In annotation mode, images are now sorted by width (x-dimension, descending) instead of area, for all classes. This groups images with similar widths for a more uniform gallery layout.
+- **Gallery images at native resolution**: Removed the `max-height: 120px` CSS constraint so images display at their actual pixel dimensions. This preserves small morphological details and ensures the measuring tool reports accurate distances.
 
 # ClassiPyR 0.1.1
 

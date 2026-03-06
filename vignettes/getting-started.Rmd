@@ -236,7 +236,7 @@ Work is automatically saved when:
 
 2. **Use drag-select** - Much faster than clicking individual images
 
-3. **Sort by size** - Images are sorted by ROI area, grouping similar organisms
+3. **Sort by width** - Images are sorted by width (x-dimension), grouping similar organisms
 
 4. **Check statistics** - The "Validation Statistics" tab shows your progress
 

@@ -3290,7 +3290,7 @@ server <- function(input, output, session) {
     classifications$height <- ifelse(!is.na(idx), roi_dims$height[idx], NA_real_)
     classifications$roi_area <- ifelse(!is.na(idx), roi_dims$area[idx], NA_real_)
 
-    classifications[order(-classifications$roi_area, na.last = TRUE), ]
+    classifications[order(-classifications$width, na.last = TRUE), ]
   }
   
   # ============================================================================
@@ -4021,11 +4021,11 @@ server <- function(input, output, session) {
     
     if (input$class_filter == "all") {
       if (rv$is_annotation_mode) {
-        # In annotation mode: sort unclassified by area (largest first),
+        # In annotation mode: sort unclassified by width (widest first),
         # then classified by class name
         unclassified <- df %>%
           filter(class_name == "unclassified") %>%
-          arrange(desc(roi_area))
+          arrange(desc(width))
         
         classified <- df %>%
           filter(class_name != "unclassified") %>%
@@ -4041,8 +4041,8 @@ server <- function(input, output, session) {
       filtered <- df %>% filter(class_name == input$class_filter)
       
       if (rv$is_annotation_mode) {
-        # Sort by area in annotation mode
-        filtered %>% arrange(desc(roi_area))
+        # Sort by width in annotation mode
+        filtered %>% arrange(desc(width))
       } else {
         filtered %>% arrange(file_name)
       }
@@ -4172,7 +4172,7 @@ server <- function(input, output, session) {
           
           tags$img(
             src = img_src,
-            style = "max-height: 120px; display: block;",
+            style = "display: block;",
             onerror = "this.style.display='none'; this.nextSibling.style.display='block';"
           ),
           div(style = "width: 100px; height: 80px; background: #f0f0f0; display: none;
