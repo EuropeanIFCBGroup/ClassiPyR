@@ -4,10 +4,14 @@
 \alias{load_from_csv}
 \title{Load classifications from CSV file (validation mode)}
 \usage{
-load_from_csv(csv_path)
+load_from_csv(csv_path, use_threshold = TRUE)
 }
 \arguments{
 \item{csv_path}{Path to classification CSV file}
+
+\item{use_threshold}{Logical, whether to use the threshold-filtered
+\code{class_name} column (default \code{TRUE}) or the raw
+\code{class_name_auto} column when available.}
 }
 \value{
 Data frame with classifications. Expected columns: `file_name`,
@@ -25,9 +29,12 @@ The CSV file must contain the following columns:
   \item{class_name}{Predicted class name (e.g., `Diatom`).}
 }
 
-An optional column may also be included:
+Optional columns may also be included:
 \describe{
   \item{score}{Classification confidence value between 0 and 1.}
+  \item{class_name_auto}{Raw (unthresholded) class prediction. When
+    \code{use_threshold = FALSE} and this column exists, its values are
+    used as \code{class_name}.}
 }
 
 The CSV file must be named after the sample it describes

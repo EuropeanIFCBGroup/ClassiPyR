@@ -328,6 +328,41 @@ test_that("read_roi_dimensions handles ADC files with fewer than 17 columns", {
   unlink(temp_adc)
 })
 
+test_that("read_png_dimensions reads width/height from PNG header", {
+  png_path <- testthat::test_path("test_data", "png", "D20220522T000439_IFCB134",
+                                  "D20220522T000439_IFCB134_00002.png")
+  skip_if_not(file.exists(png_path), "Test PNG file not found")
+
+  dims <- ClassiPyR:::read_png_dimensions(png_path)
+  expect_type(dims, "list")
+  expect_true(is.numeric(dims$width))
+  expect_true(is.numeric(dims$height))
+  expect_true(!is.na(dims$width) && dims$width > 0)
+  expect_true(!is.na(dims$height) && dims$height > 0)
+})
+
+test_that("read_png_dimensions parses PNG IHDR dimensions", {
+  png_path <- tempfile(fileext = ".png")
+  png_bytes <- as.raw(c(
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+    0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+    0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,
+    0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+    0x00, 0x00, 0x02, 0x00, 0x01, 0xE2, 0x21, 0xBC,
+    0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+    0x44, 0xAE, 0x42, 0x60, 0x82
+  ))
+  writeBin(png_bytes, png_path)
+
+  dims <- ClassiPyR:::read_png_dimensions(png_path)
+  expect_equal(dims$width, 1)
+  expect_equal(dims$height, 1)
+
+  unlink(png_path)
+})
+
 test_that("get_config_dir uses tempdir during R CMD check", {
   # Simulate R CMD check environment
   old_val <- Sys.getenv("_R_CHECK_PACKAGE_NAME_", unset = NA)
@@ -612,6 +647,191 @@ test_that("rescan_file_index works with non-standard folder structure", {
   # The path should go directly from roi_folder to the file, no YYYY/DYYYYMMDD layer
   expect_equal(normalizePath(dirname(roi_path), winslash = "/"), 
                normalizePath(roi_folder, winslash = "/"))
+
+  unlink(temp_root, recursive = TRUE)
+})
+
+test_that("rescan_file_index detects H5 and MAT classifier files", {
+  temp_root <- tempfile("h5_test_")
+  roi_folder <- file.path(temp_root, "raw")
+  csv_folder <- file.path(temp_root, "classified")
+  output_folder <- file.path(temp_root, "manual")
+  dir.create(roi_folder, recursive = TRUE)
+  dir.create(csv_folder, recursive = TRUE)
+  dir.create(output_folder, recursive = TRUE)
+
+  # Create ROI files
+  file.create(file.path(roi_folder, "D20230101T120000_IFCB134.roi"))
+  file.create(file.path(roi_folder, "D20230102T120000_IFCB134.roi"))
+  file.create(file.path(roi_folder, "D20230103T120000_IFCB134.roi"))
+
+  # Create H5 classifier file
+  file.create(file.path(csv_folder, "D20230101T120000_IFCB134_class_v1.h5"))
+
+  # Create MAT classifier file
+  file.create(file.path(csv_folder, "D20230102T120000_IFCB134_class_v1.mat"))
+
+  # Create CSV classifier file
+  writeLines("file_name,class_name",
+             file.path(csv_folder, "D20230103T120000_IFCB134.csv"))
+
+  result <- rescan_file_index(
+    roi_folder = roi_folder,
+    csv_folder = csv_folder,
+    output_folder = output_folder,
+    verbose = FALSE
+  )
+
+  expect_type(result, "list")
+  expect_length(result$sample_names, 3)
+
+  # H5 classifier detected
+  expect_true("D20230101T120000_IFCB134" %in%
+                names(result$classifier_h5_files))
+
+  # MAT classifier detected
+  expect_true("D20230102T120000_IFCB134" %in%
+                names(result$classifier_mat_files))
+
+  # All three should be classified
+  expect_length(result$classified_samples, 3)
+
+  unlink(temp_root, recursive = TRUE)
+})
+
+test_that("rescan_file_index uses db_folder for annotated sample lookup", {
+  temp_root <- tempfile("dbfolder_test_")
+  roi_folder <- file.path(temp_root, "raw")
+  output_folder <- file.path(temp_root, "manual")
+  db_folder <- file.path(temp_root, "db")
+  dir.create(roi_folder, recursive = TRUE)
+  dir.create(output_folder, recursive = TRUE)
+  dir.create(db_folder, recursive = TRUE)
+
+  # Create ROI file
+  file.create(file.path(roi_folder, "D20230101T120000_IFCB134.roi"))
+
+  # Save an annotation in the SQLite DB in db_folder
+  db_path <- get_db_path(db_folder)
+  save_annotations_db(
+    db_path, "D20230101T120000_IFCB134",
+    data.frame(file_name = "D20230101T120000_IFCB134_00001.png",
+               class_name = "Diatom", stringsAsFactors = FALSE),
+    c("unclassified", "Diatom"), "test"
+  )
+
+  result <- rescan_file_index(
+    roi_folder = roi_folder,
+    csv_folder = roi_folder,  # no CSV files here
+    output_folder = output_folder,
+    db_folder = db_folder,
+    verbose = FALSE
+  )
+
+  expect_type(result, "list")
+  expect_true("D20230101T120000_IFCB134" %in% result$annotated_samples)
+
+  unlink(temp_root, recursive = TRUE)
+})
+
+test_that("rescan_file_index returns NULL when no ROI files found", {
+  temp_root <- tempfile("noroi_test_")
+  roi_folder <- file.path(temp_root, "empty_raw")
+  dir.create(roi_folder, recursive = TRUE)
+
+  result <- rescan_file_index(
+    roi_folder = roi_folder,
+    csv_folder = roi_folder,
+    output_folder = roi_folder,
+    verbose = FALSE
+  )
+
+  expect_null(result)
+
+  unlink(temp_root, recursive = TRUE)
+})
+
+test_that("rescan_file_index discovers samples from extracted PNG folders", {
+  temp_root <- tempfile("png_scan_test_")
+  source_folder <- file.path(temp_root, "png_source")
+  csv_folder <- file.path(temp_root, "classified")
+  output_folder <- file.path(temp_root, "manual")
+  dir.create(source_folder, recursive = TRUE)
+  dir.create(csv_folder, recursive = TRUE)
+  dir.create(output_folder, recursive = TRUE)
+
+  sample_simple <- "D20230313T004021_IFCB134"
+  sample_nested <- "D20230314T001205_IFCB134"
+
+  simple_dir <- file.path(source_folder, sample_simple)
+  nested_dir <- file.path(source_folder, "2023", "D20230314", sample_nested)
+  dir.create(simple_dir, recursive = TRUE)
+  dir.create(nested_dir, recursive = TRUE)
+
+  file.create(file.path(simple_dir, paste0(sample_simple, "_00002.png")))
+  file.create(file.path(nested_dir, paste0(sample_nested, "_00007.png")))
+
+  # Not in a sample-named folder; should be ignored.
+  class_dir <- file.path(source_folder, "Diatom")
+  dir.create(class_dir, recursive = TRUE)
+  file.create(file.path(class_dir, paste0(sample_simple, "_00099.png")))
+
+  result <- rescan_file_index(
+    roi_folder = source_folder,
+    csv_folder = csv_folder,
+    output_folder = output_folder,
+    verbose = FALSE
+  )
+
+  expect_type(result, "list")
+  expect_true(sample_simple %in% result$sample_names)
+  expect_true(sample_nested %in% result$sample_names)
+  expect_equal(
+    normalizePath(result$png_sample_path_map[[sample_simple]], winslash = "/"),
+    normalizePath(simple_dir, winslash = "/")
+  )
+  expect_equal(
+    normalizePath(result$png_sample_path_map[[sample_nested]], winslash = "/"),
+    normalizePath(nested_dir, winslash = "/")
+  )
+
+  unlink(temp_root, recursive = TRUE)
+})
+
+test_that("rescan_file_index reports staged progress via callback", {
+  temp_root <- tempfile("progress_scan_test_")
+  source_folder <- file.path(temp_root, "source")
+  csv_folder <- file.path(temp_root, "classified")
+  output_folder <- file.path(temp_root, "manual")
+  dir.create(source_folder, recursive = TRUE)
+  dir.create(csv_folder, recursive = TRUE)
+  dir.create(output_folder, recursive = TRUE)
+
+  sample_name <- "D20230313T004021_IFCB134"
+  sample_dir <- file.path(source_folder, sample_name)
+  dir.create(sample_dir, recursive = TRUE)
+  file.create(file.path(sample_dir, paste0(sample_name, "_00002.png")))
+
+  progress_values <- numeric()
+  progress_details <- character()
+  progress_cb <- function(value = NULL, detail = NULL) {
+    if (!is.null(value)) progress_values <<- c(progress_values, value)
+    if (!is.null(detail)) progress_details <<- c(progress_details, detail)
+  }
+
+  result <- rescan_file_index(
+    roi_folder = source_folder,
+    csv_folder = csv_folder,
+    output_folder = output_folder,
+    verbose = FALSE,
+    progress = progress_cb
+  )
+
+  expect_type(result, "list")
+  expect_true(length(progress_values) > 0)
+  expect_true(any(progress_values == 0))
+  expect_true(any(progress_values == 1))
+  expect_true(length(progress_details) > 0)
 
   unlink(temp_root, recursive = TRUE)
 })

@@ -6,7 +6,7 @@
 
 #' @importFrom DBI dbConnect dbDisconnect dbWriteTable dbGetQuery dbExecute
 #' @importFrom RSQLite SQLite
-#' @importFrom iRfcb ifcb_create_manual_file ifcb_extract_pngs
+#' @importFrom iRfcb ifcb_create_manual_file ifcb_extract_pngs ifcb_get_ecotaxa_example ifcb_zip_pngs
 NULL
 
 #' Get path to the annotations SQLite database
@@ -62,19 +62,269 @@ init_db_schema <- function(con) {
     )
   ")
 
+  dbExecute(con, "
+    CREATE TABLE IF NOT EXISTS class_taxonomy (
+      class_name TEXT PRIMARY KEY,
+      aphia_id TEXT NOT NULL,
+      scientific_name TEXT,
+      accepted_name TEXT,
+      accepted_aphia_id TEXT,
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  ")
+
+  dbExecute(con, "
+    CREATE TABLE IF NOT EXISTS global_class_list (
+      class_index INTEGER PRIMARY KEY,
+      class_name  TEXT NOT NULL
+    )
+  ")
+
   # Migration: add is_manual column to existing databases that lack it
   cols <- dbGetQuery(con, "PRAGMA table_info(annotations)")
   if (!"is_manual" %in% cols$name) {
     dbExecute(con, "ALTER TABLE annotations ADD COLUMN is_manual INTEGER NOT NULL DEFAULT 1")
   }
 
+  tax_cols <- dbGetQuery(con, "PRAGMA table_info(class_taxonomy)")
+  if (nrow(tax_cols) > 0) {
+    if (!"scientific_name" %in% tax_cols$name) {
+      dbExecute(con, "ALTER TABLE class_taxonomy ADD COLUMN scientific_name TEXT")
+    }
+    if (!"accepted_aphia_id" %in% tax_cols$name) {
+      dbExecute(con, "ALTER TABLE class_taxonomy ADD COLUMN accepted_aphia_id TEXT")
+    }
+  }
+
   invisible(NULL)
+}
+
+#' Save class taxonomy mappings to SQLite
+#'
+#' Stores class-to-AphiaID mappings (with optional accepted names) in the
+#' \code{class_taxonomy} table of the annotations database.
+#'
+#' @param db_path Path to the SQLite database file.
+#' @param class_aphia_map Named character vector mapping class names to AphiaID.
+#' @param accepted_name_map Optional named character vector mapping class names
+#'   to WoRMS accepted names.
+#' @param scientific_name_map Optional named character vector mapping class
+#'   names to matched scientific names (query record).
+#' @param accepted_aphia_map Optional named character vector mapping class names
+#'   to accepted WoRMS AphiaID values.
+#' @return Logical \code{TRUE} on success, \code{FALSE} on failure.
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path(get_default_db_dir())
+#' save_class_taxonomy_db(
+#'   db_path,
+#'   class_aphia_map = c("Prorocentrum micans" = "109636")
+#' )
+#' }
+save_class_taxonomy_db <- function(db_path, class_aphia_map, accepted_name_map = NULL,
+                                   scientific_name_map = NULL, accepted_aphia_map = NULL) {
+  if (length(class_aphia_map) == 0) {
+    return(TRUE)
+  }
+
+  # Keep last value for duplicated class names to avoid ambiguous [[name]] access.
+  if (!is.null(names(class_aphia_map))) {
+    keep_last <- !duplicated(names(class_aphia_map), fromLast = TRUE)
+    class_aphia_map <- class_aphia_map[keep_last]
+  }
+
+  dir.create(dirname(db_path), recursive = TRUE, showWarnings = FALSE)
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+  init_db_schema(con)
+
+  tryCatch({
+    dbExecute(con, "BEGIN TRANSACTION")
+
+    map_names <- names(class_aphia_map)
+    for (i in seq_along(class_aphia_map)) {
+      nm <- if (!is.null(map_names) && length(map_names) >= i) map_names[i] else NA_character_
+      aphia <- as.character(class_aphia_map[i])[1]
+      if (is.na(nm) || !nzchar(nm) || is.na(aphia) || !nzchar(aphia)) next
+
+      accepted_name <- NA_character_
+      if (!is.null(accepted_name_map) && !is.null(names(accepted_name_map))) {
+        idx <- match(nm, names(accepted_name_map))
+        if (!is.na(idx)) {
+          accepted_name <- as.character(accepted_name_map[idx])[1]
+        }
+      }
+
+      scientific_name <- NA_character_
+      if (!is.null(scientific_name_map) && !is.null(names(scientific_name_map))) {
+        idx <- match(nm, names(scientific_name_map))
+        if (!is.na(idx)) {
+          scientific_name <- as.character(scientific_name_map[idx])[1]
+        }
+      }
+
+      accepted_aphia_id <- NA_character_
+      if (!is.null(accepted_aphia_map) && !is.null(names(accepted_aphia_map))) {
+        idx <- match(nm, names(accepted_aphia_map))
+        if (!is.na(idx)) {
+          accepted_aphia_id <- as.character(accepted_aphia_map[idx])[1]
+        }
+      }
+
+      dbExecute(con, "
+        INSERT INTO class_taxonomy (
+          class_name, aphia_id, scientific_name, accepted_name, accepted_aphia_id, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(class_name) DO UPDATE SET
+          aphia_id = excluded.aphia_id,
+          scientific_name = CASE
+            WHEN excluded.scientific_name IS NULL OR excluded.scientific_name = ''
+            THEN class_taxonomy.scientific_name
+            ELSE excluded.scientific_name
+          END,
+          accepted_name = CASE
+            WHEN excluded.accepted_name IS NULL OR excluded.accepted_name = ''
+            THEN class_taxonomy.accepted_name
+            ELSE excluded.accepted_name
+          END,
+          accepted_aphia_id = CASE
+            WHEN excluded.accepted_aphia_id IS NULL OR excluded.accepted_aphia_id = ''
+            THEN class_taxonomy.accepted_aphia_id
+            ELSE excluded.accepted_aphia_id
+          END,
+          updated_at = datetime('now')
+      ", params = list(nm, aphia, scientific_name, accepted_name, accepted_aphia_id))
+    }
+
+    dbExecute(con, "COMMIT")
+    TRUE
+  }, error = function(e) {
+    tryCatch(dbExecute(con, "ROLLBACK"), error = function(e2) NULL)
+    warning("Failed to save class taxonomy to database: ", e$message)
+    FALSE
+  })
+}
+
+#' Load class taxonomy mappings from SQLite
+#'
+#' Reads class-to-AphiaID mappings from the \code{class_taxonomy} table.
+#'
+#' @param db_path Path to the SQLite database file.
+#' @return Named character vector mapping class names to AphiaID.
+#'   Returns empty vector if database/table is missing or empty.
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path(get_default_db_dir())
+#' map <- load_class_taxonomy_db(db_path)
+#' }
+load_class_taxonomy_db <- function(db_path) {
+  if (!file.exists(db_path)) {
+    return(stats::setNames(character(0), character(0)))
+  }
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+  init_db_schema(con)
+
+  rows <- dbGetQuery(con, "
+    SELECT class_name, aphia_id
+    FROM class_taxonomy
+    WHERE aphia_id IS NOT NULL AND aphia_id != ''
+  ")
+
+  if (nrow(rows) == 0) {
+    return(stats::setNames(character(0), character(0)))
+  }
+
+  out <- stats::setNames(as.character(rows$aphia_id), as.character(rows$class_name))
+  out[!is.na(names(out)) & nzchar(names(out)) & !is.na(out) & nzchar(out)]
 }
 
 #' Save annotations to the SQLite database
 #'
 #' Writes (or replaces) annotations for a single sample. The existing rows for
 #' the sample are deleted first so that re-saving acts as an upsert.
+#'
+#' Save global class list to SQLite
+#'
+#' Replaces the contents of the \code{global_class_list} table with the
+#' supplied class names, preserving their index order. This is used to
+#' auto-persist the in-app classlist so it survives across sessions.
+#'
+#' @param db_path Path to the SQLite database file.
+#' @param class2use Character vector of class names.
+#' @return Logical \code{TRUE} on success, \code{FALSE} on failure.
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path(get_default_db_dir())
+#' save_global_class_list_db(db_path, c("unclassified", "Diatom", "Ciliate"))
+#' }
+save_global_class_list_db <- function(db_path, class2use) {
+  if (is.null(class2use) || length(class2use) == 0) {
+    return(TRUE)
+  }
+
+  dir.create(dirname(db_path), recursive = TRUE, showWarnings = FALSE)
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+  init_db_schema(con)
+
+  tryCatch({
+    dbExecute(con, "BEGIN TRANSACTION")
+    dbExecute(con, "DELETE FROM global_class_list")
+    for (i in seq_along(class2use)) {
+      dbExecute(con, "INSERT INTO global_class_list (class_index, class_name) VALUES (?, ?)",
+                params = list(i, class2use[i]))
+    }
+    dbExecute(con, "COMMIT")
+    TRUE
+  }, error = function(e) {
+    tryCatch(dbExecute(con, "ROLLBACK"), error = function(re) NULL)
+    warning("Failed to save global class list: ", e$message, call. = FALSE)
+    FALSE
+  })
+}
+
+#' Load global class list from SQLite
+#'
+#' Returns the class list stored in the \code{global_class_list} table,
+#' ordered by \code{class_index}. Returns \code{NULL} if the table is empty
+#' or the database does not exist.
+#'
+#' @param db_path Path to the SQLite database file.
+#' @return Character vector of class names, or \code{NULL} if unavailable.
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path(get_default_db_dir())
+#' classes <- load_global_class_list_db(db_path)
+#' }
+load_global_class_list_db <- function(db_path) {
+  if (!file.exists(db_path)) {
+    return(NULL)
+  }
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+  init_db_schema(con)
+
+  tryCatch({
+    df <- dbGetQuery(con, "SELECT class_name FROM global_class_list ORDER BY class_index")
+    if (nrow(df) == 0) NULL else df$class_name
+  }, error = function(e) {
+    warning("Failed to load global class list: ", e$message, call. = FALSE)
+    NULL
+  })
+}
+
+#' Save annotations to SQLite
+#'
+#' Saves per-ROI classifications and the sample class list to the SQLite
+#' database.
 #'
 #' @param db_path Path to the SQLite database file
 #' @param sample_name Sample name (e.g., \code{"D20230101T120000_IFCB134"})
@@ -601,6 +851,79 @@ export_db_to_png <- function(db_path, sample_name, roi_path, png_folder,
   })
 }
 
+#' Import annotations from a PNG class folder into the SQLite database
+#'
+#' Scans a folder of PNG images organized in class-name subfolders (via
+#' \code{\link{scan_png_class_folder}}) and imports the annotations into the
+#' database. An optional \code{class_mapping} named vector remaps class names
+#' before saving.
+#'
+#' @param png_folder Path to the top-level folder containing class subfolders
+#' @param db_path Path to the SQLite database file
+#' @param class2use Character vector of class names (preserves index order for
+#'   .mat export)
+#' @param class_mapping Optional named character vector mapping scanned class
+#'   names to target class names. Names are the source classes, values are the
+#'   target classes. Classes not in the mapping are kept as-is.
+#' @param annotator Annotator name (defaults to \code{"imported"})
+#' @return Named list with counts: \code{success}, \code{failed}
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path("/data/manual")
+#' class2use <- c("Diatom", "Dinoflagellate", "Ciliate")
+#' result <- import_png_folder_to_db(
+#'   "/data/png_export", db_path, class2use,
+#'   class_mapping = c("OldName" = "NewName"),
+#'   annotator = "Jane"
+#' )
+#' cat(result$success, "imported,", result$failed, "failed\n")
+#' }
+import_png_folder_to_db <- function(png_folder, db_path, class2use,
+                                     class_mapping = NULL,
+                                     annotator = "imported") {
+  scan_result <- scan_png_class_folder(png_folder)
+
+  counts <- list(success = 0L, failed = 0L)
+
+  if (nrow(scan_result$annotations) == 0) {
+    return(counts)
+  }
+
+  annotations <- scan_result$annotations
+
+  # Apply class mapping if provided
+  if (!is.null(class_mapping) && length(class_mapping) > 0) {
+    mapped <- class_mapping[annotations$class_name]
+    has_mapping <- !is.na(mapped)
+    annotations$class_name[has_mapping] <- mapped[has_mapping]
+  }
+
+  # Group by sample_name and save each sample
+
+  sample_names <- unique(annotations$sample_name)
+
+  for (sn in sample_names) {
+    sample_rows <- annotations[annotations$sample_name == sn, ]
+
+    classifications <- data.frame(
+      file_name = sample_rows$file_name,
+      class_name = sample_rows$class_name,
+      stringsAsFactors = FALSE
+    )
+
+    ok <- save_annotations_db(db_path, sn, classifications, class2use,
+                              annotator)
+    if (isTRUE(ok)) {
+      counts$success <- counts$success + 1L
+    } else {
+      counts$failed <- counts$failed + 1L
+    }
+  }
+
+  counts
+}
+
 #' Bulk export all annotated samples from SQLite to class-organized PNGs
 #'
 #' Exports every annotated sample in the database to PNG images organized
@@ -649,4 +972,527 @@ export_all_db_to_png <- function(db_path, png_folder, roi_path_map,
   }
 
   counts
+}
+
+# Parse IFCB PNG filename into date/time/ROI components
+#
+# @param file_name Basename of IFCB PNG file
+# @return List with `object_id`, `object_date`, `object_time`, and
+#   `object_roi_number` (integer-like character), or `NA_character_` values
+#   when parsing fails.
+# @keywords internal
+parse_ifcb_png_name <- function(file_name) {
+  object_id <- tools::file_path_sans_ext(file_name)
+  parsed <- tryCatch(
+    iRfcb::ifcb_convert_filenames(file_name),
+    error = function(e) NULL
+  )
+
+  if (!is.null(parsed) && nrow(parsed) > 0) {
+    timestamp <- suppressWarnings(as.POSIXct(parsed$timestamp[1], tz = "UTC"))
+    object_date <- if (!is.na(timestamp)) {
+      format(timestamp, "%Y%m%d", tz = "UTC")
+    } else {
+      NA_character_
+    }
+    object_time <- if (!is.na(timestamp)) {
+      format(timestamp, "%H%M%S", tz = "UTC")
+    } else {
+      NA_character_
+    }
+    roi_number <- if ("roi" %in% names(parsed)) {
+      suppressWarnings(as.integer(parsed$roi[1]))
+    } else {
+      NA_integer_
+    }
+
+    return(list(
+      object_id = object_id,
+      object_date = object_date,
+      object_time = object_time,
+      object_roi_number = if (is.na(roi_number)) NA_character_ else as.character(roi_number)
+    ))
+  }
+
+  # Fallback parser for unrecognized names (keeps previous tolerant behavior).
+  m <- regexec("^D([0-9]{8})T([0-9]{6})_.*_([0-9]+)\\.png$", file_name)
+  hit <- regmatches(file_name, m)[[1]]
+  if (length(hit) == 4) {
+    roi_number <- suppressWarnings(as.integer(hit[4]))
+    return(list(
+      object_id = object_id,
+      object_date = hit[2],
+      object_time = hit[3],
+      object_roi_number = if (is.na(roi_number)) NA_character_ else as.character(roi_number)
+    ))
+  }
+
+  list(
+    object_id = object_id,
+    object_date = NA_character_,
+    object_time = NA_character_,
+    object_roi_number = NA_character_
+  )
+}
+
+# Create per-class EcoTaxa inventory text files for exported PNG folders
+#
+# Writes one tab-separated `.txt` file inside each class subdirectory with
+# column headers and the iRfcb type row (`[t]`/`[f]`), plus one row per PNG.
+#
+# @param png_folder Path to top-level folder containing class subdirectories
+# @param db_path Path to SQLite database for annotation metadata
+# @param txt_file_name Name of inventory file to write in each class folder
+# @return Integer count of written inventory files
+# @keywords internal
+create_ecotaxa_inventory_txt <- function(png_folder, db_path,
+                                         txt_file_name = NULL) {
+  if (!dir.exists(png_folder) || !file.exists(db_path)) {
+    return(0L)
+  }
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+  init_db_schema(con)
+
+  meta <- dbGetQuery(con, "
+    SELECT
+      printf('%s_%05d.png', a.sample_name, a.roi_number) AS img_file_name,
+      a.class_name AS object_annotation_category,
+      a.annotator AS object_annotation_person_name,
+      t.aphia_id AS object_aphiaid,
+      t.scientific_name AS object_annotation_hierarchy
+    FROM annotations a
+    LEFT JOIN class_taxonomy t
+      ON a.class_name = t.class_name
+  ")
+
+  if (!nrow(meta)) {
+    return(0L)
+  }
+
+  example <- ifcb_get_ecotaxa_example()
+  cols <- c(
+    "img_file_name",
+    "object_id",
+    "object_date",
+    "object_time",
+    "object_annotation_status",
+    "object_annotation_person_name",
+    "object_annotation_category",
+    "object_aphiaid",
+    "object_annotation_hierarchy",
+    "object_roi_number"
+  )
+
+  type_row <- example[1, cols, drop = FALSE]
+  class_dirs <- list.dirs(png_folder, recursive = FALSE, full.names = TRUE)
+  written <- 0L
+
+  for (dir_path in class_dirs) {
+    png_files <- list.files(dir_path, pattern = "\\.png$", full.names = FALSE)
+    if (!length(png_files)) {
+      next
+    }
+
+    png_files <- sort(png_files)
+    rows <- data.frame(
+      img_file_name = png_files,
+      object_id = character(length(png_files)),
+      object_date = character(length(png_files)),
+      object_time = character(length(png_files)),
+      object_annotation_status = rep("validated", length(png_files)),
+      object_annotation_person_name = rep(NA_character_, length(png_files)),
+      object_annotation_category = rep(NA_character_, length(png_files)),
+      object_aphiaid = rep(NA_character_, length(png_files)),
+      object_annotation_hierarchy = rep(NA_character_, length(png_files)),
+      object_roi_number = rep(NA_character_, length(png_files)),
+      stringsAsFactors = FALSE
+    )
+
+    parsed <- lapply(png_files, parse_ifcb_png_name)
+    rows$object_id <- vapply(parsed, `[[`, character(1), "object_id")
+    rows$object_date <- vapply(parsed, `[[`, character(1), "object_date")
+    rows$object_time <- vapply(parsed, `[[`, character(1), "object_time")
+    rows$object_roi_number <- vapply(parsed, `[[`, character(1), "object_roi_number")
+
+    idx <- match(rows$img_file_name, meta$img_file_name)
+    has_meta <- !is.na(idx)
+
+    rows$object_annotation_person_name[has_meta] <- meta$object_annotation_person_name[idx[has_meta]]
+    rows$object_annotation_category[has_meta] <- meta$object_annotation_category[idx[has_meta]]
+    rows$object_aphiaid[has_meta] <- meta$object_aphiaid[idx[has_meta]]
+    rows$object_annotation_hierarchy[has_meta] <- meta$object_annotation_hierarchy[idx[has_meta]]
+
+    out <- rbind(type_row, rows[, cols, drop = FALSE])
+    file_name <- if (!is.null(txt_file_name) && nzchar(txt_file_name)) {
+      txt_file_name
+    } else {
+      paste0("ecotaxa_", basename(dir_path), ".tsv")
+    }
+    out_path <- file.path(dir_path, file_name)
+    utils::write.table(
+      out,
+      file = out_path,
+      sep = "\t",
+      row.names = FALSE,
+      col.names = TRUE,
+      quote = FALSE,
+      na = ""
+    )
+    written <- written + 1L
+  }
+
+  written
+}
+
+#' Bulk export all annotated samples from SQLite to EcoTaxa-ready ZIP
+#'
+#' Exports annotated samples to class-organized PNG folders, writes one
+#' inventory \code{.txt} file per class folder, and then zips the result using
+#' \code{iRfcb::ifcb_zip_pngs(include_txt = TRUE)}.
+#'
+#' @param db_path Path to the SQLite database file
+#' @param zip_path Full output path for the resulting ZIP archive
+#' @param roi_path_map Named list mapping sample names to \code{.roi} file
+#'   paths. Samples without an entry are skipped.
+#' @param skip_class Character vector of class names to exclude from export
+#'   (e.g. \code{"unclassified"}). Default \code{NULL} exports all classes.
+#' @param readme_file Optional README markdown file included in ZIP. Defaults to
+#'   \code{system.file("exdata/README-template.md", package = "iRfcb")}.
+#' @return Named list with counts: \code{success}, \code{failed},
+#'   \code{skipped}, \code{inventory_files}, and \code{zip_path}.
+#' @export
+export_all_db_to_zip <- function(db_path, zip_path, roi_path_map,
+                                 skip_class = NULL,
+                                 readme_file = system.file("exdata/README-template.md",
+                                                           package = "iRfcb")) {
+  if (!nzchar(zip_path)) {
+    warning("zip_path is empty")
+    return(list(success = 0L, failed = 0L, skipped = 0L,
+                inventory_files = 0L, zip_path = zip_path))
+  }
+
+  out_dir <- dirname(zip_path)
+  if (!dir.exists(out_dir)) {
+    dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  }
+
+  temp_png <- tempfile("classipyr_zip_export_")
+  dir.create(temp_png, recursive = TRUE, showWarnings = FALSE)
+  on.exit(unlink(temp_png, recursive = TRUE, force = TRUE), add = TRUE)
+
+  counts <- export_all_db_to_png(
+    db_path = db_path,
+    png_folder = temp_png,
+    roi_path_map = roi_path_map,
+    skip_class = skip_class
+  )
+
+  inventory_files <- create_ecotaxa_inventory_txt(temp_png, db_path)
+  has_png <- length(list.files(temp_png, pattern = "\\.png$", recursive = TRUE)) > 0
+  if (!has_png) {
+    warning("No PNG files were exported; ZIP archive was not created")
+    return(list(success = counts$success, failed = counts$failed,
+                skipped = counts$skipped, inventory_files = inventory_files,
+                zip_path = zip_path))
+  }
+
+  zip_ok <- tryCatch({
+    ifcb_zip_pngs(
+      png_folder = temp_png,
+      zip_filename = zip_path,
+      readme_file = readme_file,
+      include_txt = TRUE,
+      quiet = TRUE
+    )
+    TRUE
+  }, error = function(e) {
+    warning("Failed to create ZIP archive: ", e$message)
+    FALSE
+  })
+
+  if (!isTRUE(zip_ok)) {
+    return(list(success = counts$success, failed = counts$failed + 1L,
+                skipped = counts$skipped, inventory_files = inventory_files,
+                zip_path = zip_path))
+  }
+
+  list(
+    success = counts$success,
+    failed = counts$failed,
+    skipped = counts$skipped,
+    inventory_files = inventory_files,
+    zip_path = zip_path
+  )
+}
+
+#' List all classes with counts in the annotations database
+#'
+#' Queries the database for distinct class names and their annotation counts.
+#' Useful for populating class review mode dropdowns. Optional filters restrict
+#' results to annotations matching a given year, month, or instrument.
+#'
+#' @param db_path Path to the SQLite database file
+#' @param year Optional year filter (e.g. \code{"2023"}). When not \code{"all"}
+#'   or \code{NULL}, restricts to sample names starting with \code{DYYYY}.
+#' @param month Optional month filter (e.g. \code{"03"}). When not \code{"all"}
+#'   or \code{NULL}, restricts to sample names with that month at positions 6-7.
+#' @param instrument Optional instrument filter (e.g. \code{"IFCB134"}). When
+#'   not \code{"all"} or \code{NULL}, restricts to sample names ending with
+#'   \code{_INSTRUMENT}.
+#' @param annotator Optional annotator name filter (e.g. \code{"Jane"}). When
+#'   not \code{"all"} or \code{NULL}, restricts to annotations by that annotator.
+#' @return Data frame with columns \code{class_name} and \code{count}, ordered
+#'   alphabetically by class name. Returns an empty data frame if the database
+#'   does not exist or has no annotations.
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path("/data/manual")
+#' classes <- list_classes_db(db_path)
+#' classes_2023 <- list_classes_db(db_path, year = "2023")
+#' }
+list_classes_db <- function(db_path, year = NULL, month = NULL,
+                            instrument = NULL, annotator = NULL) {
+  empty <- data.frame(class_name = character(), count = integer(),
+                      stringsAsFactors = FALSE)
+
+  if (!file.exists(db_path)) {
+    return(empty)
+  }
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+
+  tables <- dbGetQuery(con, "SELECT name FROM sqlite_master WHERE type='table'")
+  if (!"annotations" %in% tables$name) {
+    return(empty)
+  }
+
+  where <- build_sample_filter_clause(year, month, instrument,
+                                       annotator = annotator)
+
+  sql <- paste0(
+    "SELECT class_name, COUNT(*) AS count FROM annotations",
+    where$clause,
+    " GROUP BY class_name ORDER BY class_name"
+  )
+
+  if (length(where$params) > 0) {
+    dbGetQuery(con, sql, params = where$params)
+  } else {
+    dbGetQuery(con, sql)
+  }
+}
+
+#' Load all annotations for a specific class from the database
+#'
+#' Returns every annotation matching \code{class_name}, with a computed
+#' \code{file_name} column for gallery display. Optional filters restrict
+#' results by year, month, or instrument.
+#'
+#' @param db_path Path to the SQLite database file
+#' @param class_name Class name to load
+#' @param year Optional year filter (e.g. \code{"2023"})
+#' @param month Optional month filter (e.g. \code{"03"})
+#' @param instrument Optional instrument filter (e.g. \code{"IFCB134"})
+#' @param annotator Optional annotator name filter (e.g. \code{"Jane"})
+#' @return Data frame with columns \code{sample_name}, \code{roi_number},
+#'   \code{class_name}, and \code{file_name}. Returns \code{NULL} if no
+#'   annotations match.
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path("/data/manual")
+#' diatoms <- load_class_annotations_db(db_path, "Diatom")
+#' diatoms_2023 <- load_class_annotations_db(db_path, "Diatom", year = "2023")
+#' }
+load_class_annotations_db <- function(db_path, class_name, year = NULL,
+                                      month = NULL, instrument = NULL,
+                                      annotator = NULL) {
+  if (!file.exists(db_path)) {
+    return(NULL)
+  }
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+
+  where <- build_sample_filter_clause(year, month, instrument,
+                                       annotator = annotator)
+  params <- c(list(class_name), where$params)
+
+  rows <- dbGetQuery(con, paste0(
+    "SELECT sample_name, roi_number, class_name FROM annotations WHERE class_name = ?",
+    if (nzchar(where$clause)) gsub("^ WHERE ", " AND ", where$clause),
+    " ORDER BY sample_name, roi_number"
+  ), params = params)
+
+  if (nrow(rows) == 0) {
+    return(NULL)
+  }
+
+  rows$file_name <- sprintf("%s_%05d.png", rows$sample_name, rows$roi_number)
+  rows
+}
+
+#' Save class review changes to the database
+#'
+#' Performs row-level UPDATEs for reclassified images identified during class
+#' review mode. Only the changed rows are updated; other annotations for the
+#' same samples are left untouched.
+#'
+#' @param db_path Path to the SQLite database file
+#' @param changes_df Data frame with columns \code{sample_name},
+#'   \code{roi_number}, and \code{new_class_name}
+#' @param annotator Annotator name
+#' @return Integer count of rows updated
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path("/data/manual")
+#' changes <- data.frame(
+#'   sample_name = "D20230101T120000_IFCB134",
+#'   roi_number = 5L,
+#'   new_class_name = "Ciliate"
+#' )
+#' save_class_review_changes_db(db_path, changes, "Jane")
+#' }
+save_class_review_changes_db <- function(db_path, changes_df, annotator) {
+  if (is.null(changes_df) || nrow(changes_df) == 0) {
+    return(0L)
+  }
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+
+  init_db_schema(con)
+
+  timestamp <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+  updated <- 0L
+
+  tryCatch({
+    dbExecute(con, "BEGIN TRANSACTION")
+
+    for (i in seq_len(nrow(changes_df))) {
+      n <- dbExecute(con,
+        "UPDATE annotations SET class_name = ?, annotator = ?, timestamp = ?, is_manual = 1 WHERE sample_name = ? AND roi_number = ?",
+        params = list(
+          changes_df$new_class_name[i],
+          annotator,
+          timestamp,
+          changes_df$sample_name[i],
+          changes_df$roi_number[i]
+        )
+      )
+      updated <- updated + as.integer(n)
+    }
+
+    dbExecute(con, "COMMIT")
+    updated
+  }, error = function(e) {
+    tryCatch(dbExecute(con, "ROLLBACK"), error = function(e2) NULL)
+    warning("Failed to save class review changes: ", e$message)
+    0L
+  })
+}
+
+#' List distinct years, months, and instruments from annotations
+#'
+#' Extracts metadata from sample names in the annotations table for use as
+#' filter options. Sample names follow the IFCB naming convention
+#' \code{DYYYYMMDDTHHMMSS_INSTRUMENT}.
+#'
+#' @param db_path Path to the SQLite database file
+#' @return A list with character vectors: \code{years}, \code{months},
+#'   \code{instruments}, and \code{annotators}. Returns empty vectors if the
+#'   database does not exist or has no annotations.
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path("/data/manual")
+#' meta <- list_annotation_metadata_db(db_path)
+#' meta$years       # e.g. c("2022", "2023")
+#' meta$months      # e.g. c("01", "06", "12")
+#' meta$instruments # e.g. c("IFCB134", "IFCB135")
+#' meta$annotators  # e.g. c("Jane", "imported")
+#' }
+list_annotation_metadata_db <- function(db_path) {
+  empty <- list(years = character(), months = character(),
+                instruments = character(), annotators = character())
+
+  if (!file.exists(db_path)) {
+    return(empty)
+  }
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+
+  tables <- dbGetQuery(con, "SELECT name FROM sqlite_master WHERE type='table'")
+  if (!"annotations" %in% tables$name) {
+    return(empty)
+  }
+
+  samples <- dbGetQuery(con,
+    "SELECT DISTINCT sample_name FROM annotations"
+  )$sample_name
+
+  annotators <- sort(dbGetQuery(con,
+    "SELECT DISTINCT annotator FROM annotations WHERE annotator IS NOT NULL"
+  )$annotator)
+
+  if (length(samples) == 0) {
+    return(list(years = character(), months = character(),
+                instruments = character(), annotators = annotators))
+  }
+
+  years <- sort(unique(substr(samples, 2, 5)))
+  months <- sort(unique(substr(samples, 6, 7)))
+  instruments <- sort(unique(sub(".*_", "", samples)))
+
+  list(years = years, months = months, instruments = instruments,
+       annotators = annotators)
+}
+
+# Build WHERE clause fragments for sample_name filtering
+#
+# @param year Year string or "all"/NULL
+# @param month Month string or "all"/NULL
+# @param instrument Instrument string or "all"/NULL
+# @return List with `clause` (SQL fragment starting with " WHERE " or "") and
+#   `params` (list of bind values)
+# @keywords internal
+build_sample_filter_clause <- function(year = NULL, month = NULL,
+                                       instrument = NULL,
+                                       annotator = NULL) {
+  conditions <- character()
+  params <- list()
+
+  if (!is.null(year) && year != "all") {
+    conditions <- c(conditions, "sample_name LIKE ?")
+    params <- c(params, list(paste0("D", year, "%")))
+  }
+
+  if (!is.null(month) && month != "all") {
+    conditions <- c(conditions, "sample_name LIKE ?")
+    params <- c(params, list(paste0("D____", month, "%")))
+  }
+
+  if (!is.null(instrument) && instrument != "all") {
+    conditions <- c(conditions, "sample_name LIKE ?")
+    params <- c(params, list(paste0("%_", instrument)))
+  }
+
+  if (!is.null(annotator) && annotator != "all") {
+    conditions <- c(conditions, "annotator = ?")
+    params <- c(params, list(annotator))
+  }
+
+  clause <- if (length(conditions) > 0) {
+    paste0(" WHERE ", paste(conditions, collapse = " AND "))
+  } else {
+    ""
+  }
+
+  list(clause = clause, params = params)
 }

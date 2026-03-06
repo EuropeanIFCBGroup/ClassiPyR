@@ -32,6 +32,7 @@ Complete documentation for all `ClassiPyR` features.
   - No sample loaded: Initial state before selecting a sample
   - Validation mode: Shows accuracy percentage
   - Annotation mode: Shows progress (X/Y classified)
+  - Class Review mode: Shows selected class and image counts
 
 ### Sidebar
 
@@ -41,6 +42,7 @@ Complete documentation for all `ClassiPyR` features.
 - **Navigation**: Load, previous, next, random, sync
 - **Cache age**: Shows when folders were last scanned
 - **Save button**: Manual save trigger
+- **Predict button**: One-click CNN classification (when configured)
 
 ### Main Area (Tabs)
 
@@ -76,6 +78,79 @@ Some samples may have both manual annotations AND auto-classifications (e.g., yo
 
 ---
 
+## Class Review Mode
+
+Class Review mode lets you view **all annotated images of a specific class** and reclassify them. There are two sources to choose from: the SQLite **Database** or an **External PNG Folder**.
+
+<a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-review.png">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-review.png" alt="Class Review mode showing all images of a selected class across the database." style="max-width:100%;">
+</a>
+<p><em>Class Review mode showing all images of a selected class across the database. Click to enlarge.</em></p>
+
+### Database review
+
+Review all annotated images of a class across the entire database:
+
+1. Switch to **Class Review** using the mode toggle in the sidebar
+2. Select **Database** as the source (default)
+3. The class dropdown is searchable — type to filter. Each class shows its image count in parentheses
+4. Select a class and click **Load** — images are loaded from ROI files or discovered PNG sample folders across all samples
+5. Review images in the gallery. Each image label shows the full name (sample + ROI) so you can identify which sample it belongs to
+6. Use the same selection and relabeling tools as in sample mode
+7. Click **Save Changes** to write row-level updates to the database
+
+### External folder review
+
+Review and split a folder of PNG images (e.g. from an external classifier or export) into class subfolders:
+
+1. Switch to **Class Review** and select **External PNG Folder** as the source
+2. Browse to the folder containing PNG images
+3. The initial class label defaults to the folder name — change it if needed
+4. Click **Load Folder** — all PNGs are loaded into the gallery with the initial class label
+5. Select images and relabel them to different classes
+6. Set an **Export Folder** and click **Export Split Folders** — images are copied into class-name subfolders
+
+This is useful for sorting or correcting a flat folder of images without importing them into the database.
+
+### Key differences from sample mode
+
+- Images come from **multiple samples** (database) or a **single folder** (external), not a single sample
+- Image labels show the **full image name** (e.g. `D20230101T120000_IFCB134_00001`) instead of just the ROI number (database mode)
+- Saving performs **surgical row-level UPDATEs** rather than replacing an entire sample's annotations (database mode)
+- The title bar turns **purple** to indicate class review mode
+- Navigation buttons (prev/next/random sample) are not available
+
+---
+
+## Live Prediction
+
+The **Predict** button in the sidebar lets you classify all images in the loaded sample using a remote CNN model, without needing pre-computed classifier files. This uses `iRfcb::ifcb_classify_images()` to send images to a Gradio-hosted classification model.
+
+### Setup
+
+1. Open **Settings** (gear icon)
+2. Under **Live Prediction**, enter a Gradio API URL (e.g. `https://irfcb-classify.hf.space`)
+3. The **Prediction Model** dropdown is populated automatically from the server
+4. Select a model and click **Save Settings**
+
+The Predict button appears in the sidebar once a Gradio URL and model are configured.
+
+### Using Predict
+
+1. Load a sample in Sample Mode (annotated or unannotated)
+2. Click **Predict** in the sidebar
+3. A progress bar shows per-image classification progress
+4. When complete, the app switches to validation mode with the predicted classes
+
+### Behaviour details
+
+- **Manual labels are preserved**: If you have already reclassified some images, those are skipped during prediction. Only unchanged images are sent to the model.
+- **Threshold setting applies**: The "Apply classification threshold" setting controls whether thresholded or raw predictions are used, just like for CSV/H5/MAT classifications.
+- **New classes are added automatically**: If the model returns class names not in your current class list, they are added so the filter and relabel dropdowns work correctly.
+- **Predictions become the baseline**: After prediction, the predicted classes are treated as the "original" classifications for validation statistics.
+
+---
+
 ## Working with Images
 
 ### Image Cards
@@ -83,7 +158,7 @@ Some samples may have both manual annotations AND auto-classifications (e.g., yo
 Each image card displays:
 
 - The plankton image
-- ROI number
+- ROI number (in sample mode) or full image name (in class review mode)
 - Classification score (if available)
 - Original class (if relabeled)
 
@@ -104,7 +179,7 @@ Each image card displays:
 |--------|--------|
 | Click | Toggle single image selection |
 | Drag | Draw rectangle to select multiple |
-| Select All | Select all images in current filter |
+| Select Page / Select All | First click selects the current page; second click selects all images across all pages |
 | Deselect | Clear all selections |
 
 <a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/drag-select.png">
@@ -152,20 +227,23 @@ The default scale is 3.4 pixels per micrometer (standard for IFCB). To adjust:
 
 ## Classification Sources
 
-`ClassiPyR` supports multiple classification input formats.
+`ClassiPyR` supports multiple classification input formats. When multiple formats exist for the same sample, the priority is: CSV > H5 > MAT. Samples without any pre-computed classifications can be classified on the fly using [Live Prediction](#live-prediction).
+
+All formats (including live predictions) support a **classification threshold** option (configurable in Settings under the Classification Folder). When enabled, predictions below the confidence threshold are shown as "unclassified"; when disabled, the raw (unthresholded) class prediction is used.
 
 ### CSV Files
 
-Standard classification CSV output. The CSV file must be named after the sample it describes (e.g., `D20230101T120000_IFCB134.csv`).
+Standard classification CSV output from [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb). The CSV file must be named after the sample it describes (e.g., `D20230101T120000_IFCB134.csv`).
 
 Required columns (exact names):
 
 - `file_name`: Image filename including `.png` extension (e.g., `D20230101T120000_IFCB134_00001.png`)
-- `class_name`: Predicted class name
+- `class_name`: Predicted class name (threshold-applied)
 
 Optional columns:
 
 - `score`: Classification confidence (0-1)
+- `class_name_auto`: Raw class prediction without threshold (used when threshold is disabled)
 
 **Minimal example:**
 
@@ -175,28 +253,38 @@ D20230101T120000_IFCB134_00001.png,Diatom
 D20230101T120000_IFCB134_00002.png,Ciliate
 ```
 
-**Example with confidence scores:**
+**Example with confidence scores and raw predictions:**
 
 ```
-file_name,class_name,score
-D20230101T120000_IFCB134_00001.png,Diatom,0.95
-D20230101T120000_IFCB134_00002.png,Ciliate,0.87
-D20230101T120000_IFCB134_00003.png,Dinoflagellate,0.72
+file_name,class_name,class_name_auto,score
+D20230101T120000_IFCB134_00001.png,unclassified,Diatom,0.45
+D20230101T120000_IFCB134_00002.png,Ciliate,Ciliate,0.87
 ```
 
 **Different CNN pipelines**: If your classifier produces different column names, rename them to `file_name` and `class_name` before placing the CSV in the Classification Folder.
 
 Files are looked up from the file index cache (see [File Index Cache](#file-index-cache) below).
 
+### HDF5 Classifier Output
+
+Files matching `*_class*.h5` pattern, produced by [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb) (>= 0.8.0). Contains:
+
+- `roi_numbers`: ROI identifiers
+- `class_name`: Predicted class with threshold applied
+- `class_name_auto`: Predicted class without threshold
+- `output_scores`: Per-class confidence scores
+- `class_labels`: All possible class names
+- `classifier_name`: Name of the classifier model
+
+Requires the optional [`hdf5r`](https://CRAN.R-project.org/package=hdf5r) package. Install with `install.packages("hdf5r")`.
+
 ### MATLAB Classifier Output
 
-Files matching `*_class*.mat` pattern containing:
+Files matching `*_class*.mat` pattern from [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) containing:
 
 - `roinum`: ROI numbers
-- `TBclass_above_threshold`: With threshold
-- `TBclass`: Without threshold
-
-**Threshold option**: Enable in Settings to include unclassified predictions below confidence threshold.
+- `TBclass_above_threshold`: Predicted class with threshold
+- `TBclass`: Predicted class without threshold
 
 ### Existing Annotations
 
@@ -296,12 +384,45 @@ Images organized into class folders for training CNN models or other classifiers
 
 ## Settings Reference
 
+### Data Source
+
+ClassiPyR supports two data source modes, selectable in Settings:
+
+| Mode | Description |
+|------|-------------|
+| **Local Folders** (default) | Read IFCB data from local ROI/ADC/HDR files |
+| **IFCB Dashboard** | Connect to a remote IFCB Dashboard instance |
+
+#### IFCB Dashboard Mode
+
+When "IFCB Dashboard" is selected, enter a Dashboard URL such as:
+
+- `https://habon-ifcb.whoi.edu/` — all datasets on the dashboard
+- `https://habon-ifcb.whoi.edu/timeline?dataset=tangosund` — a specific dataset
+
+The app fetches the sample list from the Dashboard API. When you load a sample, PNG images are downloaded from the dashboard and cached locally at `tools::R_user_dir("ClassiPyR", "cache")/dashboard/`. ADC files are downloaded on demand for image dimensions and MAT export.
+
+| Dashboard Setting | Description |
+|-------------------|-------------|
+| Dashboard URL | The full URL of the IFCB Dashboard (with optional `?dataset=` parameter) |
+| Use dashboard auto-classifications | When checked, downloads the dashboard's `_class_scores.csv` for validation mode |
+| Advanced Download Settings | Parallel downloads, sleep time, timeout, and max retries for dashboard downloads |
+
+The **Classification Folder** setting is available in both local and dashboard mode. In dashboard mode, local classification files (CSV/H5/MAT) take priority over dashboard auto-classifications. The priority order is:
+
+1. Database annotations (manual, existing)
+2. Local classification files (CSV > H5 > MAT) — if Classification Folder is configured
+3. Dashboard auto-classifications (if enabled)
+4. New annotation mode
+
+> **Note**: In dashboard mode, the ROI/PNG Data Folder setting is not used. The Output Folder, Database Folder, and PNG Output Folder still apply for saving annotations and exports.
+
 ### Folder Paths
 
 | Setting | Description |
 |---------|-------------|
-| Classification Folder | Source of CSV/MAT classifications |
-| ROI Data Folder | IFCB raw files (ROI/ADC/HDR) |
+| Classification Folder | Source of CSV/H5/MAT classifications (both local and dashboard mode) |
+| ROI/PNG Data Folder | IFCB raw files (ROI/ADC/HDR) or extracted PNG sample folders (local mode only) |
 | Output Folder | Where MAT files and statistics go (can be on a network drive) |
 | Database Folder | Where the SQLite database is stored (must be a local drive) |
 | PNG Output Folder | Where organized images go |
@@ -319,8 +440,45 @@ Folder paths are configured using a web-based folder browser that works on all p
 Below the format selector, two buttons allow bulk conversion between formats:
 
 - **Import .mat → SQLite**: Imports all `.mat` annotation files from the output folder into the SQLite database. Already-imported samples are skipped.
-- **Export SQLite → .mat**: Exports all annotated samples from the database to `.mat` files. Requires Python with scipy.
+- **Import PNG → SQLite**: Imports annotations from a folder of PNG images organized in class-name subfolders. Class names are extracted from folder names (trailing `_NNN` suffixes are stripped). Useful for re-importing corrected exports or importing external classification datasets.
+- **Export SQLite → .mat**: Exports all annotated samples from the database to `.mat` files in the specified Output Folder. Requires Python with scipy.
 - **Export SQLite → PNG**: Extracts annotated images from ROI files into class-name subfolders in the PNG Output Folder. Useful for building training datasets for CNN classifiers.
+- **Export SQLite → ZIP**: Builds an EcoTaxa-ready ZIP archive from SQLite annotations that is also suitable for sharing datasets in general repositories (for example Zenodo or Figshare). The export writes class-organized PNGs, per-class inventories (`ecotaxa_<CLASSNAME>.tsv`), and a README file.
+
+The **Export SQLite → ZIP** dialog includes optional README metadata fields:
+
+- Author
+- Contact e-mail
+- DOI
+- Licence
+- Version
+- Citation
+- Institute
+
+These values are saved in settings and reused for future ZIP exports. Empty fields are omitted from the README.
+
+ZIP export also supports archive splitting via `split_zip` and `max_size` (MB), matching `iRfcb::ifcb_zip_pngs()`.
+
+> **Note**: External datasets can be viewed without ROI files when extracted PNGs are available under sample-named folders in the ROI/PNG Data Folder. MAT export still requires ADC data (from local files or IFCB Dashboard).
+
+### WoRMS (AphiaID) Matching
+
+Class list entries can be linked to WoRMS AphiaIDs in the Class List Editor:
+
+<a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/worms-match-modal.png">
+<img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/worms-match-modal.png" alt="WoRMS match results modal with per-class manual rematch query inputs." style="max-width:80%;">
+</a>
+<p><em>WoRMS match results modal with per-class manual rematch query inputs. Click to enlarge.</em></p>
+
+1. Open **Settings** → **Edit Class List**
+2. Click **Match WoRMS AphiaID**
+3. Review accepted/synonym/unmatched/skipped results
+4. For unresolved classes, edit query fields and click **Rematch Unmatched**
+5. Click **Apply AphiaID Matches**
+
+When applied, AphiaID values are saved in SQLite (`class_taxonomy` table) and shown inline in the class list display as `[AphiaID: ...]`.
+
+> **Note**: AphiaID mappings are database metadata. They are not written into exported `class2use.mat` / `.txt` files.
 
 ### Auto-Sync
 
@@ -338,9 +496,30 @@ run_app(venv_path = "/path/to/your/venv")
 
 The path is remembered for future sessions. **Priority order**: `run_app(venv_path=)` argument > saved settings > default (`./venv`).
 
+### Live Prediction
+
+| Setting | Description |
+|---------|-------------|
+| Gradio API URL | URL of a Gradio-hosted CNN classification server (e.g. `https://irfcb-classify.hf.space`) |
+| Prediction Model | CNN model to use for classification. Choices are fetched from the Gradio server. |
+
+When both fields are configured, a **Predict** button appears in the sidebar for Sample Mode. See [Live Prediction](#live-prediction) for usage details.
+
 ### Classifier Options
 
-**Apply classification threshold**: When loading MATLAB classifier output, use `TBclass_above_threshold` (checked) or `TBclass` (unchecked).
+**Apply classification threshold**: When loading classifier output (CSV, H5, or MAT) or live predictions, use the threshold-filtered class predictions (checked) or the raw unthresholded predictions (unchecked).
+
+### PNG Export Options
+
+**Skip class from PNG export**: Optionally exclude a class (e.g. "unclassified") from the organized PNG output. Set in Settings under the PNG Output Folder section.
+
+### ZIP Export Notes
+
+- ZIP export uses your current SQLite annotations as source.
+- README content is generated from the package template and includes archive provenance:
+  - ClassiPyR version used for export
+  - ClassiPyR citation text
+- Per-class inventory files are named `ecotaxa_<CLASSNAME>.tsv`.
 
 ---
 
@@ -408,5 +587,9 @@ Settings are loaded automatically when you start the app, so your folder paths, 
 
 - **[`iRfcb`](https://github.com/EuropeanIFCBGroup/iRfcb)** for IFCB data operations (extracting images, reading ADC metadata, reading/writing `.mat` files, class list handling)
 - **[`RSQLite`](https://CRAN.R-project.org/package=RSQLite)** and **[`DBI`](https://CRAN.R-project.org/package=DBI)** for the SQLite annotation database
+
+Optional dependencies:
+
+- **[`hdf5r`](https://CRAN.R-project.org/package=hdf5r)** for reading HDF5 (`.h5`) classifier output files. Install with `install.packages("hdf5r")`.
 
 All R dependencies are installed automatically when you install `ClassiPyR`. Python is only needed for `.mat` file export.

@@ -68,7 +68,12 @@ save_sample_annotations <- function(sample_name,
                                      db_folder = get_default_db_dir(),
                                      export_statistics = TRUE) {
 
-  if (is.null(sample_name) || is.null(classifications) || is.null(class2use_path)) {
+  if (is.null(sample_name) || is.null(classifications)) {
+    return(FALSE)
+  }
+
+  # class2use_path is only required for MAT format (SQLite uses class2use vector)
+  if (is.null(class2use_path) && save_format %in% c("mat", "both") && is.null(class2use)) {
     return(FALSE)
   }
 

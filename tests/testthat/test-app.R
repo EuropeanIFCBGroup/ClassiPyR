@@ -56,6 +56,7 @@ test_that("app UI can be created without errors", {
   # Load required packages
   library(shiny)
   library(shinyjs)
+  library(shinyFiles)
   library(bslib)
   library(DT)
 

@@ -43,15 +43,17 @@ reference:
   - get_config_dir
   - get_settings_path
 - title: Sample Loading
-  desc: Functions for loading classifications and samples
+  desc: Functions for loading classifications and samples from ROI/PNG sources
   contents:
   - load_class_list
   - load_from_classifier_mat
   - load_from_csv
+  - load_from_h5
   - load_from_mat
   - load_from_db
   - create_new_classifications
   - filter_to_extracted
+  - scan_png_class_folder
 - title: Sample Saving
   desc: Functions for saving annotations and exporting images
   contents:
@@ -66,6 +68,7 @@ reference:
   - save_annotations_db
   - load_annotations_db
   - list_annotated_samples_db
+  - list_annotation_metadata_db
   - update_annotator
   - import_mat_to_db
   - import_all_mat_to_db
@@ -73,6 +76,20 @@ reference:
   - export_all_db_to_mat
   - export_db_to_png
   - export_all_db_to_png
+  - export_all_db_to_zip
+  - import_png_folder_to_db
+  - list_classes_db
+  - save_class_taxonomy_db
+  - load_class_taxonomy_db
+  - save_global_class_list_db
+  - load_global_class_list_db
+  - load_class_annotations_db
+  - save_class_review_changes_db
+- title: WoRMS Taxonomy
+  desc: Functions for matching class names to WoRMS AphiaID values
+  contents:
+  - sanitize_worms_query
+  - build_worms_match_rows
 - title: File Index Cache
   desc: Functions for managing the file index cache for faster startup
   contents:
@@ -80,6 +97,18 @@ reference:
   - load_file_index
   - save_file_index
   - rescan_file_index
+- title: Dashboard
+  desc: Functions for working with remote IFCB Dashboard instances
+  contents:
+  - parse_dashboard_url
+  - list_dashboard_bins
+  - download_dashboard_images
+  - download_dashboard_images_bulk
+  - download_dashboard_image_single
+  - download_dashboard_images_individual
+  - download_dashboard_adc
+  - download_dashboard_autoclass
+  - get_dashboard_cache_dir
 - title: Utilities
   desc: Helper functions for IFCB data processing
   contents:
@@ -95,4 +124,3 @@ footer:
   structure:
     left: developed_by
     right: built_with
-
