@@ -31,7 +31,7 @@ test_that("save_annotations_db creates database with correct schema", {
 
   # Verify schema
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
-  on.exit(DBI::dbDisconnect(con))
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
 
   tables <- DBI::dbGetQuery(con, "SELECT name FROM sqlite_master WHERE type='table'")
   expect_true("annotations" %in% tables$name)
@@ -95,7 +95,7 @@ test_that("save_annotations_db upserts (re-saving replaces data)", {
 
   # Verify only latest version exists
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
-  on.exit(DBI::dbDisconnect(con))
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
 
   annotations <- DBI::dbGetQuery(con,
     "SELECT * FROM annotations WHERE sample_name = ?",
@@ -285,7 +285,7 @@ test_that("update_annotator changes annotator for a single sample", {
 
   # Verify in DB
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
-  on.exit(DBI::dbDisconnect(con))
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
   rows <- DBI::dbGetQuery(con,
     "SELECT DISTINCT annotator FROM annotations WHERE sample_name = ?",
     params = list(sample_name))
@@ -316,7 +316,7 @@ test_that("update_annotator changes multiple samples", {
 
   # Verify both updated
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
-  on.exit(DBI::dbDisconnect(con))
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
   rows <- DBI::dbGetQuery(con, "SELECT DISTINCT annotator FROM annotations")
   expect_equal(rows$annotator, "SharedUser")
 })
@@ -1055,7 +1055,7 @@ test_that("save_annotations_db stores is_manual flags", {
   expect_true(result)
 
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
-  on.exit(DBI::dbDisconnect(con))
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
 
   rows <- DBI::dbGetQuery(con,
     "SELECT roi_number, class_name, is_manual FROM annotations WHERE sample_name = ? ORDER BY roi_number",
@@ -1083,7 +1083,7 @@ test_that("save_annotations_db defaults is_manual to 1", {
                       c("unclassified", "Diatom", "Ciliate"), "TestUser")
 
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
-  on.exit(DBI::dbDisconnect(con))
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
 
   rows <- DBI::dbGetQuery(con,
     "SELECT is_manual FROM annotations WHERE sample_name = ?",
@@ -1166,7 +1166,7 @@ test_that("import_mat_to_db reads class2use_manual from .mat", {
 
   # Verify the class list stored in DB matches the .mat file's embedded list
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
-  on.exit(DBI::dbDisconnect(con))
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
 
   cl <- DBI::dbGetQuery(con,
     "SELECT class_name FROM class_lists WHERE sample_name = 'test_sample' ORDER BY class_index")
@@ -1204,7 +1204,7 @@ test_that("import_mat_to_db preserves NaN as is_manual=0", {
   expect_true(result)
 
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
-  on.exit(DBI::dbDisconnect(con))
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
 
   rows <- DBI::dbGetQuery(con,
     "SELECT roi_number, class_name, is_manual FROM annotations WHERE sample_name = 'test_nan' ORDER BY roi_number")
@@ -1414,7 +1414,7 @@ test_that("save_class_review_changes_db updates only targeted rows", {
 
   # Verify only changed rows were updated
   con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
-  on.exit(DBI::dbDisconnect(con))
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
 
   # sample_A ROI 1 should be Dinoflagellate with Reviewer annotator
   row_a1 <- DBI::dbGetQuery(con,
