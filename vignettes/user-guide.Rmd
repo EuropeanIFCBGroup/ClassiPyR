@@ -68,13 +68,14 @@ Complete documentation for all `ClassiPyR` features.
 - Progress shows classified vs remaining
 - Validation statistics tab shows annotation progress instead
 
-### Samples with Both Modes
+### Switching Between Modes
 
-Some samples may have both manual annotations AND auto-classifications (e.g., you previously annotated a sample, then ran a classifier on it). For these samples:
+Any sample with auto-classification data (✓ or ✎✓) shows a mode toggle button in the header bar:
 
-- The sample dropdown shows ✎✓ indicator
-- When loaded, you can switch between modes using the button in the header
-- Each mode maintains its own state independently
+- **→ Manual** (in validation mode): Switch to annotation mode. If manual annotations exist they are loaded; otherwise blank "unclassified" annotations are created.
+- **→ Validation** (in annotation mode): Switch back to the original auto-classifications.
+
+Samples with only manual annotations (✎) or no data at all (\*) do not show the toggle.
 
 ---
 

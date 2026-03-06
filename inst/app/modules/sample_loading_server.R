@@ -96,7 +96,8 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
         classifications = rv$classifications,
         original_classifications = rv$original_classifications,
         changes_log = rv$changes_log,
-        is_annotation_mode = rv$is_annotation_mode
+        is_annotation_mode = rv$is_annotation_mode,
+        has_classification = rv$has_classification
       )
 
       tryCatch({
@@ -229,9 +230,8 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
         }
         classifications <- load_from_db(db_path, sample_name, roi_dims)
         rv$is_annotation_mode <- TRUE
-        rv$has_both_modes <- isTRUE(config$dashboard_autoclass)
-        rv$using_manual_mode <- TRUE
-        mode_message <- if (rv$has_both_modes) "Manual mode (switch available)" else "Resumed"
+        rv$has_classification <- isTRUE(config$dashboard_autoclass)
+        mode_message <- if (rv$has_classification) "Manual mode (switch available)" else "Resumed"
       }
 
       if (is.null(classifications)) {
@@ -249,22 +249,19 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
           if (length(local_csv) > 0) {
             classifications <- load_from_csv(local_csv[1], use_threshold = config$use_threshold)
             rv$is_annotation_mode <- FALSE
-            rv$has_both_modes <- FALSE
-            rv$using_manual_mode <- FALSE
+            rv$has_classification <- TRUE
             threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
             mode_message <- paste0("Validation mode (Local CSV, ", threshold_text, ")")
           } else if (length(local_h5) > 0) {
             classifications <- load_from_h5(local_h5[1], sample_name, roi_dims, use_threshold = config$use_threshold)
             rv$is_annotation_mode <- FALSE
-            rv$has_both_modes <- FALSE
-            rv$using_manual_mode <- FALSE
+            rv$has_classification <- TRUE
             threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
             mode_message <- paste0("Validation mode (Local H5, ", threshold_text, ")")
           } else if (length(local_mat) > 0) {
             classifications <- load_from_classifier_mat(local_mat[1], sample_name, rv$class2use, roi_dims, use_threshold = config$use_threshold)
             rv$is_annotation_mode <- FALSE
-            rv$has_both_modes <- FALSE
-            rv$using_manual_mode <- FALSE
+            rv$has_classification <- TRUE
             threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
             mode_message <- paste0("Validation mode (Local MAT, ", threshold_text, ")")
           }
@@ -305,8 +302,7 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
 
           classifications <- autoclass
           rv$is_annotation_mode <- FALSE
-          rv$has_both_modes <- FALSE
-          rv$using_manual_mode <- FALSE
+          rv$has_classification <- TRUE
           mode_message <- "Validation mode (Dashboard autoclass)"
         }
       }
@@ -325,8 +321,7 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
 
         classifications <- create_new_classifications(sample_name, roi_dims)
         rv$is_annotation_mode <- TRUE
-        rv$has_both_modes <- FALSE
-        rv$using_manual_mode <- TRUE
+        rv$has_classification <- FALSE
         mode_message <- "New annotation"
       }
 
@@ -386,8 +381,7 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
       has_existing_annotation <- has_db_annotation || has_mat_annotation
       has_classification <- has_csv || has_classifier_h5 || has_classifier_mat
 
-      rv$has_both_modes <- has_existing_annotation && has_classification
-      rv$using_manual_mode <- has_existing_annotation
+      rv$has_classification <- has_classification
 
       mode_message <- NULL
       roi_dims <- NULL
@@ -409,7 +403,7 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
           classifications <- load_from_mat(annotation_mat_path, sample_name, rv$class2use, roi_dims)
         }
         rv$is_annotation_mode <- TRUE
-        mode_message <- if (rv$has_both_modes) "Manual mode (switch available)" else "Resumed"
+        mode_message <- if (rv$has_classification) "Manual mode (switch available)" else "Resumed"
       } else if (has_csv) {
         classifications <- load_from_csv(csv_path, use_threshold = config$use_threshold)
         classifications <- apply_roi_dims_to_classifications(classifications, roi_dims)
@@ -484,6 +478,7 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
     rv$current_sample <- sample_name
     rv$selected_images <- character()
     rv$is_annotation_mode <- cached$is_annotation_mode
+    rv$has_classification <- cached$has_classification %||% FALSE
 
     available_classes <- sort(unique(rv$classifications$class_name))
     unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
@@ -629,7 +624,7 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
     rv$changes_log <- create_empty_changes_log()
     rv$selected_images <- character(0)
     rv$is_annotation_mode <- FALSE
-    rv$has_both_modes <- FALSE
+    rv$has_classification <- FALSE
 
     rv$class_review_mode <- FALSE
     rv$class_review_source <- "database"

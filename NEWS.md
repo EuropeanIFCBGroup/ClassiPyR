@@ -1,3 +1,10 @@
+# ClassiPyR (development version)
+
+## Bug fixes
+
+- The validation/annotation mode toggle now appears whenever auto-classification data exists for a sample, not only when both manual annotations AND auto-classifications pre-exist. This allows switching to annotation mode for samples that only have auto-classifications (✓), creating blank annotations on the fly. Previously these samples had no toggle and were locked in validation mode.
+- The session cache now stores and restores the mode toggle state, so the toggle no longer disappears after switching between cached samples.
+
 # ClassiPyR 0.2.0
 
 ## New features
@@ -73,7 +80,7 @@ Initial release of ClassiPyR, a Shiny application for manual classification and 
 - Resume previous annotations from saved files
 - Navigate between samples with previous/next/random buttons
 - Filter samples by classification status (all/classified/annotated/unannotated)
-- Samples with both manual annotations AND auto-classifications can switch between modes
+- Samples with auto-classifications can switch between validation and annotation modes
 
 ### Classification Loading
 - Load classifications from CSV files (recursive folder search)
@@ -82,7 +89,7 @@ Initial release of ClassiPyR, a Shiny application for manual classification and 
 - Automatic sample status indicators in dropdown:
   - ✎ = Has manual annotation
   - ✓ = Has auto-classification
-  - ✎✓ = Has both (can switch between modes)
+  - ✎✓ = Has both
   - * = Unannotated
 
 ### Image Gallery

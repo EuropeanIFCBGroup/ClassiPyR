@@ -148,7 +148,7 @@ Click **Load**.
 
 > **Tip**: If your sample list seems out of date, click the **Sync** button (circular arrow icon) next to the navigation buttons to rescan your folders.
 
-> **Tip**: Samples with ✎✓ let you switch between viewing your manual annotations and the auto-classifications using a button in the header.
+> **Tip**: Any sample with auto-classifications (✓ or ✎✓) shows a toggle in the header to switch between validation and annotation mode.
 
 ---
 

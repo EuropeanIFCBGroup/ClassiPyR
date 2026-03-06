@@ -131,7 +131,7 @@ setup_ui_outputs_server <- function(input, output, session, rv, config,
       classified <- sum(rv$classifications$class_name != "unclassified")
       pct <- round((classified / total) * 100)
 
-      switch_btn <- if (rv$has_both_modes) {
+      switch_btn <- if (rv$has_classification) {
         actionLink(
           "switch_to_validation",
           label = tags$span(style = "font-size: 12px; color: white;", "\u2192 Validation"),
@@ -152,7 +152,7 @@ setup_ui_outputs_server <- function(input, output, session, rv, config,
     } else {
       stats <- calculate_stats()
 
-      switch_btn <- if (rv$has_both_modes) {
+      switch_btn <- if (rv$has_classification) {
         actionLink(
           "switch_to_annotation",
           label = tags$span(style = "font-size: 12px; color: white;", "\u2192 Manual"),
@@ -215,7 +215,7 @@ setup_ui_outputs_server <- function(input, output, session, rv, config,
   }
 
   do_switch_to_validation <- function() {
-    req(rv$current_sample, rv$has_both_modes)
+    req(rv$current_sample, rv$has_classification)
 
     sample_name <- rv$current_sample
     roi_path <- roi_path_map()[[sample_name]]
@@ -263,7 +263,6 @@ setup_ui_outputs_server <- function(input, output, session, rv, config,
     rv$original_classifications <- classifications
     rv$classifications <- classifications
     rv$is_annotation_mode <- FALSE
-    rv$using_manual_mode <- FALSE
     rv$selected_images <- character()
     rv$current_page <- 1
     rv$changes_log <- create_empty_changes_log()
@@ -283,7 +282,7 @@ setup_ui_outputs_server <- function(input, output, session, rv, config,
   })
 
   observeEvent(input$switch_to_annotation, {
-    req(rv$current_sample, rv$has_both_modes)
+    req(rv$current_sample, rv$has_classification)
 
     sample_name <- rv$current_sample
     roi_path <- roi_path_map()[[sample_name]]
@@ -296,12 +295,13 @@ setup_ui_outputs_server <- function(input, output, session, rv, config,
     has_db <- sample_name %in% list_annotated_samples_db(db_path)
     has_mat <- file.exists(annotation_mat_path)
 
+    roi_dims <- if (!is.null(adc_path) && file.exists(adc_path)) {
+      read_roi_dimensions(adc_path)
+    } else {
+      infer_roi_dims_from_png_local(sample_name, sample_png_dir)
+    }
+
     if (has_db || has_mat) {
-      roi_dims <- if (!is.null(adc_path) && file.exists(adc_path)) {
-        read_roi_dimensions(adc_path)
-      } else {
-        infer_roi_dims_from_png_local(sample_name, sample_png_dir)
-      }
       if (is.null(roi_dims)) {
         showNotification("No ROI dimensions available for manual annotations", type = "error")
         return()
@@ -311,28 +311,32 @@ setup_ui_outputs_server <- function(input, output, session, rv, config,
       } else {
         classifications <- load_from_mat(annotation_mat_path, sample_name, rv$class2use, roi_dims)
       }
-
-      rv$original_classifications <- classifications
-      rv$classifications <- classifications
-      rv$is_annotation_mode <- TRUE
-      rv$using_manual_mode <- TRUE
-      rv$selected_images <- character()
-      rv$current_page <- 1
-      rv$changes_log <- create_empty_changes_log()
-
-      available_classes <- sort(unique(classifications$class_name))
-      unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
-      display_names <- sapply(available_classes, function(cls) {
-        if (cls %in% unmatched) paste0("\u26A0 ", cls) else cls
-      })
-      updateSelectInput(session, "class_filter",
-                        choices = c("All" = "all", setNames(available_classes, display_names)),
-                        selected = "all")
-
       showNotification("Switched to Manual annotation mode", type = "message")
     } else {
-      showNotification("No manual annotation file found", type = "warning")
+      # No existing annotations — create blank classifications from ROI dimensions
+      if (is.null(roi_dims)) {
+        showNotification("No ROI dimensions available to create annotations", type = "error")
+        return()
+      }
+      classifications <- create_new_classifications(sample_name, roi_dims)
+      showNotification("Switched to Annotation mode (new)", type = "message")
     }
+
+    rv$original_classifications <- classifications
+    rv$classifications <- classifications
+    rv$is_annotation_mode <- TRUE
+    rv$selected_images <- character()
+    rv$current_page <- 1
+    rv$changes_log <- create_empty_changes_log()
+
+    available_classes <- sort(unique(classifications$class_name))
+    unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
+    display_names <- sapply(available_classes, function(cls) {
+      if (cls %in% unmatched) paste0("\u26A0 ", cls) else cls
+    })
+    updateSelectInput(session, "class_filter",
+                      choices = c("All" = "all", setNames(available_classes, display_names)),
+                      selected = "all")
   })
 
   # Return do_switch_to_validation for use by statistics tab link

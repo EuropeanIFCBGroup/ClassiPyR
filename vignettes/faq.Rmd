@@ -520,11 +520,11 @@ You can still work with these classes, but consider adding them to your class li
 
 **Q: A sample shows both annotation and classification markers - what does that mean?**
 
-A: This sample has both manual annotations AND auto-classifications available. When you load it:
+A: This sample has both manual annotations AND auto-classifications available. When you load it, the app defaults to manual annotation mode. A toggle in the header lets you switch between annotation and validation mode.
 
-- The app defaults to manual annotation mode
-- You can switch to validation mode using the button in the header
-- Each mode maintains its state independently
+**Q: Can I switch to annotation mode for a sample that only has auto-classifications?**
+
+A: Yes. Any sample with auto-classification data (✓ or ✎✓) shows a mode toggle in the header. Clicking **→ Manual** creates blank "unclassified" annotations if no manual annotations exist yet, so you can annotate from scratch while keeping the option to switch back to the auto-classifications.
 
 ---
 

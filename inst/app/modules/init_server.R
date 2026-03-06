@@ -25,8 +25,7 @@ setup_init_server <- function(input, output, session) {
 
     # Mode tracking
     is_annotation_mode = FALSE,     # TRUE = annotation (no auto-class), FALSE = validation
-    has_both_modes = FALSE,         # TRUE if sample has both manual AND auto-classification
-    using_manual_mode = TRUE,       # When has_both_modes, which mode is active
+    has_classification = FALSE,     # TRUE if sample has auto-classification data available
 
     # UI state
     current_page = 1,               # Current pagination page
