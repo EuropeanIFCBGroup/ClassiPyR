@@ -8,7 +8,10 @@ setup_manual_save_server <- function(input, output, session, rv, config,
     req(rv$classifications)
     req(rv$class2use)
     req(rv$current_sample)
-    req(rv$class2use_path)
+    # class2use_path is only required for MAT saves; SQLite uses rv$class2use directly
+    if (config$save_format %in% c("mat", "both")) {
+      req(rv$class2use_path)
+    }
 
     rv$is_loading <- TRUE
     disable_nav_buttons()

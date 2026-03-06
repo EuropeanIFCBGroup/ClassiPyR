@@ -188,6 +188,7 @@ test_that("save_sample_annotations returns FALSE for NULL inputs", {
     class2use_path = "/tmp/class2use.txt"
   ))
 
+  # NULL class2use_path with MAT format should return FALSE early
   expect_false(save_sample_annotations(
     sample_name = "D20230314T001205_IFCB134",
     classifications = data.frame(),
@@ -197,7 +198,8 @@ test_that("save_sample_annotations returns FALSE for NULL inputs", {
     output_folder = tempdir(),
     png_output_folder = tempdir(),
     roi_folder = tempdir(),
-    class2use_path = NULL
+    class2use_path = NULL,
+    save_format = "mat"
   ))
 })
 
