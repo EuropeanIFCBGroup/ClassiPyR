@@ -191,17 +191,16 @@ download_dashboard_images <- function(base_url, sample_name,
     # Extract to the expected folder structure
     dir.create(png_subfolder, recursive = TRUE, showWarnings = FALSE)
 
-    # ZIP Slip prevention: validate paths BEFORE extraction
-    resolved_exdir <- normalizePath(png_subfolder, mustWork = FALSE)
+    # ZIP Slip prevention: reject entries with ".." path components
     zip_contents <- utils::unzip(zip_path, list = TRUE)$Name
-    for (entry in zip_contents) {
-      resolved <- normalizePath(file.path(png_subfolder, entry), mustWork = FALSE)
-      if (!startsWith(resolved, resolved_exdir)) {
-        unlink(png_subfolder, recursive = TRUE)
-        stop("ZIP archive contains path traversal entry: ", entry)
-      }
+    bad <- grep("\\.\\.", zip_contents, value = TRUE)
+    if (length(bad) > 0) {
+      unlink(png_subfolder, recursive = TRUE)
+      stop("ZIP archive contains path traversal entry: ", bad[1])
     }
-    utils::unzip(zip_path, exdir = png_subfolder)
+    # Only extract PNG images (dashboard ZIPs also contain metadata/csv/json)
+    png_entries <- grep("\\.png$", zip_contents, value = TRUE, ignore.case = TRUE)
+    utils::unzip(zip_path, files = png_entries, exdir = png_subfolder)
 
     # Clean up zip file
     unlink(zip_path)
@@ -434,17 +433,16 @@ download_dashboard_images_bulk <- function(base_url, sample_names,
       png_subfolder <- file.path(cache_dir, sn, sn)
       dir.create(png_subfolder, recursive = TRUE, showWarnings = FALSE)
       tryCatch({
-        # ZIP Slip prevention: validate paths BEFORE extraction
-        resolved_exdir <- normalizePath(png_subfolder, mustWork = FALSE)
+        # ZIP Slip prevention: reject entries with ".." path components
         zip_contents <- utils::unzip(zip_path, list = TRUE)$Name
-        for (entry in zip_contents) {
-          resolved <- normalizePath(file.path(png_subfolder, entry), mustWork = FALSE)
-          if (!startsWith(resolved, resolved_exdir)) {
-            unlink(png_subfolder, recursive = TRUE)
-            stop("ZIP archive contains path traversal entry: ", entry)
-          }
+        bad <- grep("\\.\\.", zip_contents, value = TRUE)
+        if (length(bad) > 0) {
+          unlink(png_subfolder, recursive = TRUE)
+          stop("ZIP archive contains path traversal entry: ", bad[1])
         }
-        utils::unzip(zip_path, exdir = png_subfolder)
+        # Only extract PNG images (dashboard ZIPs also contain metadata/csv/json)
+        png_entries <- grep("\\.png$", zip_contents, value = TRUE, ignore.case = TRUE)
+        utils::unzip(zip_path, files = png_entries, exdir = png_subfolder)
       }, error = function(e) NULL)
       unlink(zip_path)
 
