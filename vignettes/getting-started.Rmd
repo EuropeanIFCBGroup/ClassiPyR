@@ -188,7 +188,8 @@ Once loaded, you'll see the Image Gallery:
 
 **Batch select**:
 
-- **Select All**: Select all visible images
+- **Select Page** (first click): Select all images on the current page
+- **Select All** (second click): Select all images across all pages
 - **Deselect**: Clear selection
 
 ### Relabeling

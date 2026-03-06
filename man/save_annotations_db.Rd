@@ -2,7 +2,7 @@
 % Please edit documentation in R/database.R
 \name{save_annotations_db}
 \alias{save_annotations_db}
-\title{Save annotations to the SQLite database}
+\title{Save annotations to SQLite}
 \usage{
 save_annotations_db(
   db_path,
@@ -34,8 +34,8 @@ files). If \code{NULL} (the default), all ROIs are treated as reviewed.}
 TRUE on success, FALSE on failure
 }
 \description{
-Writes (or replaces) annotations for a single sample. The existing rows for
-the sample are deleted first so that re-saving acts as an upsert.
+Saves per-ROI classifications and the sample class list to the SQLite
+database.
 }
 \examples{
 \dontrun{

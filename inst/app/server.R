@@ -67,12 +67,15 @@ server <- function(input, output, session) {
     is_loading = FALSE,             # TRUE while loading/saving operations in progress
     measure_mode = FALSE,           # TRUE when measure tool is active
     pending_sample_select = NULL,   # Pending sample selection for dropdown update
+    select_all_state = "first",     # State for two-click Select All: "first" = next click selects current page, "second" = next click selects all
 
     # Class review mode state
     class_review_mode = FALSE,      # TRUE when in class review mode
+    class_review_source = "database", # "database" or "external"
     class_review_class = NULL,      # Currently reviewed class name
     class_review_samples = character(), # Unique sample names in class review
     class_review_original = NULL,   # Original classifications snapshot for diff
+    class_review_external_files = NULL, # file_name -> source_path map for export
 
     # WoRMS matching state
     class_aphia_map = setNames(character(0), character(0)),
@@ -749,6 +752,10 @@ server <- function(input, output, session) {
                  roots = make_dynamic_roots("cfg_png_output_folder"), session = session)
   shinyDirChoose(input, "browse_png_import_folder",
                  roots = make_dynamic_roots("cfg_png_import_folder"), session = session)
+  shinyDirChoose(input, "browse_cr_external_folder",
+                 roots = make_dynamic_roots("cr_external_folder"), session = session)
+  shinyDirChoose(input, "browse_cr_external_export_folder",
+                 roots = make_dynamic_roots("cr_external_export_folder"), session = session)
 
   setup_path_validation("cfg_csv_folder", "browse_csv_folder", "Classification Folder")
   setup_path_validation("cfg_roi_folder", "browse_roi_folder", "ROI/PNG Data Folder")
@@ -756,6 +763,8 @@ server <- function(input, output, session) {
   setup_path_validation("cfg_db_folder", "browse_db_folder", "Database Folder", notify_invalid = FALSE)
   setup_path_validation("cfg_png_output_folder", "browse_png_folder", "PNG Output Folder", notify_invalid = FALSE)
   setup_path_validation("cfg_png_import_folder", "browse_png_import_folder", "PNG Import Folder")
+  setup_path_validation("cr_external_folder", "browse_cr_external_folder", "External PNG Folder")
+  setup_path_validation("cr_external_export_folder", "browse_cr_external_export_folder", "External Export Folder", notify_invalid = FALSE)
   
   # Browse button observers - parse selection and update text input
   observeEvent(input$browse_csv_folder, {
@@ -799,6 +808,24 @@ server <- function(input, output, session) {
       folder <- parseDirPath(get_browse_volumes(input$cfg_png_output_folder), input$browse_png_folder)
       if (length(folder) > 0) {
         updateTextInput(session, "cfg_png_output_folder", value = as.character(folder))
+      }
+    }
+  })
+
+  observeEvent(input$browse_cr_external_folder, {
+    if (!is.integer(input$browse_cr_external_folder)) {
+      folder <- parseDirPath(get_browse_volumes(input$cr_external_folder), input$browse_cr_external_folder)
+      if (length(folder) > 0) {
+        updateTextInput(session, "cr_external_folder", value = as.character(folder))
+      }
+    }
+  })
+
+  observeEvent(input$browse_cr_external_export_folder, {
+    if (!is.integer(input$browse_cr_external_export_folder)) {
+      folder <- parseDirPath(get_browse_volumes(input$cr_external_export_folder), input$browse_cr_external_export_folder)
+      if (length(folder) > 0) {
+        updateTextInput(session, "cr_external_export_folder", value = as.character(folder))
       }
     }
   })
@@ -2405,11 +2432,18 @@ server <- function(input, output, session) {
 
       span(
         style = "font-size: 14px; color: white;",
-        tags$span(style = "font-weight: bold; margin-right: 8px;", "CLASS REVIEW"),
+        tags$span(
+          style = "font-weight: bold; margin-right: 8px;",
+          if (identical(rv$class_review_source, "external")) "CLASS REVIEW (EXTERNAL)" else "CLASS REVIEW"
+        ),
         tags$span(rv$class_review_class),
         tags$span(
           style = "margin-left: 10px; opacity: 0.9;",
-          sprintf("(%d images, %d samples%s)", n_images, n_samples, change_text)
+          if (identical(rv$class_review_source, "external")) {
+            sprintf("(%d images%s)", n_images, change_text)
+          } else {
+            sprintf("(%d images, %d samples%s)", n_images, n_samples, change_text)
+          }
         )
       )
     } else if (is.null(rv$current_sample)) {
@@ -2610,36 +2644,61 @@ server <- function(input, output, session) {
   # Class List Loading
   # ============================================================================
   
-  # Try to load class2use file on startup (from persisted path or default locations)
+  # Try to load class2use on startup: SQLite first, then file fallback
   observe({
     # Skip if we've already loaded a class list from a file
     if (!is.null(rv$class2use_path)) return()
-    
-    # Only load from persisted settings path (no auto-loading from root directory)
+
+    # Try SQLite database first (if save_format includes "sqlite")
+    if (grepl("sqlite", config$save_format, fixed = TRUE)) {
+      db_path <- get_db_path(config$db_folder)
+      if (file.exists(db_path)) {
+        db_classes <- load_global_class_list_db(db_path)
+        if (!is.null(db_classes) && length(db_classes) > 0) {
+          if (!"unclassified" %in% db_classes) {
+            db_classes <- c("unclassified", db_classes)
+          }
+          rv$class2use <- db_classes
+
+          sorted_classes <- sort(rv$class2use)
+          updateSelectizeInput(session, "new_class_quick",
+                               choices = sorted_classes,
+                               selected = character(0))
+
+          showNotification(
+            paste("Restored", length(rv$class2use), "classes from database"),
+            type = "message"
+          )
+          return()
+        }
+      }
+    }
+
+    # Fall back to persisted settings path (no auto-loading from root directory)
     class2use_path <- saved_settings$class2use_path
     # Validate: must be non-null, non-NA, non-empty single string
     if (is.null(class2use_path) || length(class2use_path) != 1 ||
         isTRUE(is.na(class2use_path)) || !nzchar(class2use_path)) {
       return()  # Start with empty class list
     }
-    
+
     path_to_try <- class2use_path
     if (file.exists(path_to_try)) {
       tryCatch({
         classes <- load_class_list(path_to_try)
-        
+
         if (!"unclassified" %in% classes) {
           classes <- c("unclassified", classes)
         }
-        
+
         rv$class2use <- classes
         rv$class2use_path <- path_to_try
-        
+
         sorted_classes <- sort(rv$class2use)
         updateSelectizeInput(session, "new_class_quick",
                              choices = sorted_classes,
                              selected = character(0))
-        
+
         showNotification(
           paste("Auto-loaded", length(rv$class2use), "classes from", basename(path_to_try)),
           type = "message"
@@ -2648,6 +2707,18 @@ server <- function(input, output, session) {
         message("Could not load class list from saved path: ", e$message)
       })
     }
+  })
+
+  # Auto-save class list to SQLite whenever it changes
+  observeEvent(rv$class2use, {
+    # Only save if SQLite is enabled and classlist is non-trivial
+    if (!grepl("sqlite", config$save_format, fixed = TRUE)) return()
+    classes <- rv$class2use
+    if (is.null(classes) || length(classes) == 0) return()
+    if (length(classes) == 1 && classes == "unclassified") return()
+
+    db_path <- get_db_path(config$db_folder)
+    save_global_class_list_db(db_path, classes)
   })
   
   # Load uploaded class2use file (from settings modal)
@@ -3824,9 +3895,11 @@ server <- function(input, output, session) {
 
     # Clear class review state when loading a sample
     rv$class_review_mode <- FALSE
+    rv$class_review_source <- "database"
     rv$class_review_class <- NULL
     rv$class_review_samples <- character()
     rv$class_review_original <- NULL
+    rv$class_review_external_files <- NULL
 
     save_to_cache()
     rv$pending_sample_select <- input$sample_select
@@ -3851,9 +3924,11 @@ server <- function(input, output, session) {
 
     # Reset class review state
     rv$class_review_mode <- FALSE
+    rv$class_review_source <- "database"
     rv$class_review_class <- NULL
     rv$class_review_samples <- character()
     rv$class_review_original <- NULL
+    rv$class_review_external_files <- NULL
 
     # Clear sample selection
     updateSelectizeInput(session, "sample_select", selected = "")
@@ -3965,8 +4040,8 @@ server <- function(input, output, session) {
       # Single class filter
       filtered <- df %>% filter(class_name == input$class_filter)
       
-      if (rv$is_annotation_mode && input$class_filter == "unclassified") {
-        # Sort unclassified by area in annotation mode
+      if (rv$is_annotation_mode) {
+        # Sort by area in annotation mode
         filtered %>% arrange(desc(roi_area))
       } else {
         filtered %>% arrange(file_name)
@@ -4007,18 +4082,28 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$prev_page, {
-    if (rv$current_page > 1) rv$current_page <- rv$current_page - 1
+    if (rv$current_page > 1) {
+      rv$current_page <- rv$current_page - 1
+      rv$select_all_state <- "first"  # Reset select_all state when navigating
+    }
   })
   
   observeEvent(input$next_page, {
     req(paginated_images())
     if (rv$current_page < paginated_images()$total_pages) {
       rv$current_page <- rv$current_page + 1
+      rv$select_all_state <- "first"  # Reset select_all state when navigating
     }
   })
   
-  observeEvent(input$class_filter, { rv$current_page <- 1 })
-  observeEvent(input$images_per_page, { rv$current_page <- 1 })
+  observeEvent(input$class_filter, { 
+    rv$current_page <- 1
+    rv$select_all_state <- "first"  # Reset select_all state when filter changes
+  })
+  observeEvent(input$images_per_page, { 
+    rv$current_page <- 1
+    rv$select_all_state <- "first"  # Reset select_all state when page size changes
+  })
   
   # Render gallery
   output$image_gallery <- renderUI({
@@ -4067,8 +4152,9 @@ server <- function(input, output, session) {
         safe_img_file <- htmltools::htmlEscape(img_file)
         resource_path <- if (!is.null(rv$resource_path_name)) rv$resource_path_name else "temp_images"
 
-        # In class review mode, derive sample from file_name since current_sample is NULL
-        if (rv$class_review_mode) {
+        # In DB class review mode, derive sample from IFCB file naming convention.
+        # External class review uses a single synthetic sample folder.
+        if (rv$class_review_mode && !identical(rv$class_review_source, "external")) {
           sample_for_img <- sub("_(\\d{5})\\.png$", "", img_file)
         } else {
           sample_for_img <- rv$current_sample
@@ -4163,12 +4249,39 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$select_all, {
-    req(filtered_images())
-    rv$selected_images <- unique(c(rv$selected_images, filtered_images()$file_name))
+    req(filtered_images(), paginated_images())
+    
+    if (rv$select_all_state == "first") {
+      # "Select Page" button: select only images on current page (replaces selection)
+      current_page_images <- paginated_images()$images$file_name
+      rv$selected_images <- current_page_images
+      # Change state to "second" for next click
+      rv$select_all_state <- "second"
+    } else {
+      # "Select All" button: select all images across all pages (replaces selection)
+      rv$selected_images <- filtered_images()$file_name
+      # Toggle back to "first" so next click selects page only
+      rv$select_all_state <- "first"
+    }
   })
   
   observeEvent(input$deselect_all, {
     rv$selected_images <- character()
+    rv$select_all_state <- "first"  # Reset select_all state
+  })
+  
+  # Reset select_all_state when classifications change (new sample loaded)
+  observeEvent(rv$classifications, {
+    rv$select_all_state <- "first"
+  }, priority = -1)  # Low priority so selection state is reset after classifications are loaded
+  
+  # Update Select All button text based on state
+  observeEvent(rv$select_all_state, {
+    if (rv$select_all_state == "first") {
+      shinyjs::html("select_all", "Select Page")
+    } else {
+      shinyjs::html("select_all", "Select All")
+    }
   })
   
   # Measure tool toggle
@@ -4319,60 +4432,96 @@ server <- function(input, output, session) {
     }
   }
 
+  # Helper: populate year/month/instrument/annotator dropdowns from DB metadata
+  populate_cr_database_filters <- function() {
+    db_path <- get_db_path(config$db_folder)
+    meta <- list_annotation_metadata_db(db_path)
+
+    updateSelectInput(session, "cr_year_select",
+                      choices = c("All" = "all", setNames(meta$years, meta$years)),
+                      selected = "all")
+    month_labels <- MONTH_NAMES[meta$months]
+    updateSelectInput(session, "cr_month_select",
+                      choices = c("All" = "all", setNames(meta$months, month_labels)),
+                      selected = "all")
+    updateSelectInput(session, "cr_instrument_select",
+                      choices = c("All" = "all", setNames(meta$instruments, meta$instruments)),
+                      selected = "all")
+    updateSelectInput(session, "cr_annotator_select",
+                      choices = c("All" = "all", setNames(meta$annotators, meta$annotators)),
+                      selected = "all")
+
+    update_cr_class_list()
+  }
+
   # When entering class review mode, populate filters and class dropdown
   observeEvent(input$app_mode, {
     if (input$app_mode == "class_review") {
-      db_path <- get_db_path(config$db_folder)
-      meta <- list_annotation_metadata_db(db_path)
-
-      updateSelectInput(session, "cr_year_select",
-                        choices = c("All" = "all", setNames(meta$years, meta$years)),
-                        selected = "all")
-      month_labels <- MONTH_NAMES[meta$months]
-      updateSelectInput(session, "cr_month_select",
-                        choices = c("All" = "all", setNames(meta$months, month_labels)),
-                        selected = "all")
-      updateSelectInput(session, "cr_instrument_select",
-                        choices = c("All" = "all", setNames(meta$instruments, meta$instruments)),
-                        selected = "all")
-      updateSelectInput(session, "cr_annotator_select",
-                        choices = c("All" = "all", setNames(meta$annotators, meta$annotators)),
-                        selected = "all")
-
-      update_cr_class_list()
+      rv$class_review_source <- if (!is.null(input$class_review_source)) input$class_review_source else "database"
+      if (identical(rv$class_review_source, "database")) {
+        populate_cr_database_filters()
+      }
     } else {
       # Leaving class review mode — clear state
+      rv$class_review_mode <- FALSE
+      rv$class_review_source <- "database"
+      rv$class_review_class <- NULL
+      rv$class_review_samples <- character()
+      rv$class_review_original <- NULL
+      rv$class_review_external_files <- NULL
+      rv$select_all_state <- "first"
+    }
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$class_review_source, {
+    rv$class_review_source <- input$class_review_source
+    if (input$app_mode == "class_review") {
       rv$class_review_mode <- FALSE
       rv$class_review_class <- NULL
       rv$class_review_samples <- character()
       rv$class_review_original <- NULL
+      rv$class_review_external_files <- NULL
+      rv$current_sample <- NULL
+      rv$classifications <- NULL
+      rv$original_classifications <- NULL
+      rv$selected_images <- character()
+      rv$current_page <- 1
+      rv$changes_log <- create_empty_changes_log()
+      updateSelectInput(session, "class_filter", choices = c("All" = "all"), selected = "all")
+    }
+    if (input$app_mode == "class_review" && identical(input$class_review_source, "database")) {
+      populate_cr_database_filters()
     }
   }, ignoreInit = TRUE)
 
   # Cascading filter updates for class review
   observeEvent(input$cr_year_select, {
     req(input$app_mode == "class_review")
+    req(identical(input$class_review_source, "database"))
     update_cr_month_choices()
     update_cr_class_list()
   }, ignoreInit = TRUE)
 
   observeEvent(input$cr_month_select, {
     req(input$app_mode == "class_review")
+    req(identical(input$class_review_source, "database"))
     update_cr_class_list()
   }, ignoreInit = TRUE)
 
   observeEvent(input$cr_instrument_select, {
     req(input$app_mode == "class_review")
+    req(identical(input$class_review_source, "database"))
     update_cr_class_list()
   }, ignoreInit = TRUE)
 
   observeEvent(input$cr_annotator_select, {
     req(input$app_mode == "class_review")
+    req(identical(input$class_review_source, "database"))
     update_cr_class_list()
   }, ignoreInit = TRUE)
 
   # Class review info output
-  output$class_review_info <- renderUI({
+  cr_info_content <- reactive({
     if (!rv$class_review_mode || is.null(rv$classifications)) return(NULL)
 
     n_images <- nrow(rv$classifications)
@@ -4385,7 +4534,11 @@ server <- function(input, output, session) {
 
     div(
       style = "font-size: 12px; color: #666; margin-bottom: 8px;",
-      sprintf("%d images from %d samples", n_images, n_samples),
+      if (identical(rv$class_review_source, "external")) {
+        sprintf("%d images from external folder", n_images)
+      } else {
+        sprintf("%d images from %d samples", n_images, n_samples)
+      },
       if (n_changed > 0) tags$span(
         style = "color: #dc3545; font-weight: bold; margin-left: 5px;",
         sprintf("(%d changed)", n_changed)
@@ -4393,8 +4546,12 @@ server <- function(input, output, session) {
     )
   })
 
+  output$class_review_info <- renderUI({ cr_info_content() })
+  output$class_review_info_ext <- renderUI({ cr_info_content() })
+
   # Load class for review
   observeEvent(input$load_class_review, {
+    req(input$class_review_source == "database")
     req(input$class_review_select, input$class_review_select != "")
 
     class_name <- input$class_review_select
@@ -4528,8 +4685,10 @@ server <- function(input, output, session) {
 
     # Set class review state
     rv$class_review_mode <- TRUE
+    rv$class_review_source <- "database"
     rv$class_review_class <- class_name
     rv$class_review_samples <- setdiff(unique_samples, missing_samples)
+    rv$class_review_external_files <- NULL
     rv$current_sample <- NULL
     rv$classifications <- classifications
     rv$original_classifications <- classifications
@@ -4556,9 +4715,153 @@ server <- function(input, output, session) {
     showNotification(msg, type = "message", duration = 8)
   })
 
+  observeEvent(input$cr_external_folder, {
+    req(input$app_mode == "class_review")
+    req(identical(input$class_review_source, "external"))
+    if (!nzchar(input$cr_external_initial_class) &&
+        !is.null(input$cr_external_folder) &&
+        nzchar(input$cr_external_folder) &&
+        dir.exists(input$cr_external_folder)) {
+      updateTextInput(session, "cr_external_initial_class",
+                      value = basename(normalizePath(input$cr_external_folder)))
+    }
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$load_external_class_review, {
+    req(input$app_mode == "class_review")
+    req(input$class_review_source == "external")
+    req(input$cr_external_folder, nzchar(input$cr_external_folder))
+
+    source_folder <- input$cr_external_folder
+    if (!dir.exists(source_folder)) {
+      showNotification("Input PNG folder does not exist.", type = "error")
+      return()
+    }
+
+    png_paths <- list.files(source_folder, pattern = "\\.png$", ignore.case = TRUE, full.names = TRUE)
+    if (length(png_paths) == 0) {
+      showNotification("No PNG files found in selected folder.", type = "warning")
+      return()
+    }
+
+    class_name <- sanitize_string(trimws(input$cr_external_initial_class))
+    if (!nzchar(class_name)) {
+      class_name <- sanitize_string(basename(normalizePath(source_folder)))
+    }
+    if (!nzchar(class_name)) class_name <- "unclassified"
+
+    rv$is_loading <- TRUE
+    disable_nav_buttons()
+    on.exit({
+      rv$is_loading <- FALSE
+      enable_nav_buttons()
+    })
+
+    if (!rv$class_review_mode && !is.null(rv$current_sample)) {
+      save_to_cache()
+    }
+
+    new_temp_folder <- tempfile(pattern = "ifcb_class_review_external_")
+    sample_name <- "__external_review__"
+    sample_folder <- file.path(new_temp_folder, sample_name)
+    dir.create(sample_folder, recursive = TRUE)
+
+    n_input <- length(png_paths)
+    copied_paths <- character(n_input)
+    copied_files <- character(n_input)
+    ok <- logical(n_input)
+
+    withProgress(message = "Loading external PNG folder...", value = 0, {
+      for (i in seq_along(png_paths)) {
+        src <- png_paths[i]
+        dest_name <- basename(src)
+        # Deduplicate filenames to prevent silent overwrites
+        if (dest_name %in% copied_files[ok]) {
+          base <- tools::file_path_sans_ext(dest_name)
+          ext <- tools::file_ext(dest_name)
+          counter <- 1L
+          while (paste0(base, "_", counter, ".", ext) %in% copied_files[ok]) {
+            counter <- counter + 1L
+          }
+          dest_name <- paste0(base, "_", counter, ".", ext)
+        }
+        dst <- file.path(sample_folder, dest_name)
+        if (isTRUE(file.copy(src, dst, overwrite = FALSE))) {
+          copied_paths[i] <- src
+          copied_files[i] <- dest_name
+          ok[i] <- TRUE
+        }
+        incProgress(0.7 / n_input)
+      }
+
+      copied_paths <- copied_paths[ok]
+      copied_files <- copied_files[ok]
+
+      dims <- vector("list", length(copied_files))
+      for (i in seq_along(copied_files)) {
+        dims[[i]] <- ClassiPyR:::read_png_dimensions(file.path(sample_folder, copied_files[i]))
+        if (length(copied_files) > 0) incProgress(0.3 / length(copied_files))
+      }
+    })
+
+    if (length(copied_files) == 0) {
+      unlink(new_temp_folder, recursive = TRUE)
+      showNotification("Could not prepare PNG files for preview.", type = "error")
+      return()
+    }
+
+    # Success — now safe to replace old temp folder
+    if (!is.null(rv$temp_png_folder) && dir.exists(rv$temp_png_folder) &&
+        isTRUE(rv$temp_png_is_managed)) {
+      unlink(rv$temp_png_folder, recursive = TRUE)
+    }
+    rv$temp_png_folder <- new_temp_folder
+    rv$temp_png_is_managed <- TRUE
+
+    classifications <- data.frame(
+      file_name = copied_files,
+      class_name = rep(class_name, length(copied_files)),
+      score = NA_real_,
+      width = vapply(dims, `[[`, numeric(1), "width"),
+      height = vapply(dims, `[[`, numeric(1), "height"),
+      roi_area = vapply(dims, function(x) x$width * x$height, numeric(1)),
+      stringsAsFactors = FALSE
+    )
+
+    rv$class_review_mode <- TRUE
+    rv$class_review_source <- "external"
+    rv$class_review_class <- class_name
+    rv$class_review_samples <- sample_name
+    rv$class_review_external_files <- data.frame(
+      file_name = copied_files,
+      source_path = copied_paths,
+      stringsAsFactors = FALSE
+    )
+    rv$current_sample <- sample_name
+    rv$classifications <- classifications
+    rv$original_classifications <- classifications
+    rv$class_review_original <- classifications
+    rv$is_annotation_mode <- TRUE
+    rv$has_both_modes <- FALSE
+    rv$selected_images <- character()
+    rv$current_page <- 1
+    rv$changes_log <- create_empty_changes_log()
+
+    available_classes <- sort(unique(classifications$class_name))
+    updateSelectInput(session, "class_filter",
+                      choices = build_class_filter_choices(available_classes),
+                      selected = "all")
+
+    showNotification(
+      sprintf("Loaded %d images from external folder for relabeling", nrow(classifications)),
+      type = "message", duration = 8
+    )
+  })
+
   # Save class review changes
   observeEvent(input$save_class_review_btn, {
     req(rv$class_review_mode)
+    req(identical(rv$class_review_source, "database"))
     req(rv$classifications)
     req(rv$class_review_original)
 
@@ -4608,6 +4911,68 @@ server <- function(input, output, session) {
     }, error = function(e) {
       showNotification(paste("Error saving:", e$message), type = "error")
     })
+  })
+
+  observeEvent(input$export_external_class_review_btn, {
+    req(rv$class_review_mode)
+    req(identical(rv$class_review_source, "external"))
+    req(rv$classifications)
+    req(rv$class_review_external_files)
+    req(input$cr_external_export_folder, nzchar(input$cr_external_export_folder))
+
+    export_folder <- input$cr_external_export_folder
+    if (!dir.exists(export_folder)) {
+      ok <- tryCatch({
+        dir.create(export_folder, recursive = TRUE, showWarnings = FALSE)
+      }, error = function(e) FALSE)
+      if (!isTRUE(ok) && !dir.exists(export_folder)) {
+        showNotification("Could not create export folder.", type = "error")
+        return()
+      }
+    }
+
+    rv$is_loading <- TRUE
+    on.exit({ rv$is_loading <- FALSE })
+
+    files_map <- rv$class_review_external_files
+    idx <- match(rv$classifications$file_name, files_map$file_name)
+    source_paths <- files_map$source_path[idx]
+
+    copied <- 0L
+    withProgress(message = "Exporting relabeled images...", value = 0, {
+      n_total <- nrow(rv$classifications)
+      for (i in seq_len(n_total)) {
+        src <- source_paths[i]
+        if (!is.na(src) && file.exists(src)) {
+          class_name <- sanitize_string(rv$classifications$class_name[i])
+          if (!nzchar(class_name)) class_name <- "unclassified"
+          class_dir <- file.path(export_folder, class_name)
+          if (!dir.exists(class_dir)) {
+            dir.create(class_dir, recursive = TRUE, showWarnings = FALSE)
+          }
+          dst <- file.path(class_dir, basename(src))
+          if (isTRUE(file.copy(src, dst, overwrite = TRUE))) {
+            copied <- copied + 1L
+          }
+        }
+        incProgress(1 / n_total,
+                    detail = sprintf("Exporting (%d/%d)", i, n_total))
+      }
+    })
+
+    skipped <- nrow(rv$classifications) - copied
+    n_classes <- length(unique(rv$classifications$class_name))
+    if (skipped > 0) {
+      showNotification(
+        sprintf("Exported %d images into %d class folders (%d skipped — source missing)", copied, n_classes, skipped),
+        type = "warning", duration = 10
+      )
+    } else {
+      showNotification(
+        sprintf("Exported %d images into %d class folders", copied, n_classes),
+        type = "message", duration = 8
+      )
+    }
   })
 
   # ============================================================================

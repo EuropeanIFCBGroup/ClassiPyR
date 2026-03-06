@@ -66,9 +66,9 @@ You can create a new class list directly in the app without uploading a file:
 - Click **Apply Changes**
 
 4. The app creates a temporary class list file automatically
-5. **Save your work**: Click **Save as .mat** or **Save as .txt** to keep your class list for future sessions
+5. If using SQLite storage (default), your class list is **auto-saved to the database** and restored on next startup
 
-> **Note**: The temporary class list works for the current session, but you should save it to a file for future use.
+> **Note**: With SQLite storage, your class list persists automatically. You can still use **Save as .mat** or **Save as .txt** to export a portable copy for sharing or backup.
 
 ---
 
@@ -205,6 +205,18 @@ Creates simple text file:
 
 1. Click **Save as .txt**
 2. Choose location in browser download
+
+---
+
+## Auto-persistence in SQLite
+
+When the storage format includes SQLite (the default), the class list is automatically saved to the `global_class_list` table in `annotations.sqlite` whenever it changes. This means:
+
+- Adding a class, renaming, applying WoRMS matches, or uploading a file all persist instantly
+- On next startup, the class list is restored from the database (no file upload needed)
+- File-based class lists (`.mat`/`.txt`) are still supported as a fallback and for sharing
+
+If you switch away from SQLite storage, class list persistence falls back to the file-based workflow (upload or save as `.txt`/`.mat`).
 
 ---
 

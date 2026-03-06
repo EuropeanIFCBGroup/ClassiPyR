@@ -80,27 +80,43 @@ Some samples may have both manual annotations AND auto-classifications (e.g., yo
 
 ## Class Review Mode
 
-Class Review mode lets you view **all annotated images of a specific class** across the entire database. This is useful for verifying that annotations are consistent and correcting misclassified images without loading samples one by one.
+Class Review mode lets you view **all annotated images of a specific class** and reclassify them. There are two sources to choose from: the SQLite **Database** or an **External PNG Folder**.
 
 <a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-review.png">
 <img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/class-review.png" alt="Class Review mode showing all images of a selected class across the database." style="max-width:100%;">
 </a>
 <p><em>Class Review mode showing all images of a selected class across the database. Click to enlarge.</em></p>
 
-### How to use
+### Database review
+
+Review all annotated images of a class across the entire database:
 
 1. Switch to **Class Review** using the mode toggle in the sidebar
-2. The class dropdown is searchable — type to filter. Each class shows its image count in parentheses
-3. Select a class and click **Load** — images are loaded from ROI files or discovered PNG sample folders across all samples
-4. Review images in the gallery. Each image label shows the full name (sample + ROI) so you can identify which sample it belongs to
-5. Use the same selection and relabeling tools as in sample mode
-6. Click **Save Changes** to write row-level updates to the database
+2. Select **Database** as the source (default)
+3. The class dropdown is searchable — type to filter. Each class shows its image count in parentheses
+4. Select a class and click **Load** — images are loaded from ROI files or discovered PNG sample folders across all samples
+5. Review images in the gallery. Each image label shows the full name (sample + ROI) so you can identify which sample it belongs to
+6. Use the same selection and relabeling tools as in sample mode
+7. Click **Save Changes** to write row-level updates to the database
+
+### External folder review
+
+Review and split a folder of PNG images (e.g. from an external classifier or export) into class subfolders:
+
+1. Switch to **Class Review** and select **External PNG Folder** as the source
+2. Browse to the folder containing PNG images
+3. The initial class label defaults to the folder name — change it if needed
+4. Click **Load Folder** — all PNGs are loaded into the gallery with the initial class label
+5. Select images and relabel them to different classes
+6. Set an **Export Folder** and click **Export Split Folders** — images are copied into class-name subfolders
+
+This is useful for sorting or correcting a flat folder of images without importing them into the database.
 
 ### Key differences from sample mode
 
-- Images come from **multiple samples**, not just one
-- Image labels show the **full image name** (e.g. `D20230101T120000_IFCB134_00001`) instead of just the ROI number
-- Saving performs **surgical row-level UPDATEs** rather than replacing an entire sample's annotations
+- Images come from **multiple samples** (database) or a **single folder** (external), not a single sample
+- Image labels show the **full image name** (e.g. `D20230101T120000_IFCB134_00001`) instead of just the ROI number (database mode)
+- Saving performs **surgical row-level UPDATEs** rather than replacing an entire sample's annotations (database mode)
 - The title bar turns **purple** to indicate class review mode
 - Navigation buttons (prev/next/random sample) are not available
 
@@ -163,7 +179,7 @@ Each image card displays:
 |--------|--------|
 | Click | Toggle single image selection |
 | Drag | Draw rectangle to select multiple |
-| Select All | Select all images in current filter |
+| Select Page / Select All | First click selects the current page; second click selects all images across all pages |
 | Deselect | Clear all selections |
 
 <a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/drag-select.png">

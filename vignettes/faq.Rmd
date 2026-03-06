@@ -38,11 +38,15 @@ A: No. The app only reads your original files. All output is written to separate
 
 **Q: How can I review all images of a specific class?**
 
-A: Use **Class Review mode**. Switch to "Class Review" using the mode toggle in the sidebar, select a class from the dropdown, and click Load. This loads all images annotated as that class from every sample in the database. You can then reclassify any mistakes using the normal relabeling tools.
+A: Use **Class Review mode**. Switch to "Class Review" using the mode toggle in the sidebar, select **Database** as the source, select a class from the dropdown, and click Load. This loads all images annotated as that class from every sample in the database. You can then reclassify any mistakes using the normal relabeling tools.
 
 **Q: Can I reclassify images across multiple samples at once?**
 
-A: Yes. Class Review mode loads images from all samples and saves changes as row-level updates to the database. This means only the images you reclassify are updated — other annotations in those samples remain untouched.
+A: Yes. Class Review mode (Database source) loads images from all samples and saves changes as row-level updates to the database. This means only the images you reclassify are updated — other annotations in those samples remain untouched.
+
+**Q: Can I sort a folder of PNG images into class subfolders?**
+
+A: Yes. In Class Review mode, select **External PNG Folder** as the source, browse to your PNG folder, and click **Load Folder**. All images are loaded with an initial class label (defaulting to the folder name). Relabel images in the gallery, then set an export folder and click **Export Split Folders** to copy images into class-name subfolders. This works independently of the database.
 
 **Q: Can I classify images without pre-computed classifier files?**
 
@@ -232,7 +236,8 @@ A: No! You can create a class list from scratch directly in the app:
 2. Add classes one at a time or paste multiple classes in the text area
 3. Click Apply Changes - a temporary file is created automatically
 4. Start annotating immediately
-5. Remember to Save as .mat or .txt for future sessions
+
+With SQLite storage (default), your class list is auto-saved to the database and restored on next startup. You can still export as `.mat` or `.txt` for sharing or backup.
 
 **Q: How do I create a class list from scratch?**
 
@@ -241,7 +246,11 @@ A:
 1. Open Settings → Edit Class List
 2. Add classes using "Add new class" field, or type/paste classes in the text area
 3. Click Apply Changes
-4. Save as .mat or .txt for future use
+4. With SQLite storage, the class list persists automatically. Optionally save as `.mat` or `.txt` for portability.
+
+**Q: Is my class list saved automatically?**
+
+A: Yes, when using SQLite storage (the default). Every change — adding classes, renaming, applying WoRMS matches, uploading a file — is auto-saved to the `global_class_list` table in the SQLite database. On next startup, the class list is restored from the database. If you don't use SQLite storage, save your class list as a `.txt` or `.mat` file to preserve it.
 
 **Q: Can I import a class list from MATLAB?**
 

@@ -1771,3 +1771,100 @@ test_that("integration: WoRMS match rows round-trip into class_taxonomy table", 
   expect_true(any(tax_rows$class_name == "OldName" & tax_rows$accepted_aphia_id == "20"))
   expect_true(any(tax_rows$class_name == "OldName" & tax_rows$scientific_name == "OldName"))
 })
+
+# =============================================================================
+# Global class list persistence
+# =============================================================================
+
+test_that("save_global_class_list_db creates database and stores classes", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
+  db_path <- get_db_path(db_dir)
+
+  class2use <- c("unclassified", "Diatom", "Ciliate", "Dinoflagellate")
+  result <- save_global_class_list_db(db_path, class2use)
+
+  expect_true(result)
+  expect_true(file.exists(db_path))
+
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  rows <- DBI::dbGetQuery(con, "SELECT * FROM global_class_list ORDER BY class_index")
+  expect_equal(nrow(rows), 4)
+  expect_equal(rows$class_name, class2use)
+  expect_equal(rows$class_index, 1:4)
+})
+
+test_that("load_global_class_list_db returns stored classes in order", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
+  db_path <- get_db_path(db_dir)
+
+  class2use <- c("unclassified", "Diatom", "Ciliate")
+  save_global_class_list_db(db_path, class2use)
+
+  loaded <- load_global_class_list_db(db_path)
+  expect_equal(loaded, class2use)
+})
+
+test_that("load_global_class_list_db returns NULL for non-existent database", {
+  result <- load_global_class_list_db("/nonexistent/path/db.sqlite")
+  expect_null(result)
+})
+
+test_that("load_global_class_list_db returns NULL for empty table", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
+  db_path <- get_db_path(db_dir)
+
+  # Create DB with empty table
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  init_db_schema(con)
+  DBI::dbDisconnect(con)
+  on.exit(NULL)  # remove disconnect handler
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
+
+  result <- load_global_class_list_db(db_path)
+  expect_null(result)
+})
+
+test_that("save_global_class_list_db replaces existing data", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
+  db_path <- get_db_path(db_dir)
+
+  save_global_class_list_db(db_path, c("unclassified", "Diatom"))
+  save_global_class_list_db(db_path, c("unclassified", "Ciliate", "Dino"))
+
+  loaded <- load_global_class_list_db(db_path)
+  expect_equal(loaded, c("unclassified", "Ciliate", "Dino"))
+})
+
+test_that("save_global_class_list_db handles NULL and empty input", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
+  db_path <- get_db_path(db_dir)
+
+  expect_true(save_global_class_list_db(db_path, NULL))
+  expect_true(save_global_class_list_db(db_path, character(0)))
+})
+
+test_that("init_db_schema creates global_class_list table", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
+  db_path <- get_db_path(db_dir)
+
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  init_db_schema(con)
+
+  tables <- DBI::dbGetQuery(con, "SELECT name FROM sqlite_master WHERE type='table'")
+  expect_true("global_class_list" %in% tables$name)
+})

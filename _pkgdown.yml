@@ -81,6 +81,8 @@ reference:
   - list_classes_db
   - save_class_taxonomy_db
   - load_class_taxonomy_db
+  - save_global_class_list_db
+  - load_global_class_list_db
   - load_class_annotations_db
   - save_class_review_changes_db
 - title: WoRMS Taxonomy

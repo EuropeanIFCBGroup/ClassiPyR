@@ -2,6 +2,11 @@
 
 ## New features
 
+### Class List Persistence
+
+- **Auto-persist class list in SQLite**: When using SQLite storage (the default), the class list is now automatically saved to a `global_class_list` table whenever it changes — adding classes, renaming, applying WoRMS matches, uploading a file, or importing from PNGs. On next startup the class list is restored from the database, so no manual file upload is needed. File-based class lists (`.mat`/`.txt`) remain supported as a fallback and for sharing.
+- New exported functions: `save_global_class_list_db()` and `load_global_class_list_db()` for programmatic access to the persisted class list.
+
 ### Import / Export
 
 - Added **Import PNG → SQLite** button in Settings > Import / Export (#15). Imports annotations from a folder of PNG images organized in class-name subfolders (e.g. exported by ClassiPyR or other tools). Folder names follow the iRfcb convention where trailing `_NNN` suffixes are stripped.
@@ -24,6 +29,7 @@
 - **Classification threshold toggle**: New "Apply classification threshold" checkbox in Settings controls whether thresholded or raw predictions are used, for all classification formats (CSV, H5, MAT).
 - **Live Prediction**: Added a "Predict" button in Sample Mode that classifies all images in the loaded sample using a remote CNN model via `iRfcb::ifcb_classify_images()` (#17). Configure the Gradio API URL and model in Settings > Live Prediction. The model dropdown is populated dynamically from the Gradio server. Predictions respect the classification threshold setting, skip manually reclassified images, and new class names from the model are added to the class list automatically. A per-image progress bar shows classification progress.
 - **Class Review Mode**: View and reclassify all annotated images of a specific class across the entire database (#16). Switch to class review via the mode toggle in the sidebar, select a class, and load all matching images from all samples at once. Changes are saved as row-level updates to the database.
+- **External PNG folder review**: Class Review mode now supports an **External PNG Folder** source in addition to the database. Load a folder of PNG images, relabel them in the gallery, and export into class-name subfolders. Useful for sorting or correcting a flat folder of images from an external classifier without importing into the database.
 - New exported functions: `list_classes_db()`, `load_class_annotations_db()`, and `save_class_review_changes_db()` for programmatic class review operations.
 
 ### Taxonomy / WoRMS
@@ -44,6 +50,8 @@
 - The **class list editor** now optionally shows `[AphiaID: ...]` per class when WoRMS mappings exist.
 - Added an **Apply** button in Settings to activate changes immediately without closing the dialog (#18).
 - Prevented shinyFiles from freezing when an invalid path is entered by disabling Browse and showing a notification for non-existent input folders (#19).
+- **Select Page / Select All**: The "Select All" button now uses a two-click workflow — first click selects the current page, second click selects all images across all pages. Resets automatically when navigating pages, changing filters, or loading a new sample.
+- In annotation mode, single-class filtered images are now sorted by area (descending) for all classes, not just "unclassified".
 
 # ClassiPyR 0.1.1
 

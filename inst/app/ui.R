@@ -475,34 +475,79 @@ ui <- page_sidebar(
 
       h4("Class Review"),
 
-      div(
-        style = "display: flex; gap: 10px; margin-bottom: 10px;",
-        div(style = "flex: 1;",
-            selectInput("cr_year_select", "Year",
-                        choices = c("All" = "all"), width = "100%")),
-        div(style = "flex: 1;",
-            selectInput("cr_month_select", "Month",
-                        choices = c("All" = "all"), width = "100%")),
-        div(style = "flex: 1;",
-            selectInput("cr_instrument_select", "IFCB",
-                        choices = c("All" = "all"), width = "100%"))
+      radioButtons("class_review_source", "Source",
+                   choices = c("Database" = "database",
+                               "External PNG Folder" = "external"),
+                   selected = "database", inline = TRUE),
+
+      conditionalPanel(
+        condition = "input.class_review_source == 'database'",
+
+        div(
+          style = "display: flex; gap: 10px; margin-bottom: 10px;",
+          div(style = "flex: 1;",
+              selectInput("cr_year_select", "Year",
+                          choices = c("All" = "all"), width = "100%")),
+          div(style = "flex: 1;",
+              selectInput("cr_month_select", "Month",
+                          choices = c("All" = "all"), width = "100%")),
+          div(style = "flex: 1;",
+              selectInput("cr_instrument_select", "IFCB",
+                          choices = c("All" = "all"), width = "100%"))
+        ),
+
+        selectInput("cr_annotator_select", "Annotator",
+                    choices = c("All" = "all"), width = "100%"),
+
+        selectizeInput("class_review_select", "Select Class",
+                       choices = NULL, width = "100%",
+                       options = list(maxOptions = 1000)),
+
+        uiOutput("class_review_info"),
+
+        div(
+          style = "display: flex; gap: 5px; margin-bottom: 5px;",
+          actionButton("load_class_review", "Load",
+                       class = "btn-primary", style = "flex: 1;"),
+          actionButton("save_class_review_btn", "Save Changes",
+                       class = "btn-success", style = "flex: 1;")
+        )
       ),
 
-      selectInput("cr_annotator_select", "Annotator",
-                  choices = c("All" = "all"), width = "100%"),
+      conditionalPanel(
+        condition = "input.class_review_source == 'external'",
+        tags$small(class = "text-muted",
+                   "Load a folder of PNG images from one class, relabel in the gallery, then export to class subfolders."),
 
-      selectizeInput("class_review_select", "Select Class",
-                     choices = NULL, width = "100%",
-                     options = list(maxOptions = 1000)),
+        div(
+          style = "display: flex; gap: 5px; align-items: flex-end; margin-top: 8px;",
+          div(style = "flex: 1;",
+              textInput("cr_external_folder", "Input PNG Folder", value = "", width = "100%")),
+          shinyDirButton("browse_cr_external_folder", "Browse", "Select PNG Folder",
+                         class = "btn-outline-secondary", style = "margin-bottom: 15px;")
+        ),
 
-      uiOutput("class_review_info"),
+        textInput("cr_external_initial_class", "Initial Class Label",
+                  value = "", width = "100%",
+                  placeholder = "Defaults to folder name if empty"),
 
-      div(
-        style = "display: flex; gap: 5px; margin-bottom: 5px;",
-        actionButton("load_class_review", "Load",
-                     class = "btn-primary", style = "flex: 1;"),
-        actionButton("save_class_review_btn", "Save Changes",
-                     class = "btn-success", style = "flex: 1;")
+        uiOutput("class_review_info_ext"),
+
+        div(
+          style = "display: flex; gap: 5px; margin-bottom: 8px;",
+          actionButton("load_external_class_review", "Load Folder",
+                       class = "btn-primary", style = "flex: 1;"),
+          actionButton("export_external_class_review_btn", "Export Split Folders",
+                       class = "btn-success", style = "flex: 1;")
+        ),
+
+        div(
+          style = "display: flex; gap: 5px; align-items: flex-end;",
+          div(style = "flex: 1;",
+              textInput("cr_external_export_folder", "Export Folder", value = "", width = "100%")),
+          shinyDirButton("browse_cr_external_export_folder", "Browse", "Select Export Folder",
+                         class = "btn-outline-secondary", style = "margin-bottom: 15px;")
+        )
       )
     ),
 
@@ -596,7 +641,7 @@ ui <- page_sidebar(
           div(
             style = "display: flex; gap: 5px; align-items: center;",
             actionButton("relabel_quick", "Relabel", class = "btn-warning toolbar-btn"),
-            actionButton("select_all", "Select All", class = "btn-outline-primary toolbar-btn"),
+            actionButton("select_all", "Select Page", class = "btn-outline-primary toolbar-btn"),
             actionButton("deselect_all", "Deselect", class = "btn-outline-secondary toolbar-btn"),
             actionButton("measure_toggle", label = icon("ruler"),
                          class = "btn-outline-secondary toolbar-btn",

@@ -73,6 +73,13 @@ init_db_schema <- function(con) {
     )
   ")
 
+  dbExecute(con, "
+    CREATE TABLE IF NOT EXISTS global_class_list (
+      class_index INTEGER PRIMARY KEY,
+      class_name  TEXT NOT NULL
+    )
+  ")
+
   # Migration: add is_manual column to existing databases that lack it
   cols <- dbGetQuery(con, "PRAGMA table_info(annotations)")
   if (!"is_manual" %in% cols$name) {
@@ -240,6 +247,84 @@ load_class_taxonomy_db <- function(db_path) {
 #'
 #' Writes (or replaces) annotations for a single sample. The existing rows for
 #' the sample are deleted first so that re-saving acts as an upsert.
+#'
+#' Save global class list to SQLite
+#'
+#' Replaces the contents of the \code{global_class_list} table with the
+#' supplied class names, preserving their index order. This is used to
+#' auto-persist the in-app classlist so it survives across sessions.
+#'
+#' @param db_path Path to the SQLite database file.
+#' @param class2use Character vector of class names.
+#' @return Logical \code{TRUE} on success, \code{FALSE} on failure.
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path(get_default_db_dir())
+#' save_global_class_list_db(db_path, c("unclassified", "Diatom", "Ciliate"))
+#' }
+save_global_class_list_db <- function(db_path, class2use) {
+  if (is.null(class2use) || length(class2use) == 0) {
+    return(TRUE)
+  }
+
+  dir.create(dirname(db_path), recursive = TRUE, showWarnings = FALSE)
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+  init_db_schema(con)
+
+  tryCatch({
+    dbExecute(con, "BEGIN TRANSACTION")
+    dbExecute(con, "DELETE FROM global_class_list")
+    for (i in seq_along(class2use)) {
+      dbExecute(con, "INSERT INTO global_class_list (class_index, class_name) VALUES (?, ?)",
+                params = list(i, class2use[i]))
+    }
+    dbExecute(con, "COMMIT")
+    TRUE
+  }, error = function(e) {
+    tryCatch(dbExecute(con, "ROLLBACK"), error = function(re) NULL)
+    warning("Failed to save global class list: ", e$message, call. = FALSE)
+    FALSE
+  })
+}
+
+#' Load global class list from SQLite
+#'
+#' Returns the class list stored in the \code{global_class_list} table,
+#' ordered by \code{class_index}. Returns \code{NULL} if the table is empty
+#' or the database does not exist.
+#'
+#' @param db_path Path to the SQLite database file.
+#' @return Character vector of class names, or \code{NULL} if unavailable.
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path(get_default_db_dir())
+#' classes <- load_global_class_list_db(db_path)
+#' }
+load_global_class_list_db <- function(db_path) {
+  if (!file.exists(db_path)) {
+    return(NULL)
+  }
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+  init_db_schema(con)
+
+  tryCatch({
+    df <- dbGetQuery(con, "SELECT class_name FROM global_class_list ORDER BY class_index")
+    if (nrow(df) == 0) NULL else df$class_name
+  }, error = function(e) {
+    warning("Failed to load global class list: ", e$message, call. = FALSE)
+    NULL
+  })
+}
+
+#' Save annotations to SQLite
+#'
+#' Saves per-ROI classifications and the sample class list to the SQLite
+#' database.
 #'
 #' @param db_path Path to the SQLite database file
 #' @param sample_name Sample name (e.g., \code{"D20230101T120000_IFCB134"})
