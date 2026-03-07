@@ -105,6 +105,95 @@ test_that("save_annotations_db upserts (re-saving replaces data)", {
   expect_equal(annotations$annotator, "User2")
 })
 
+test_that("delete_annotations_db removes rows from both tables", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
+  db_path <- get_db_path(db_dir)
+
+  sample_name <- "D20230101T120000_IFCB134"
+  classifications <- data.frame(
+    file_name = c("D20230101T120000_IFCB134_00001.png",
+                  "D20230101T120000_IFCB134_00002.png"),
+    class_name = c("Diatom", "Ciliate"),
+    stringsAsFactors = FALSE
+  )
+  class2use <- c("unclassified", "Diatom", "Ciliate")
+
+  save_annotations_db(db_path, sample_name, classifications, class2use, "TestUser")
+
+  result <- delete_annotations_db(db_path, sample_name)
+  expect_true(result)
+
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+
+  annotations <- DBI::dbGetQuery(con,
+    "SELECT * FROM annotations WHERE sample_name = ?",
+    params = list(sample_name))
+  expect_equal(nrow(annotations), 0)
+
+  class_list <- DBI::dbGetQuery(con,
+    "SELECT * FROM class_lists WHERE sample_name = ?",
+    params = list(sample_name))
+  expect_equal(nrow(class_list), 0)
+})
+
+test_that("delete_annotations_db does not affect other samples", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
+  db_path <- get_db_path(db_dir)
+
+  class2use <- c("unclassified", "Diatom", "Ciliate")
+
+  save_annotations_db(db_path, "sample_A",
+    data.frame(file_name = "sample_A_00001.png", class_name = "Diatom",
+               stringsAsFactors = FALSE),
+    class2use, "TestUser")
+
+  save_annotations_db(db_path, "sample_B",
+    data.frame(file_name = "sample_B_00001.png", class_name = "Ciliate",
+               stringsAsFactors = FALSE),
+    class2use, "TestUser")
+
+  delete_annotations_db(db_path, "sample_A")
+
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+
+  remaining <- DBI::dbGetQuery(con, "SELECT DISTINCT sample_name FROM annotations")
+  expect_equal(remaining$sample_name, "sample_B")
+
+  remaining_cl <- DBI::dbGetQuery(con, "SELECT DISTINCT sample_name FROM class_lists")
+  expect_equal(remaining_cl$sample_name, "sample_B")
+})
+
+test_that("delete_annotations_db returns FALSE for non-existent database", {
+  expect_warning(
+    result <- delete_annotations_db("/nonexistent/path/annotations.sqlite", "sample"),
+    "does not exist"
+  )
+  expect_false(result)
+})
+
+test_that("delete_annotations_db returns TRUE for sample not in database", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
+  db_path <- get_db_path(db_dir)
+
+  # Save one sample so the DB and tables exist
+  save_annotations_db(db_path, "existing_sample",
+    data.frame(file_name = "existing_sample_00001.png", class_name = "Diatom",
+               stringsAsFactors = FALSE),
+    c("unclassified", "Diatom"), "TestUser")
+
+  # Deleting a non-existent sample succeeds (no-op)
+  result <- delete_annotations_db(db_path, "nonexistent_sample")
+  expect_true(result)
+})
+
 test_that("load_annotations_db returns correct data frame format", {
   db_dir <- tempfile("db_")
   dir.create(db_dir)

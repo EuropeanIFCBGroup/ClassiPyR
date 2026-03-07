@@ -405,6 +405,47 @@ save_annotations_db <- function(db_path, sample_name, classifications,
   })
 }
 
+#' Delete annotations for a sample from the SQLite database
+#'
+#' Removes all rows for the given sample from both the \code{annotations} and
+#' \code{class_lists} tables in a single transaction. This is a permanent
+#' operation — the sample will appear unannotated after deletion.
+#'
+#' @param db_path Path to the SQLite database file
+#' @param sample_name Sample name to delete
+#' @return \code{TRUE} on success, \code{FALSE} on error (with a warning)
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path("/data/local_db")
+#' delete_annotations_db(db_path, "D20230101T120000_IFCB134")
+#' }
+delete_annotations_db <- function(db_path, sample_name) {
+  if (!file.exists(db_path)) {
+    warning("Database file does not exist: ", db_path)
+    return(FALSE)
+  }
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+
+  tryCatch({
+    dbExecute(con, "BEGIN TRANSACTION")
+
+    dbExecute(con, "DELETE FROM annotations WHERE sample_name = ?",
+              params = list(sample_name))
+    dbExecute(con, "DELETE FROM class_lists WHERE sample_name = ?",
+              params = list(sample_name))
+
+    dbExecute(con, "COMMIT")
+    TRUE
+  }, error = function(e) {
+    tryCatch(dbExecute(con, "ROLLBACK"), error = function(e2) NULL)
+    warning("Failed to delete annotations from database: ", e$message)
+    FALSE
+  })
+}
+
 #' Load annotations from the SQLite database
 #'
 #' Reads annotations for a single sample and returns a data frame in the same

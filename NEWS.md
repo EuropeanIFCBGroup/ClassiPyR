@@ -1,5 +1,11 @@
 # ClassiPyR (development version)
 
+## New features
+
+- **Clear Annotations**: Added a "Clear Annotations" button in sample mode that permanently deletes a sample's annotations from the SQLite database (and removes the `.mat` file if present). The button is disabled outside annotation mode and shows a confirmation dialog before proceeding. After clearing, the sample resets to a blank unclassified state.
+- New exported function `delete_annotations_db()` for programmatic deletion of a sample's annotations from the database.
+- The **Predict** button is now always visible (greyed out when disabled). 
+
 ## Bug fixes
 
 - The validation/annotation mode toggle now appears whenever auto-classification data exists for a sample, not only when both manual annotations AND auto-classifications pre-exist. This allows switching to annotation mode for samples that only have auto-classifications (✓), creating blank annotations on the fly. Previously these samples had no toggle and were locked in validation mode.

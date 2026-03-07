@@ -43,6 +43,7 @@ Complete documentation for all `ClassiPyR` features.
 - **Cache age**: Shows when folders were last scanned
 - **Save button**: Manual save trigger
 - **Predict button**: One-click CNN classification (when configured)
+- **Clear Annotations**: Delete a sample's annotations from the database (annotation mode only)
 
 ### Main Area (Tabs)
 

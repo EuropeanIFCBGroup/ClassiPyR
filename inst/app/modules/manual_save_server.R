@@ -4,6 +4,85 @@ setup_manual_save_server <- function(input, output, session, rv, config,
                                      roi_path_map, annotated_samples,
                                      disable_nav_buttons, enable_nav_buttons,
                                      update_current_sample_status_fn) {
+  # --- Clear Annotations button (conditionally rendered) ---
+  output$clear_btn_ui <- renderUI({
+    is_enabled <- isTRUE(rv$is_annotation_mode) &&
+      !is.null(rv$current_sample) &&
+      !isTRUE(rv$class_review_mode)
+
+    actionButton("clear_btn", "Clear Annotations",
+                 icon = icon("trash"),
+                 class = if (is_enabled) "btn-danger" else "btn-outline-secondary",
+                 width = "100%",
+                 disabled = if (!is_enabled) "disabled" else NULL)
+  })
+
+  observeEvent(input$clear_btn, {
+    req(rv$current_sample)
+    showModal(modalDialog(
+      title = "Clear Annotations",
+      tags$p(
+        "This will permanently delete all annotations for ",
+        tags$strong(rv$current_sample),
+        " from the database."
+      ),
+      tags$p("This action cannot be undone."),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("confirm_clear_annotations", "Delete",
+                     class = "btn-danger", icon = icon("trash"))
+      )
+    ))
+  })
+
+  observeEvent(input$confirm_clear_annotations, {
+    removeModal()
+
+    sample_name <- rv$current_sample
+    db_path <- get_db_path(config$db_folder)
+
+    # Delete from SQLite
+    deleted <- delete_annotations_db(db_path, sample_name)
+    if (!isTRUE(deleted)) {
+      showNotification("Failed to delete annotations from database", type = "error")
+      return()
+    }
+
+    # Delete .mat file if it exists
+    mat_path <- file.path(config$output_folder, paste0(sample_name, ".mat"))
+    if (file.exists(mat_path)) {
+      file.remove(mat_path)
+    }
+
+    # Reconstruct roi_dimensions from current classifications
+    roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", rv$classifications$file_name))
+    roi_dimensions <- data.frame(
+      roi_number = roi_numbers,
+      width = rv$classifications$width,
+      height = rv$classifications$height,
+      area = rv$classifications$roi_area,
+      stringsAsFactors = FALSE
+    )
+
+    # Reset classifications to blank unclassified state
+    rv$classifications <- create_new_classifications(sample_name, roi_dimensions)
+    rv$original_classifications <- rv$classifications
+    rv$changes_log <- create_empty_changes_log()
+
+    # Remove from annotated samples list
+    current_annotated <- annotated_samples()
+    annotated_samples(setdiff(current_annotated, sample_name))
+    update_current_sample_status_fn(sample_name)
+
+    # Clear session cache entry
+    rv$session_cache[[sample_name]] <- NULL
+
+    showNotification(
+      paste("Annotations cleared for", sample_name),
+      type = "message"
+    )
+  })
+
   observeEvent(input$save_btn, {
     req(rv$classifications)
     req(rv$class2use)
