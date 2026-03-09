@@ -1957,3 +1957,86 @@ test_that("init_db_schema creates global_class_list table", {
   tables <- DBI::dbGetQuery(con, "SELECT name FROM sqlite_master WHERE type='table'")
   expect_true("global_class_list" %in% tables$name)
 })
+
+# =============================================================================
+# export_all_db_to_mat / export_all_db_to_png: samples parameter
+# =============================================================================
+
+test_that("export_all_db_to_mat filters by samples parameter", {
+  skip_if_not_installed("iRfcb")
+  skip_if_not(reticulate::py_available(), "Python not available")
+  skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
+
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  class2use <- c("unclassified", "Diatom", "Ciliate")
+
+  save_annotations_db(db_path, "sample_A",
+                      data.frame(file_name = "sample_A_00001.png",
+                                 class_name = "Diatom",
+                                 stringsAsFactors = FALSE),
+                      class2use, "test")
+  save_annotations_db(db_path, "sample_B",
+                      data.frame(file_name = "sample_B_00001.png",
+                                 class_name = "Ciliate",
+                                 stringsAsFactors = FALSE),
+                      class2use, "test")
+  save_annotations_db(db_path, "sample_C",
+                      data.frame(file_name = "sample_C_00001.png",
+                                 class_name = "Diatom",
+                                 stringsAsFactors = FALSE),
+                      class2use, "test")
+
+  mat_dir <- tempfile("mat_")
+  dir.create(mat_dir)
+  on.exit(unlink(c(db_dir, mat_dir), recursive = TRUE), add = TRUE)
+
+  # Export only sample_A and sample_C
+  result <- export_all_db_to_mat(db_path, mat_dir, samples = c("sample_A", "sample_C"))
+
+  expect_equal(result$success, 2L)
+  expect_equal(result$failed, 0L)
+  expect_true(file.exists(file.path(mat_dir, "sample_A.mat")))
+  expect_false(file.exists(file.path(mat_dir, "sample_B.mat")))
+  expect_true(file.exists(file.path(mat_dir, "sample_C.mat")))
+})
+
+test_that("export_all_db_to_png filters by samples parameter", {
+  roi_path <- testthat::test_path("test_data", "raw", "2022", "D20220522",
+                                   "D20220522T000439_IFCB134.roi")
+  skip_if_not(file.exists(roi_path), "Test ROI file not found")
+
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+
+  class2use <- c("unclassified", "Diatom")
+
+  # Two samples with ROIs, one without
+  save_annotations_db(db_path, "D20220522T000439_IFCB134",
+                      data.frame(file_name = "D20220522T000439_IFCB134_00002.png",
+                                 class_name = "Diatom",
+                                 stringsAsFactors = FALSE),
+                      class2use, "test")
+  save_annotations_db(db_path, "sample_no_roi",
+                      data.frame(file_name = "sample_no_roi_00001.png",
+                                 class_name = "Diatom",
+                                 stringsAsFactors = FALSE),
+                      class2use, "test")
+
+  png_dir <- tempfile("png_")
+  dir.create(png_dir)
+  on.exit(unlink(c(db_dir, png_dir), recursive = TRUE), add = TRUE)
+
+  roi_map <- list("D20220522T000439_IFCB134" = roi_path)
+
+  # Export only D20220522T000439_IFCB134 (exclude sample_no_roi)
+  result <- export_all_db_to_png(db_path, png_dir, roi_map,
+                                 samples = c("D20220522T000439_IFCB134"))
+
+  expect_equal(result$success, 1L)
+  expect_equal(result$failed, 0L)
+  expect_equal(result$skipped, 0L)  # sample_no_roi not even considered
+})

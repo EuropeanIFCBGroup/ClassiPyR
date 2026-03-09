@@ -234,7 +234,7 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
         mode_message <- if (rv$has_classification) "Manual mode (switch available)" else "Resumed"
       }
 
-      if (is.null(classifications)) {
+      if (is.null(classifications) && !isTRUE(config$dashboard_autoclass)) {
         csv_folder <- config$csv_folder
         has_csv_folder <- !is.null(csv_folder) && nzchar(csv_folder) && dir.exists(csv_folder)
 
@@ -269,16 +269,33 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
       }
 
       if (is.null(classifications) && isTRUE(config$dashboard_autoclass)) {
+        autoclass_warning <- NULL
         autoclass <- withProgress(message = "Downloading auto-classifications...", value = 0, {
           incProgress(0.1, detail = "Requesting classifier output...")
-          out <- download_dashboard_autoclass(parsed$base_url, sample_name, cache_dir,
-                                              parallel_downloads = config$dashboard_parallel_downloads,
-                                              sleep_time = config$dashboard_sleep_time,
-                                              multi_timeout = config$dashboard_multi_timeout,
-                                              max_retries = config$dashboard_max_retries)
+          out <- tryCatch(
+            withCallingHandlers(
+              download_dashboard_autoclass(parsed$base_url, sample_name, cache_dir,
+                                           parallel_downloads = config$dashboard_parallel_downloads,
+                                           sleep_time = config$dashboard_sleep_time,
+                                           multi_timeout = config$dashboard_multi_timeout,
+                                           max_retries = config$dashboard_max_retries),
+              warning = function(w) {
+                autoclass_warning <<- conditionMessage(w)
+                invokeRestart("muffleWarning")
+              }
+            ),
+            error = function(e) NULL
+          )
           incProgress(0.9, detail = "Download complete")
           out
         })
+
+        if ((is.null(autoclass) || nrow(autoclass) == 0) && !is.null(autoclass_warning)) {
+          showNotification(
+            paste("No auto-classifications available for this sample on the dashboard."),
+            type = "warning", duration = 6
+          )
+        }
 
         if (!is.null(autoclass) && nrow(autoclass) > 0) {
           if (!is.null(roi_dims)) {

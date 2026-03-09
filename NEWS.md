@@ -2,14 +2,26 @@
 
 ## New features
 
+- **Export SQLite → MATLAB ZIP**: New "SQLite → MATLAB ZIP" button in Settings that bundles `.mat` annotation files, feature CSVs, a `class2use.mat` config file, optional raw data, and READMEs into a distributable MATLAB-format ZIP archive via `iRfcb::ifcb_zip_matlab()`. When using SQLite-only storage, annotations are automatically converted to `.mat` files (requires Python with scipy). Supports the same README metadata fields as the existing PNG ZIP export.
+- **IFCB instrument filter for ZIP exports**: Both ZIP and MATLAB ZIP export dialogs now include a "Filter by IFCB" dropdown when the database contains samples from multiple instruments. Select one or more instruments to include; deselect instruments to exclude them from the archive.
+- **Local classifier files in dashboard mode**: When "Use dashboard auto-classifications" is disabled and a Classification Folder is configured, local classifier output files (CSV/H5/MAT) are now scanned during dashboard sync. Classified samples show the correct status (checkmark) in the sample dropdown, consistent with the loading behavior.
 - **Clear Annotations**: Added a "Clear Annotations" button in sample mode that permanently deletes a sample's annotations from the SQLite database (and removes the `.mat` file if present). The button is disabled outside annotation mode and shows a confirmation dialog before proceeding. After clearing, the sample resets to a blank unclassified state.
 - New exported function `delete_annotations_db()` for programmatic deletion of a sample's annotations from the database.
+
+## UI Improvements
+
+- **Reorganised Settings panel**: Folder paths are now grouped into clear "Input Folders" and "Output" sections. The ROI/PNG data folder is listed first as the primary input. Database folder and annotation storage format are grouped together under Output. The former standalone "Annotation Storage" section has been merged into Output.
+- Added descriptive help text to all folder path fields in Settings.
+- Help text is now visually closer to the field it describes, with more spacing before the next field.
 - The **Predict** button is now always visible (greyed out when disabled). 
 
 ## Bug fixes
 
+- **Python environment detection**: Fixed `py_discover_config()` returning system Python instead of the active virtualenv in the Shiny runtime, causing iRfcb's scipy check to fail for all `.mat` file operations (class list download, SQLite → .mat export, MATLAB ZIP export). The fix sets `RETICULATE_PYTHON` before Python initialization so that `py_discover_config()` resolves to the correct virtualenv binary.
+- **Dashboard auto-classification fallback**: When "Use dashboard auto-classifications" is enabled but the dashboard has no classifier output for a sample, a user-friendly notification is now shown instead of only logging a console warning. Local classifier files are no longer loaded as an unintended fallback in this mode.
 - The validation/annotation mode toggle now appears whenever auto-classification data exists for a sample, not only when both manual annotations AND auto-classifications pre-exist. This allows switching to annotation mode for samples that only have auto-classifications (✓), creating blank annotations on the fly. Previously these samples had no toggle and were locked in validation mode.
 - The session cache now stores and restores the mode toggle state, so the toggle no longer disappears after switching between cached samples.
+- Fixed "argument is of length zero" warning when closing the app, caused by the autosave-on-close handler failing to read the annotator name and class list after the session had already ended.
 
 # ClassiPyR 0.2.0
 

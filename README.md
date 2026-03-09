@@ -19,14 +19,12 @@ A Shiny application for manual (human) image classification and validation of Im
 - **Class Review**: Review and reclassify all images of a specific class across the entire database
 - **IFCB Dashboard**: Work directly with remote IFCB Dashboard instances - no local data files needed
 - **Live Prediction**: One-click CNN classification via a remote Gradio API using [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb)
-- **Multiple Formats**: Load from CSV or MATLAB classifier output
+- **Multiple Formats**: Load from CSV, HDF5 or MATLAB classifier output
 - **Flexible Image Source**: Load samples from ROI files or pre-extracted PNG sample folders
 - **SQLite Storage**: Annotations stored in a local SQLite database by default - no Python needed
 - **Efficient Workflow**: Drag-select, batch relabeling, class filtering
 - **MATLAB Compatible**: Optional `.mat` export for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox
 - **CNN Training Ready**: Organized PNG output by class
-- **Measure Tool**: Built-in ruler for image measurements
-- **Cross-Platform**: Works on all platforms with no external dependencies
 
 ## Installation
 
@@ -43,6 +41,15 @@ remotes::install_github("EuropeanIFCBGroup/ClassiPyR",
 
 `ClassiPyR` depends on [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb) for IFCB data handling, which is installed automatically.
 
+## Quick Start
+
+```r
+library(ClassiPyR)
+run_app()
+```
+
+See the [Getting Started](https://europeanifcbgroup.github.io/ClassiPyR/articles/getting-started.html) guide for detailed setup instructions.
+
 ### Python Setup (optional)
 
 Python is **not required** for the default workflow. Annotations are stored in a local SQLite database that works out of the box.
@@ -53,23 +60,14 @@ Python is only needed if you want to export annotations as MATLAB `.mat` files f
 library(iRfcb)
 
 # Define a path were the venv will be installed
-venv_path = "/path/to/your/venv"
+venv_path <- "/path/to/your/venv"
 
 # Install the venv
 ifcb_py_install(venv_path)
-```
 
-## Quick Start
-
-```r
-library(ClassiPyR)
-run_app()
-
-# Or specify a Python virtual environment (takes priority over saved settings)
+# Launch with Python support
 run_app(venv_path = venv_path)
 ```
-
-See the [Getting Started](https://europeanifcbgroup.github.io/ClassiPyR/articles/getting-started.html) guide for detailed setup instructions.
 
 ## Documentation
 

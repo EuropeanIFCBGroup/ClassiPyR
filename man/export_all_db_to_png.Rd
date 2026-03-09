@@ -4,7 +4,13 @@
 \alias{export_all_db_to_png}
 \title{Bulk export all annotated samples from SQLite to class-organized PNGs}
 \usage{
-export_all_db_to_png(db_path, png_folder, roi_path_map, skip_class = NULL)
+export_all_db_to_png(
+  db_path,
+  png_folder,
+  roi_path_map,
+  skip_class = NULL,
+  samples = NULL
+)
 }
 \arguments{
 \item{db_path}{Path to the SQLite database file}
@@ -16,6 +22,10 @@ paths. Samples without an entry are skipped.}
 
 \item{skip_class}{Character vector of class names to exclude from export
 (e.g. \code{"unclassified"}). Default \code{NULL} exports all classes.}
+
+\item{samples}{Optional character vector of sample names to export. When
+\code{NULL} (the default), all annotated samples in the database are
+exported.}
 }
 \value{
 Named list with counts: \code{success}, \code{failed}, \code{skipped}

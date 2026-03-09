@@ -12,6 +12,7 @@ rescan_file_index(
   db_folder = NULL,
   data_source = "local",
   dashboard_url = NULL,
+  dashboard_autoclass = FALSE,
   progress = NULL
 )
 }
@@ -33,6 +34,11 @@ or \code{"dashboard"} to fetch the sample list from a remote IFCB Dashboard.}
 
 \item{dashboard_url}{When \code{data_source = "dashboard"}, the full Dashboard
 URL (e.g. \code{"https://habon-ifcb.whoi.edu/timeline?dataset=tangosund"}).}
+
+\item{dashboard_autoclass}{Logical. When \code{TRUE} and
+\code{data_source = "dashboard"}, skip scanning the local
+\code{csv_folder} for classifier output files (the dashboard's own
+auto-classifications are used instead). Defaults to \code{FALSE}.}
 
 \item{progress}{Optional callback function used to report scan progress.
 The callback receives named arguments \code{value} (numeric in [0, 1])

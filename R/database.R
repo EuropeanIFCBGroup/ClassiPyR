@@ -6,7 +6,7 @@
 
 #' @importFrom DBI dbConnect dbDisconnect dbWriteTable dbGetQuery dbExecute
 #' @importFrom RSQLite SQLite
-#' @importFrom iRfcb ifcb_create_manual_file ifcb_extract_pngs ifcb_get_ecotaxa_example ifcb_zip_pngs
+#' @importFrom iRfcb ifcb_create_manual_file ifcb_extract_pngs ifcb_get_ecotaxa_example ifcb_zip_pngs ifcb_create_class2use ifcb_zip_matlab
 NULL
 
 #' Get path to the annotations SQLite database
@@ -785,6 +785,9 @@ import_all_mat_to_db <- function(mat_folder, db_path,
 #'
 #' @param db_path Path to the SQLite database file
 #' @param output_folder Folder where .mat files will be written
+#' @param samples Optional character vector of sample names to export. When
+#'   \code{NULL} (the default), all annotated samples in the database are
+#'   exported.
 #' @return Named list with counts: \code{success}, \code{failed}
 #' @export
 #' @examples
@@ -793,8 +796,10 @@ import_all_mat_to_db <- function(mat_folder, db_path,
 #' result <- export_all_db_to_mat(db_path, "/data/manual")
 #' cat(result$success, "exported,", result$failed, "failed\n")
 #' }
-export_all_db_to_mat <- function(db_path, output_folder) {
-  samples <- list_annotated_samples_db(db_path)
+export_all_db_to_mat <- function(db_path, output_folder, samples = NULL) {
+  if (is.null(samples)) {
+    samples <- list_annotated_samples_db(db_path)
+  }
 
   counts <- list(success = 0L, failed = 0L)
 
@@ -976,6 +981,9 @@ import_png_folder_to_db <- function(png_folder, db_path, class2use,
 #'   paths. Samples without an entry are skipped.
 #' @param skip_class Character vector of class names to exclude from export
 #'   (e.g. \code{"unclassified"}). Default \code{NULL} exports all classes.
+#' @param samples Optional character vector of sample names to export. When
+#'   \code{NULL} (the default), all annotated samples in the database are
+#'   exported.
 #' @return Named list with counts: \code{success}, \code{failed}, \code{skipped}
 #' @export
 #' @examples
@@ -987,8 +995,10 @@ import_png_folder_to_db <- function(png_folder, db_path, class2use,
 #' cat(result$success, "exported,", result$failed, "failed,", result$skipped, "skipped\n")
 #' }
 export_all_db_to_png <- function(db_path, png_folder, roi_path_map,
-                                 skip_class = NULL) {
-  samples <- list_annotated_samples_db(db_path)
+                                 skip_class = NULL, samples = NULL) {
+  if (is.null(samples)) {
+    samples <- list_annotated_samples_db(db_path)
+  }
 
   counts <- list(success = 0L, failed = 0L, skipped = 0L)
 

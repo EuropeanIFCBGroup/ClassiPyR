@@ -20,13 +20,14 @@ setup_session_cleanup_server <- function(input, session, rv, config) {
       }
 
       session_cache <- isolate(rv$session_cache)
+      class2use <- isolate(rv$class2use)
       class2use_path <- isolate(rv$class2use_path)
       temp_png_folder <- isolate(rv$temp_png_folder)
       temp_png_is_managed <- isolate(rv$temp_png_is_managed)
       output_folder <- isolate(config$output_folder)
       png_output_folder <- isolate(config$png_output_folder)
       roi_folder <- isolate(config$roi_folder)
-      annotator <- isolate(input$annotator_name)
+      annotator <- isolate(input$annotator_name) %||% "Unknown"
 
       # Save any unsaved samples with changes
       for (sample_name in names(session_cache)) {
@@ -43,6 +44,7 @@ setup_session_cleanup_server <- function(input, session, rv, config) {
               png_output_folder = png_output_folder,
               roi_folder = roi_folder,
               class2use_path = class2use_path,
+              class2use = class2use,
               annotator = annotator,
               save_format = isolate(config$save_format),
               db_folder = isolate(config$db_folder),

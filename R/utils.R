@@ -146,6 +146,10 @@ load_file_index <- function() {
 #'   or \code{"dashboard"} to fetch the sample list from a remote IFCB Dashboard.
 #' @param dashboard_url When \code{data_source = "dashboard"}, the full Dashboard
 #'   URL (e.g. \code{"https://habon-ifcb.whoi.edu/timeline?dataset=tangosund"}).
+#' @param dashboard_autoclass Logical. When \code{TRUE} and
+#'   \code{data_source = "dashboard"}, skip scanning the local
+#'   \code{csv_folder} for classifier output files (the dashboard's own
+#'   auto-classifications are used instead). Defaults to \code{FALSE}.
 #' @param progress Optional callback function used to report scan progress.
 #'   The callback receives named arguments \code{value} (numeric in [0, 1])
 #'   and \code{detail} (character message). Mainly intended for Shiny
@@ -175,6 +179,7 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
                               output_folder = NULL, verbose = TRUE,
                               db_folder = NULL, data_source = "local",
                               dashboard_url = NULL,
+                              dashboard_autoclass = FALSE,
                               progress = NULL) {
   report_progress <- function(value = NULL, detail = NULL) {
     if (is.function(progress)) {
@@ -236,20 +241,71 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
     db_path <- get_db_path(db_folder)
     annotated_db <- list_annotated_samples_db(db_path)
     annotated <- annotated_db[annotated_db %in% sample_names]
-    report_progress(0.85, "Merging annotation status...")
+    report_progress(0.75, "Merging annotation status...")
+
+    # When not using dashboard auto-classifications, scan local csv_folder
+    # for classifier output (CSV, H5, MAT) to populate classified status
+    classified <- character()
+    csv_map <- list()
+    mat_file_map <- list()
+    h5_file_map <- list()
+
+    csv_valid <- !isTRUE(dashboard_autoclass) &&
+      !is.null(csv_folder) && length(csv_folder) == 1 &&
+      !isTRUE(is.na(csv_folder)) && nzchar(csv_folder) && dir.exists(csv_folder)
+
+    if (csv_valid) {
+      report_progress(0.78, "Scanning local classification files...")
+      if (verbose) message("Scanning classification files in: ", csv_folder)
+
+      csv_files <- list.files(csv_folder, pattern = "\\.csv$",
+                              recursive = TRUE, full.names = TRUE)
+      csv_sample_names <- tools::file_path_sans_ext(basename(csv_files))
+      for (i in seq_along(csv_files)) {
+        sn <- csv_sample_names[i]
+        if (sn %in% sample_names && is.null(csv_map[[sn]])) {
+          csv_map[[sn]] <- csv_files[i]
+        }
+      }
+
+      mat_files <- list.files(csv_folder, pattern = "_class.*\\.mat$",
+                              recursive = TRUE, full.names = TRUE)
+      for (mat_file in mat_files) {
+        sample_from_mat <- sub("_class.*\\.mat$", "", basename(mat_file))
+        if (sample_from_mat %in% sample_names) {
+          mat_file_map[[sample_from_mat]] <- mat_file
+        }
+      }
+
+      h5_files <- list.files(csv_folder, pattern = "_class.*\\.h5$",
+                             recursive = TRUE, full.names = TRUE)
+      for (h5_file in h5_files) {
+        sample_from_h5 <- sub("_class.*\\.h5$", "", basename(h5_file))
+        if (sample_from_h5 %in% sample_names) {
+          h5_file_map[[sample_from_h5]] <- h5_file
+        }
+      }
+
+      csv_matched <- csv_sample_names[csv_sample_names %in% sample_names]
+      classified <- unique(c(csv_matched, names(h5_file_map), names(mat_file_map)))
+      if (verbose) message("  Found ", length(classified), " classified samples")
+    }
+    report_progress(0.85, "Building index...")
 
     index_data <- list(
       data_source = "dashboard",
       dashboard_url = dashboard_url,
       dashboard_base_url = parsed$base_url,
       dashboard_dataset = parsed$dataset_name,
+      csv_folder = csv_folder,
+      dashboard_autoclass = dashboard_autoclass,
       sample_names = sample_names,
-      classified_samples = character(),
+      classified_samples = classified,
       annotated_samples = annotated,
       roi_path_map = list(),
-      csv_path_map = list(),
-      classifier_mat_files = list(),
-      classifier_h5_files = list(),
+      csv_path_map = csv_map,
+      classifier_mat_files = mat_file_map,
+      classifier_h5_files = h5_file_map,
       timestamp = as.character(Sys.time())
     )
 
@@ -747,7 +803,41 @@ create_empty_changes_log <- function() {
 init_python_env <- function(venv_path = NULL) {
 
   tryCatch({
-    # First check if Python is already configured via reticulate
+    # Determine venv path: use provided path, or working directory default
+    if (is.null(venv_path) || venv_path == "") {
+      venv_path <- file.path(getwd(), "venv")
+    }
+
+    # Set RETICULATE_PYTHON *before* initialization so that py_discover_config()
+    # resolves to the correct environment. iRfcb's check_python_and_module()
+    # uses py_discover_config() + py_list_packages() which relies on this.
+    # Without this, py_discover_config() may return system Python even when
+    # reticulate is using a virtualenv, causing scipy checks to fail.
+    .set_reticulate_python <- function(venv) {
+      if (.Platform$OS.type == "windows") {
+        py <- file.path(venv, "Scripts", "python.exe")
+      } else {
+        py <- file.path(venv, "bin", "python")
+      }
+      if (file.exists(py)) {
+        Sys.setenv(RETICULATE_PYTHON = py)
+        return(TRUE)
+      }
+      FALSE
+    }
+
+    # Try the provided/configured venv first, then common reticulate defaults
+    venv_candidates <- unique(c(
+      venv_path,
+      path.expand("~/.virtualenvs/r-reticulate"),
+      path.expand("~/.virtualenvs/iRfcb")
+    ))
+    for (candidate in venv_candidates) {
+      if (reticulate::virtualenv_exists(candidate) && .set_reticulate_python(candidate)) {
+        break
+      }
+    }
+
     if (reticulate::py_available(initialize = TRUE)) {
       # Check if scipy is installed (required for MAT file writing)
       if (!reticulate::py_module_available("scipy")) {
@@ -756,11 +846,6 @@ init_python_env <- function(venv_path = NULL) {
       }
       message("Python environment ready")
       return(TRUE)
-    }
-
-    # Determine venv path: use provided path, or working directory default
-    if (is.null(venv_path) || venv_path == "") {
-      venv_path <- file.path(getwd(), "venv")
     }
 
     # Try to use existing venv
