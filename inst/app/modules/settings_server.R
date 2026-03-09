@@ -24,11 +24,11 @@ setup_settings_server <- function(input, output, session, rv, config,
         textInput("cfg_dashboard_url", "Dashboard URL",
                   value = config$dashboard_url, width = "100%",
                   placeholder = "https://habon-ifcb.whoi.edu/timeline?dataset=tangosund"),
-        tags$small(class = "text-muted", style = "display: block; margin-bottom: 10px;",
+        tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
                    "Enter the IFCB Dashboard URL. Dataset can be specified via ?dataset=name."),
         checkboxInput("cfg_dashboard_autoclass", "Use dashboard auto-classifications",
                       value = config$dashboard_autoclass),
-        tags$small(class = "text-muted", style = "display: block; margin-bottom: 15px;",
+        tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
                    "When enabled, downloads auto-classification scores from the dashboard for validation mode."),
         tags$details(
           tags$summary(style = "cursor: pointer; margin-bottom: 10px; color: #666;",
@@ -58,11 +58,27 @@ setup_settings_server <- function(input, output, session, rv, config,
         )
       ),
 
-      # -- Classification Folder
-      h5("Classification"),
+      # -- Input Folders
+      h5("Input Folders"),
 
+      # ROI/PNG Data — primary input, listed first
+      conditionalPanel(
+        condition = "input.cfg_data_source == 'local'",
+        div(
+          style = "display: flex; gap: 5px; align-items: flex-end;",
+          div(style = "flex: 1;",
+              textInput("cfg_roi_folder", "ROI/PNG Data Folder",
+                        value = config$roi_folder, width = "100%")),
+          shinyDirButton("browse_roi_folder", "Browse", "Select ROI/PNG Data Folder",
+                         class = "btn-outline-secondary", style = "margin-bottom: 15px;")
+        ),
+        tags$small(class = "text-muted", style = "display: block; margin-top: -10px; margin-bottom: 20px;",
+                   "Folder containing raw IFCB files (.roi/.adc/.hdr) or extracted PNG images.")
+      ),
+
+      # Classification folder
       div(
-        style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 5px;",
+        style = "display: flex; gap: 5px; align-items: flex-end;",
         div(style = "flex: 1;",
             textInput("cfg_csv_folder", "Classification Folder (CSV/H5/MAT)",
                       value = config$csv_folder, width = "100%")),
@@ -71,73 +87,85 @@ setup_settings_server <- function(input, output, session, rv, config,
       ),
 
       conditionalPanel(
+        condition = "input.cfg_data_source == 'local'",
+        tags$small(class = "text-muted", style = "display: block; margin-top: -10px; margin-bottom: 20px;",
+                   "Folder with pre-computed classifications used to pre-populate class labels for validation.")
+      ),
+      conditionalPanel(
         condition = "input.cfg_data_source == 'dashboard'",
-        tags$small(class = "text-muted", style = "display: block; margin-bottom: 5px;",
+        tags$small(class = "text-muted", style = "display: block; margin-top: -10px; margin-bottom: 20px;",
                    "Optional. Use local classification files instead of dashboard auto-classifications.")
       ),
 
       checkboxInput("cfg_use_threshold", "Apply classification threshold",
                     value = config$use_threshold),
-      tags$small(class = "text-muted", style = "display: block; margin-bottom: 15px;",
+      tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
                  "When enabled, classifications below the confidence threshold are marked as 'unclassified'."),
 
-      # -- Folder Paths (local mode only)
-      conditionalPanel(
-        condition = "input.cfg_data_source == 'local'",
+      checkboxInput("cfg_auto_sync", "Sync folders automatically on startup",
+                    value = config$auto_sync),
+      tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
+                 "When disabled, the app loads from cache on startup. Use the sync button to update manually."),
 
-        h5("ROI/PNG Data"),
+      hr(),
 
-        div(
-          style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
-          div(style = "flex: 1;",
-              textInput("cfg_roi_folder", "ROI/PNG Data Folder",
-                        value = config$roi_folder, width = "100%")),
-          shinyDirButton("browse_roi_folder", "Browse", "Select ROI/PNG Data Folder",
-                         class = "btn-outline-secondary", style = "margin-bottom: 15px;")
-        )
-      ),
+      # -- Output
+      h5("Output"),
 
+      # Database folder — primary output
       div(
-        style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 5px;",
-        div(style = "flex: 1;",
-            textInput("cfg_output_folder", "Output Folder (MAT/statistics)",
-                      value = config$output_folder, width = "100%")),
-        shinyDirButton("browse_output_folder", "Browse", "Select Output Folder",
-                       class = "btn-outline-secondary", style = "margin-bottom: 15px;")
-      ),
-
-      checkboxInput("cfg_export_statistics", "Export validation statistics",
-                    value = config$export_statistics),
-      tags$small(class = "text-muted", style = "display: block; margin-bottom: 15px;",
-                 "Write per-sample CSV files with classification accuracy to the output folder."),
-
-      div(
-        style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 15px;",
-        div(style = "flex: 1;",
-            textInput("cfg_png_output_folder", "PNG Output Folder",
-                      value = config$png_output_folder, width = "100%")),
-        shinyDirButton("browse_png_folder", "Browse", "Select PNG Output Folder",
-                       class = "btn-outline-secondary", style = "margin-bottom: 15px;")
-      ),
-
-      div(
-        style = "display: flex; gap: 5px; align-items: flex-end; margin-bottom: 5px;",
+        style = "display: flex; gap: 5px; align-items: flex-end;",
         div(style = "flex: 1;",
             textInput("cfg_db_folder", "Database Folder (SQLite)",
                       value = config$db_folder, width = "100%")),
         shinyDirButton("browse_db_folder", "Browse", "Select Database Folder",
                        class = "btn-outline-secondary", style = "margin-bottom: 15px;")
       ),
-      tags$small(class = "text-muted", style = "display: block; margin-bottom: 15px;",
-                 "Must be a local drive. SQLite databases are",
+      tags$small(class = "text-muted", style = "display: block; margin-top: -10px; margin-bottom: 20px;",
+                 "Where annotation databases are stored. Must be a local drive \u2014 SQLite databases are",
                  tags$a(href = "https://www.sqlite.org/useovernet.html", target = "_blank",
                         "not safe on network filesystems"),
                  "due to unreliable file locking."),
 
-      checkboxInput("cfg_auto_sync", "Sync folders automatically on startup",
-                    value = config$auto_sync),
-      tags$small(class = "text-muted",
-                 "When disabled, the app loads from cache on startup. Use the sync button to update manually."),
+      # Annotation storage format
+      selectInput("cfg_save_format", "Annotation Storage Format",
+                  choices = c(
+                    "SQLite (recommended)" = "sqlite",
+                    "MAT file (MATLAB compatible)" = "mat",
+                    "Both SQLite and MAT" = "both"
+                  ),
+                  selected = config$save_format),
+      tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
+                 "SQLite works out of the box. MAT files require Python and are only needed for ifcb-analysis compatibility."),
+
+      # Output folder — only relevant for MAT/statistics
+      div(
+        style = "display: flex; gap: 5px; align-items: flex-end;",
+        div(style = "flex: 1;",
+            textInput("cfg_output_folder", "MAT / Statistics Output Folder",
+                      value = config$output_folder, width = "100%")),
+        shinyDirButton("browse_output_folder", "Browse", "Select Output Folder",
+                       class = "btn-outline-secondary", style = "margin-bottom: 15px;")
+      ),
+      tags$small(class = "text-muted", style = "display: block; margin-top: -10px; margin-bottom: 20px;",
+                 "Folder for MAT annotation files and validation statistics CSV files."),
+
+      checkboxInput("cfg_export_statistics", "Export validation statistics",
+                    value = config$export_statistics),
+      tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
+                 "Write per-sample CSV files with classification accuracy to the output folder above."),
+
+      # PNG output folder
+      div(
+        style = "display: flex; gap: 5px; align-items: flex-end;",
+        div(style = "flex: 1;",
+            textInput("cfg_png_output_folder", "PNG Export Folder",
+                      value = config$png_output_folder, width = "100%")),
+        shinyDirButton("browse_png_folder", "Browse", "Select PNG Export Folder",
+                       class = "btn-outline-secondary", style = "margin-bottom: 15px;")
+      ),
+      tags$small(class = "text-muted", style = "display: block; margin-top: -10px; margin-bottom: 20px;",
+                 "Folder for exporting classified images sorted into class subfolders."),
 
       hr(),
 
@@ -154,21 +182,6 @@ setup_settings_server <- function(input, output, session, rv, config,
         tags$span(class = "text-muted", style = "font-size: 12px;",
                   textOutput("class_count_text", inline = TRUE))
       ),
-
-      hr(),
-
-      # -- Annotation Storage
-      h5("Annotation Storage"),
-
-      selectInput("cfg_save_format", "Storage Format",
-                  choices = c(
-                    "SQLite (recommended)" = "sqlite",
-                    "MAT file (MATLAB compatible)" = "mat",
-                    "Both SQLite and MAT" = "both"
-                  ),
-                  selected = config$save_format),
-      tags$small(class = "text-muted",
-                 "SQLite works out of the box. MAT files require Python and are only needed for ifcb-analysis compatibility."),
 
       hr(),
 
@@ -192,8 +205,13 @@ setup_settings_server <- function(input, output, session, rv, config,
         actionButton("export_db_to_mat_btn", "SQLite \u2192 .mat",
                      icon = icon("file-export"), class = "btn-outline-secondary btn-sm"),
         actionButton("export_db_to_png_btn", "SQLite \u2192 PNG",
-                     icon = icon("file-export"), class = "btn-outline-secondary btn-sm"),
+                     icon = icon("file-export"), class = "btn-outline-secondary btn-sm")
+      ),
+      div(
+        style = "display: flex; gap: 10px; margin-bottom: 5px;",
         actionButton("export_db_to_zip_btn", "SQLite \u2192 ZIP",
+                     icon = icon("file-export"), class = "btn-outline-secondary btn-sm"),
+        actionButton("export_db_to_matlab_zip_btn", "SQLite \u2192 MATLAB ZIP",
                      icon = icon("file-export"), class = "btn-outline-secondary btn-sm")
       ),
       div(
@@ -216,14 +234,14 @@ setup_settings_server <- function(input, output, session, rv, config,
       textInput("cfg_gradio_url", "Gradio API URL",
                 value = config$gradio_url, width = "100%",
                 placeholder = "https://irfcb-classify.hf.space"),
-      tags$small(class = "text-muted", style = "display: block; margin-bottom: 10px;",
+      tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
                  "Enter Gradio API URL for CNN classification. Example: https://irfcb-classify.hf.space"),
 
       selectInput("cfg_prediction_model", "Prediction Model",
                   choices = if (nzchar(config$prediction_model)) config$prediction_model else NULL,
                   selected = if (nzchar(config$prediction_model)) config$prediction_model else NULL,
                   width = "100%"),
-      tags$small(class = "text-muted", style = "display: block; margin-bottom: 15px;",
+      tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
                  "Select a CNN model for classification. Models are fetched from the Gradio API."),
 
       hr(),

@@ -5,14 +5,39 @@ setup_prediction_server <- function(input, output, session, rv, config,
   output$predict_btn_ui <- renderUI({
     has_config <- nzchar(config$gradio_url) && nzchar(config$prediction_model)
     has_sample <- !is.null(rv$current_sample)
+    is_enabled <- has_config && has_sample
 
-    if (!has_config) return(NULL)
+    btn <- actionButton("predict_btn", "Predict",
+                        icon = icon("robot"),
+                        class = if (is_enabled) "btn-info" else "btn-outline-secondary",
+                        width = "100%",
+                        disabled = if (!is_enabled) "disabled" else NULL)
 
-    actionButton("predict_btn", "Predict",
-                 icon = icon("robot"),
-                 class = if (has_sample) "btn-info" else "btn-outline-secondary",
-                 width = "100%",
-                 disabled = if (!has_sample) "disabled" else NULL)
+    if (!is_enabled) {
+      # Wrap in a clickable div so we can intercept clicks on the disabled button
+      tags$div(
+        id = "predict_btn_wrapper",
+        style = "cursor: pointer;",
+        onclick = paste0(
+          "Shiny.setInputValue('predict_btn_disabled_click',",
+          " Math.random());"
+        ),
+        btn
+      )
+    } else {
+      btn
+    }
+  })
+
+  observeEvent(input$predict_btn_disabled_click, {
+    has_config <- nzchar(config$gradio_url) && nzchar(config$prediction_model)
+    if (!has_config) {
+      showNotification(
+        "Set a Gradio API URL and model name in Settings to enable predictions.",
+        type = "warning",
+        duration = 5
+      )
+    }
   })
 
   observeEvent(input$predict_btn, {

@@ -4,12 +4,16 @@
 \alias{export_all_db_to_mat}
 \title{Bulk export all annotated samples from SQLite to .mat files}
 \usage{
-export_all_db_to_mat(db_path, output_folder)
+export_all_db_to_mat(db_path, output_folder, samples = NULL)
 }
 \arguments{
 \item{db_path}{Path to the SQLite database file}
 
 \item{output_folder}{Folder where .mat files will be written}
+
+\item{samples}{Optional character vector of sample names to export. When
+\code{NULL} (the default), all annotated samples in the database are
+exported.}
 }
 \value{
 Named list with counts: \code{success}, \code{failed}

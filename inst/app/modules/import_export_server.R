@@ -90,10 +90,25 @@ setup_import_export_server <- function(input, output, session, rv, config,
       paste0("ifcb_ecotaxa_export_", format(Sys.Date(), "%Y%m%d"), ".zip")
     )
 
+    # Get available instruments for filter dropdown
+    zip_instruments <- tryCatch({
+      meta <- list_annotation_metadata_db(get_db_path(config$db_folder))
+      meta$instruments
+    }, error = function(e) character())
+
     showModal(modalDialog(
       title = "Export SQLite -> ZIP",
       size = "l",
       textInput("zip_export_path", "ZIP file path", value = default_zip, width = "100%"),
+      if (length(zip_instruments) > 1) {
+        div(
+          style = "margin-bottom: 10px;",
+          selectizeInput("zip_instrument_filter", "Filter by IFCB",
+                         choices = zip_instruments, selected = zip_instruments,
+                         multiple = TRUE, width = "100%"),
+          tags$small(class = "text-muted", "Remove instruments to exclude their samples from the export.")
+        )
+      },
       tags$small(class = "text-muted", "Optional fields used only when generating the README file."),
       div(
         style = "display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px;",
@@ -142,6 +157,8 @@ setup_import_export_server <- function(input, output, session, rv, config,
       config$zip_max_size
     }
     if (is.na(max_size) || max_size <= 0) max_size <- 500
+
+    instrument_filter <- input$zip_instrument_filter
 
     if (!nzchar(zip_path)) {
       showNotification("ZIP file path is empty.", type = "error")
@@ -207,12 +224,19 @@ setup_import_export_server <- function(input, output, session, rv, config,
     is_dashboard <- identical(config$data_source, "dashboard")
     export_counts <- list(success = 0L, failed = 0L, skipped = 0L)
 
+    # Get samples and apply instrument filter
+    all_samples <- list_annotated_samples_db(db_path)
+    if (length(instrument_filter) > 0) {
+      instrument_pattern <- paste0("_(", paste(instrument_filter, collapse = "|"), ")$")
+      all_samples <- all_samples[grepl(instrument_pattern, all_samples)]
+    }
+    if (length(all_samples) == 0) {
+      showNotification("No annotated samples match the selected filter.", type = "warning")
+      return()
+    }
+
     if (is_dashboard) {
-      samples <- list_annotated_samples_db(db_path)
-      if (length(samples) == 0) {
-        showNotification("No annotated samples in database.", type = "warning")
-        return()
-      }
+      samples <- all_samples
 
       cache_dir <- get_dashboard_cache_dir()
       parsed <- parse_dashboard_url(config$dashboard_url)
@@ -286,7 +310,8 @@ setup_import_export_server <- function(input, output, session, rv, config,
       }
 
       withProgress(message = "Exporting PNGs from SQLite...", value = 0, {
-        export_counts <- export_all_db_to_png(db_path, temp_png, current_roi_map, skip_class = skip)
+        export_counts <- export_all_db_to_png(db_path, temp_png, current_roi_map,
+                                               skip_class = skip, samples = all_samples)
       })
     }
 
@@ -341,6 +366,257 @@ setup_import_export_server <- function(input, output, session, rv, config,
         inventory_files, zip_path
       ),
       type = if (export_counts$failed > 0) "warning" else "message",
+      duration = 10
+    )
+  })
+
+  # Export SQLite -> MATLAB ZIP handler: show dialog
+  observeEvent(input$export_db_to_matlab_zip_btn, {
+    default_dir <- if (!is.null(config$output_folder) && nzchar(config$output_folder)) {
+      config$output_folder
+    } else {
+      getwd()
+    }
+    default_zip <- file.path(
+      default_dir,
+      paste0("ifcb_matlab_export_", format(Sys.Date(), "%Y%m%d"), ".zip")
+    )
+
+    # Get available instruments for filter dropdown
+    matlab_zip_instruments <- tryCatch({
+      meta <- list_annotation_metadata_db(get_db_path(config$db_folder))
+      meta$instruments
+    }, error = function(e) character())
+
+    showModal(modalDialog(
+      title = "Export SQLite \u2192 MATLAB ZIP",
+      size = "l",
+      textInput("matlab_zip_export_path", "ZIP file path", value = default_zip, width = "100%"),
+      if (length(matlab_zip_instruments) > 1) {
+        div(
+          style = "margin-bottom: 10px;",
+          selectizeInput("matlab_zip_instrument_filter", "Filter by IFCB",
+                         choices = matlab_zip_instruments, selected = matlab_zip_instruments,
+                         multiple = TRUE, width = "100%"),
+          tags$small(class = "text-muted", "Remove instruments to exclude their samples from the export.")
+        )
+      },
+      textInput("matlab_zip_features_folder", "Features folder (required)", value = "", width = "100%"),
+      tags$small(class = "text-muted", style = "display: block; margin-bottom: 10px;",
+                 "Top-level features folder (e.g. /path/to/features). CSV files in subdirectories are included when recursive search is enabled."),
+      textInput("matlab_zip_data_folder", "Data folder (optional)",
+                value = if (!is.null(config$roi_folder) && nzchar(config$roi_folder)) config$roi_folder else "",
+                width = "100%"),
+      tags$small(class = "text-muted", style = "display: block; margin-bottom: 10px;",
+                 "Folder with raw IFCB data files (.roi, .adc, .hdr). Clear to omit from ZIP."),
+      div(
+        style = "display: flex; gap: 20px; margin-bottom: 10px;",
+        checkboxInput("matlab_zip_feature_recursive", "Search features recursively", value = TRUE),
+        checkboxInput("matlab_zip_data_recursive", "Search data recursively", value = TRUE)
+      ),
+      tags$small(class = "text-muted", "Optional fields used for the README file."),
+      div(
+        style = "display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px;",
+        textInput("matlab_zip_readme_author", "Author", value = config$zip_readme_author),
+        textInput("matlab_zip_readme_contact_email", "Contact e-mail", value = config$zip_readme_contact_email),
+        textInput("matlab_zip_readme_doi", "DOI", value = config$zip_readme_doi),
+        textInput("matlab_zip_readme_license", "Licence", value = config$zip_readme_license),
+        textInput("matlab_zip_readme_version", "Version", value = config$zip_readme_version),
+        textInput("matlab_zip_readme_institute", "Institute", value = config$zip_readme_institute)
+      ),
+      textAreaInput("matlab_zip_readme_citation", "Citation", value = config$zip_readme_citation, width = "100%", rows = 3),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("confirm_export_matlab_zip_btn", "Export", class = "btn-primary")
+      ),
+      easyClose = TRUE
+    ))
+  })
+
+  observeEvent(input$confirm_export_matlab_zip_btn, {
+    removeModal()
+
+    zip_path <- trimws(input$matlab_zip_export_path)
+    features_folder <- trimws(input$matlab_zip_features_folder)
+    data_folder <- trimws(input$matlab_zip_data_folder)
+
+    readme_fields <- list(
+      author = trimws(input$matlab_zip_readme_author),
+      contact_email = trimws(input$matlab_zip_readme_contact_email),
+      doi = trimws(input$matlab_zip_readme_doi),
+      license = trimws(input$matlab_zip_readme_license),
+      version = trimws(input$matlab_zip_readme_version),
+      citation = trimws(input$matlab_zip_readme_citation),
+      institute = trimws(input$matlab_zip_readme_institute)
+    )
+    feature_recursive <- isTRUE(input$matlab_zip_feature_recursive)
+    data_recursive <- isTRUE(input$matlab_zip_data_recursive)
+
+    instrument_filter <- input$matlab_zip_instrument_filter
+
+    if (!nzchar(zip_path)) {
+      showNotification("ZIP file path is empty.", type = "error")
+      return()
+    }
+    if (!nzchar(features_folder) || !dir.exists(features_folder)) {
+      showNotification("Features folder is missing or does not exist.", type = "error")
+      return()
+    }
+
+    db_path <- get_db_path(config$db_folder)
+    if (!file.exists(db_path)) {
+      showNotification("Database not found. Save annotations first.", type = "error")
+      return()
+    }
+
+    # Get filtered sample list
+    filtered_samples <- list_annotated_samples_db(db_path)
+    if (length(instrument_filter) > 0) {
+      instrument_pattern <- paste0("_(", paste(instrument_filter, collapse = "|"), ")$")
+      filtered_samples <- filtered_samples[grepl(instrument_pattern, filtered_samples)]
+    }
+    if (length(filtered_samples) == 0) {
+      showNotification("No annotated samples match the selected filter.", type = "warning")
+      return()
+    }
+
+    # Determine manual_folder
+    use_temp_mat <- FALSE
+    if (config$save_format %in% c("mat", "both")) {
+      manual_folder <- config$output_folder
+    } else {
+      if (!python_available) {
+        showNotification("Python with scipy is required to convert SQLite annotations to .mat files.",
+                         type = "error")
+        return()
+      }
+      temp_mat_dir <- tempfile("matlab_zip_manual_")
+      dir.create(temp_mat_dir, recursive = TRUE, showWarnings = FALSE)
+      use_temp_mat <- TRUE
+
+      withProgress(message = "Exporting SQLite to temporary .mat files...", {
+        mat_result <- export_all_db_to_mat(db_path, temp_mat_dir, samples = filtered_samples)
+      })
+
+      if (mat_result$success == 0) {
+        showNotification("No .mat files were exported. Check that annotations exist.", type = "error")
+        unlink(temp_mat_dir, recursive = TRUE, force = TRUE)
+        return()
+      }
+      manual_folder <- temp_mat_dir
+    }
+    if (use_temp_mat) {
+      on.exit(unlink(temp_mat_dir, recursive = TRUE, force = TRUE), add = TRUE)
+    }
+
+    # Create class2use.mat in a temp location
+    temp_config_dir <- tempfile("matlab_zip_config_")
+    dir.create(temp_config_dir, recursive = TRUE, showWarnings = FALSE)
+    on.exit(unlink(temp_config_dir, recursive = TRUE, force = TRUE), add = TRUE)
+
+    class_list <- rv$class2use
+    if (is.null(class_list) || length(class_list) == 0) {
+      class_list <- load_global_class_list_db(db_path)
+    }
+    if (is.null(class_list) || length(class_list) == 0) {
+      showNotification("No class list available. Load or create a class list first.", type = "error")
+      return()
+    }
+
+    class2use_file <- file.path(temp_config_dir, "class2use.mat")
+    tryCatch({
+      iRfcb::ifcb_create_class2use(class_list, class2use_file)
+    }, error = function(e) {
+      showNotification(paste("Failed to create class2use.mat:", e$message), type = "error")
+      return()
+    })
+
+    if (!file.exists(class2use_file)) {
+      showNotification("Failed to create class2use.mat.", type = "error")
+      return()
+    }
+
+    # Build README
+    readme_template <- system.file("exdata/README-template.md", package = "ClassiPyR")
+    if (!nzchar(readme_template)) {
+      readme_template <- system.file("exdata/README-template.md", package = "iRfcb")
+    }
+    readme_path <- build_zip_readme(
+      template_path = readme_template,
+      png_folder = manual_folder,
+      zip_path = zip_path,
+      fields = readme_fields
+    )
+
+    # MATLAB template
+    matlab_readme <- system.file("exdata/MATLAB-template.md", package = "ClassiPyR")
+
+    zip_dir <- dirname(zip_path)
+    if (!dir.exists(zip_dir)) {
+      dir.create(zip_dir, recursive = TRUE, showWarnings = FALSE)
+    }
+
+    # Persist metadata settings
+    config$zip_readme_author <- readme_fields$author
+    config$zip_readme_contact_email <- readme_fields$contact_email
+    config$zip_readme_doi <- readme_fields$doi
+    config$zip_readme_license <- readme_fields$license
+    config$zip_readme_version <- readme_fields$version
+    config$zip_readme_citation <- readme_fields$citation
+    config$zip_readme_institute <- readme_fields$institute
+    persist_settings(list(
+      csv_folder = config$csv_folder, roi_folder = config$roi_folder,
+      output_folder = config$output_folder, png_output_folder = config$png_output_folder,
+      db_folder = config$db_folder, use_threshold = config$use_threshold,
+      pixels_per_micron = config$pixels_per_micron, auto_sync = config$auto_sync,
+      save_format = config$save_format, export_statistics = config$export_statistics,
+      skip_class_png = config$skip_class_png, class2use_path = rv$class2use_path,
+      python_venv_path = config$python_venv_path, data_source = config$data_source,
+      dashboard_url = config$dashboard_url, dashboard_autoclass = config$dashboard_autoclass,
+      dashboard_parallel_downloads = config$dashboard_parallel_downloads,
+      dashboard_sleep_time = config$dashboard_sleep_time,
+      dashboard_multi_timeout = config$dashboard_multi_timeout,
+      dashboard_max_retries = config$dashboard_max_retries,
+      gradio_url = config$gradio_url, prediction_model = config$prediction_model,
+      zip_readme_author = config$zip_readme_author,
+      zip_readme_contact_email = config$zip_readme_contact_email,
+      zip_readme_doi = config$zip_readme_doi,
+      zip_readme_license = config$zip_readme_license,
+      zip_readme_version = config$zip_readme_version,
+      zip_readme_citation = config$zip_readme_citation,
+      zip_readme_institute = config$zip_readme_institute
+    ))
+
+    # Call ifcb_zip_matlab
+    zip_ok <- tryCatch({
+      withProgress(message = "Creating MATLAB ZIP archive...", value = 0, {
+        iRfcb::ifcb_zip_matlab(
+          manual_folder = manual_folder,
+          features_folder = features_folder,
+          class2use_file = class2use_file,
+          zip_filename = zip_path,
+          data_folder = if (nzchar(data_folder) && dir.exists(data_folder)) data_folder else NULL,
+          readme_file = if (!is.null(readme_path) && nzchar(readme_path)) readme_path else NULL,
+          matlab_readme_file = if (nzchar(matlab_readme)) matlab_readme else NULL,
+          email_address = readme_fields$contact_email,
+          version = readme_fields$version,
+          feature_recursive = feature_recursive,
+          data_recursive = data_recursive,
+          quiet = TRUE
+        )
+        incProgress(1)
+      })
+      TRUE
+    }, error = function(e) {
+      showNotification(paste("MATLAB ZIP export failed:", e$message), type = "error", duration = 8)
+      FALSE
+    })
+
+    if (!isTRUE(zip_ok)) return()
+
+    showNotification(
+      sprintf("MATLAB ZIP export complete: %s", basename(zip_path)),
+      type = "message",
       duration = 10
     )
   })

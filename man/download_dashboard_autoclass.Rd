@@ -8,6 +8,7 @@ download_dashboard_autoclass(
   base_url,
   sample_name,
   cache_dir = get_dashboard_cache_dir(),
+  dataset_name = NULL,
   parallel_downloads = 5,
   sleep_time = 2,
   multi_timeout = 120,
@@ -20,6 +21,9 @@ download_dashboard_autoclass(
 \item{sample_name}{Character. Sample name.}
 
 \item{cache_dir}{Character. Cache directory.}
+
+\item{dataset_name}{Optional character. Dataset slug (e.g. \code{"mvco"}).
+If NULL, resolved automatically via \code{\link{resolve_sample_dataset}}.}
 
 \item{parallel_downloads}{Integer. Number of parallel downloads.}
 

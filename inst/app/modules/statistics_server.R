@@ -80,7 +80,7 @@ setup_statistics_server <- function(input, output, session, rv,
           tags$strong("Annotation Mode"),
           tags$p("Validation statistics compare auto-classifications against your corrections. ",
                  "In annotation mode, there are no auto-classifications to validate."),
-          if (rv$has_both_modes) {
+          if (rv$has_classification) {
             tags$p("This sample also has auto-classifications available. ",
                    actionLink("switch_to_validation_from_tab", "Switch to Validation mode"),
                    " to see classifier performance statistics.")

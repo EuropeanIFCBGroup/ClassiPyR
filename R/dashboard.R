@@ -123,6 +123,36 @@ list_dashboard_bins <- function(base_url, dataset_name = NULL) {
   as.character(bins)
 }
 
+#' Resolve the dataset name for a sample from the Dashboard API
+#'
+#' Queries the \code{/api/bin/<sample>} endpoint to retrieve the
+#' \code{primary_dataset} field. Useful when the user did not provide a
+#' \code{?dataset=} query parameter in the dashboard URL.
+#'
+#' @param base_url Character. Dashboard base URL (no trailing slash).
+#' @param sample_name Character. Sample name (bin PID).
+#' @return Character dataset name, or NULL if it could not be resolved.
+#' @export
+resolve_sample_dataset <- function(base_url, sample_name) {
+  api_url <- paste0(sub("/+$", "", base_url), "/api/bin/", sample_name)
+
+  tryCatch({
+    response <- curl::curl_fetch_memory(api_url,
+      handle = curl::new_handle(httpheader = c(Accept = "application/json")))
+
+    if (response$status_code != 200) return(NULL)
+
+    json_content <- rawToChar(response$content)
+    Encoding(json_content) <- "UTF-8"
+    parsed <- jsonlite::fromJSON(json_content, flatten = TRUE)
+
+    ds <- parsed[["primary_dataset"]]
+    if (!is.null(ds) && is.character(ds) && nzchar(ds)) ds else NULL
+  }, error = function(e) {
+    NULL
+  })
+}
+
 #' Download and extract PNG images from the Dashboard
 #'
 #' Downloads a zip file of PNG images for a sample from the Dashboard.
@@ -281,6 +311,8 @@ download_dashboard_adc <- function(base_url, sample_name,
 #' @param base_url Character. Dashboard base URL.
 #' @param sample_name Character. Sample name.
 #' @param cache_dir Character. Cache directory.
+#' @param dataset_name Optional character. Dataset slug (e.g. \code{"mvco"}).
+#'   If NULL, resolved automatically via \code{\link{resolve_sample_dataset}}.
 #' @param parallel_downloads Integer. Number of parallel downloads.
 #' @param sleep_time Numeric. Seconds to sleep between download batches.
 #' @param multi_timeout Numeric. Timeout in seconds for multi-file downloads.
@@ -290,10 +322,20 @@ download_dashboard_adc <- function(base_url, sample_name,
 #' @export
 download_dashboard_autoclass <- function(base_url, sample_name,
                                          cache_dir = get_dashboard_cache_dir(),
+                                         dataset_name = NULL,
                                          parallel_downloads = 5, sleep_time = 2,
                                          multi_timeout = 120, max_retries = 3) {
-  # The dashboard URL needs to include the dataset path for autoclass
-  dashboard_url <- paste0(sub("/+$", "", base_url), "/")
+  # Class scores are served from the dataset path (e.g., /mvco/), not /data/
+  # If dataset_name is not provided, resolve it from the bin API
+  if (is.null(dataset_name) || !nzchar(dataset_name)) {
+    dataset_name <- resolve_sample_dataset(base_url, sample_name)
+  }
+
+  if (!is.null(dataset_name) && nzchar(dataset_name)) {
+    dashboard_url <- paste0(sub("/+$", "", base_url), "/", dataset_name, "/")
+  } else {
+    dashboard_url <- paste0(sub("/+$", "", base_url), "/")
+  }
 
   tryCatch({
     ifcb_download_dashboard_data(

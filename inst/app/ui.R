@@ -559,7 +559,9 @@ ui <- page_sidebar(
       actionButton("save_btn", "Save Annotations",
                    class = "btn-success", width = "100%"),
       div(style = "margin-top: 5px;",
-          uiOutput("predict_btn_ui"))
+          uiOutput("predict_btn_ui")),
+      div(style = "margin-top: 5px;",
+          uiOutput("clear_btn_ui"))
     ),
 
     uiOutput("python_warning"),

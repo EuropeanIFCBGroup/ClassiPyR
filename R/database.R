@@ -6,7 +6,7 @@
 
 #' @importFrom DBI dbConnect dbDisconnect dbWriteTable dbGetQuery dbExecute
 #' @importFrom RSQLite SQLite
-#' @importFrom iRfcb ifcb_create_manual_file ifcb_extract_pngs ifcb_get_ecotaxa_example ifcb_zip_pngs
+#' @importFrom iRfcb ifcb_create_manual_file ifcb_extract_pngs ifcb_get_ecotaxa_example ifcb_zip_pngs ifcb_create_class2use ifcb_zip_matlab
 NULL
 
 #' Get path to the annotations SQLite database
@@ -405,6 +405,47 @@ save_annotations_db <- function(db_path, sample_name, classifications,
   })
 }
 
+#' Delete annotations for a sample from the SQLite database
+#'
+#' Removes all rows for the given sample from both the \code{annotations} and
+#' \code{class_lists} tables in a single transaction. This is a permanent
+#' operation — the sample will appear unannotated after deletion.
+#'
+#' @param db_path Path to the SQLite database file
+#' @param sample_name Sample name to delete
+#' @return \code{TRUE} on success, \code{FALSE} on error (with a warning)
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path("/data/local_db")
+#' delete_annotations_db(db_path, "D20230101T120000_IFCB134")
+#' }
+delete_annotations_db <- function(db_path, sample_name) {
+  if (!file.exists(db_path)) {
+    warning("Database file does not exist: ", db_path)
+    return(FALSE)
+  }
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+
+  tryCatch({
+    dbExecute(con, "BEGIN TRANSACTION")
+
+    dbExecute(con, "DELETE FROM annotations WHERE sample_name = ?",
+              params = list(sample_name))
+    dbExecute(con, "DELETE FROM class_lists WHERE sample_name = ?",
+              params = list(sample_name))
+
+    dbExecute(con, "COMMIT")
+    TRUE
+  }, error = function(e) {
+    tryCatch(dbExecute(con, "ROLLBACK"), error = function(e2) NULL)
+    warning("Failed to delete annotations from database: ", e$message)
+    FALSE
+  })
+}
+
 #' Load annotations from the SQLite database
 #'
 #' Reads annotations for a single sample and returns a data frame in the same
@@ -744,6 +785,9 @@ import_all_mat_to_db <- function(mat_folder, db_path,
 #'
 #' @param db_path Path to the SQLite database file
 #' @param output_folder Folder where .mat files will be written
+#' @param samples Optional character vector of sample names to export. When
+#'   \code{NULL} (the default), all annotated samples in the database are
+#'   exported.
 #' @return Named list with counts: \code{success}, \code{failed}
 #' @export
 #' @examples
@@ -752,8 +796,10 @@ import_all_mat_to_db <- function(mat_folder, db_path,
 #' result <- export_all_db_to_mat(db_path, "/data/manual")
 #' cat(result$success, "exported,", result$failed, "failed\n")
 #' }
-export_all_db_to_mat <- function(db_path, output_folder) {
-  samples <- list_annotated_samples_db(db_path)
+export_all_db_to_mat <- function(db_path, output_folder, samples = NULL) {
+  if (is.null(samples)) {
+    samples <- list_annotated_samples_db(db_path)
+  }
 
   counts <- list(success = 0L, failed = 0L)
 
@@ -935,6 +981,9 @@ import_png_folder_to_db <- function(png_folder, db_path, class2use,
 #'   paths. Samples without an entry are skipped.
 #' @param skip_class Character vector of class names to exclude from export
 #'   (e.g. \code{"unclassified"}). Default \code{NULL} exports all classes.
+#' @param samples Optional character vector of sample names to export. When
+#'   \code{NULL} (the default), all annotated samples in the database are
+#'   exported.
 #' @return Named list with counts: \code{success}, \code{failed}, \code{skipped}
 #' @export
 #' @examples
@@ -946,8 +995,10 @@ import_png_folder_to_db <- function(png_folder, db_path, class2use,
 #' cat(result$success, "exported,", result$failed, "failed,", result$skipped, "skipped\n")
 #' }
 export_all_db_to_png <- function(db_path, png_folder, roi_path_map,
-                                 skip_class = NULL) {
-  samples <- list_annotated_samples_db(db_path)
+                                 skip_class = NULL, samples = NULL) {
+  if (is.null(samples)) {
+    samples <- list_annotated_samples_db(db_path)
+  }
 
   counts <- list(success = 0L, failed = 0L, skipped = 0L)
 

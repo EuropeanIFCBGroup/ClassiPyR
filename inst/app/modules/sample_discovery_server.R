@@ -52,7 +52,9 @@ setup_sample_discovery_server <- function(input, output, session, rv, config,
       cached <- load_file_index()
       cache_valid <- !is.null(cached) &&
         identical(cached$data_source, "dashboard") &&
-        identical(cached$dashboard_url, dashboard_url)
+        identical(cached$dashboard_url, dashboard_url) &&
+        identical(cached$csv_folder, config$csv_folder) &&
+        identical(cached$dashboard_autoclass, isTRUE(config$dashboard_autoclass))
 
       if (cache_valid) {
         populate_from_index(cached)
@@ -70,7 +72,9 @@ setup_sample_discovery_server <- function(input, output, session, rv, config,
         result <- rescan_file_index(
           data_source = "dashboard",
           dashboard_url = dashboard_url,
+          csv_folder = config$csv_folder,
           db_folder = config$db_folder,
+          dashboard_autoclass = isTRUE(config$dashboard_autoclass),
           verbose = FALSE,
           progress = function(value = NULL, detail = NULL) {
             if (!is.null(value)) {

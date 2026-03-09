@@ -852,3 +852,94 @@ test_that("rescan_file_index reads folder paths from saved settings", {
   # but the function should not error)
   expect_true(is.null(result) || is.list(result))
 })
+
+test_that("rescan_file_index dashboard mode scans local csv_folder when dashboard_autoclass is FALSE", {
+  # Mock list_dashboard_bins to return sample names without network access
+  temp_root <- tempfile("dash_csv_test_")
+  csv_folder <- file.path(temp_root, "classified")
+  db_folder <- file.path(temp_root, "db")
+  dir.create(csv_folder, recursive = TRUE)
+  dir.create(db_folder, recursive = TRUE)
+  on.exit(unlink(temp_root, recursive = TRUE), add = TRUE)
+
+  sample1 <- "D20230101T120000_IFCB134"
+  sample2 <- "D20230102T120000_IFCB134"
+  sample3 <- "D20230103T120000_IFCB134"
+
+  # Create local classifier files
+  writeLines("file_name,class_name", file.path(csv_folder, paste0(sample1, ".csv")))
+  file.create(file.path(csv_folder, paste0(sample2, "_class_v1.h5")))
+  file.create(file.path(csv_folder, paste0(sample3, "_class_v1.mat")))
+
+  local_mocked_bindings(
+    list_dashboard_bins = function(...) c(sample1, sample2, sample3, "D20230104T120000_IFCB134"),
+    parse_dashboard_url = function(url) list(base_url = "https://example.com/", dataset_name = "test"),
+    save_file_index = function(data) invisible(NULL),
+    .package = "ClassiPyR"
+  )
+
+  result <- rescan_file_index(
+    data_source = "dashboard",
+    dashboard_url = "https://example.com/timeline?dataset=test",
+    csv_folder = csv_folder,
+    db_folder = db_folder,
+    dashboard_autoclass = FALSE,
+    verbose = FALSE
+  )
+
+  expect_type(result, "list")
+  expect_equal(length(result$sample_names), 4)
+
+  # All three samples with local files should be classified
+  expect_true(sample1 %in% result$classified_samples)
+  expect_true(sample2 %in% result$classified_samples)
+  expect_true(sample3 %in% result$classified_samples)
+  # sample4 has no local file
+  expect_false("D20230104T120000_IFCB134" %in% result$classified_samples)
+
+  # CSV map should contain sample1
+  expect_true(sample1 %in% names(result$csv_path_map))
+  # H5 map should contain sample2
+  expect_true(sample2 %in% names(result$classifier_h5_files))
+  # MAT map should contain sample3
+  expect_true(sample3 %in% names(result$classifier_mat_files))
+
+  # Verify dashboard_autoclass and csv_folder stored for cache invalidation
+  expect_false(result$dashboard_autoclass)
+  expect_equal(result$csv_folder, csv_folder)
+})
+
+test_that("rescan_file_index dashboard mode skips csv_folder scan when dashboard_autoclass is TRUE", {
+  temp_root <- tempfile("dash_autoclass_test_")
+  csv_folder <- file.path(temp_root, "classified")
+  db_folder <- file.path(temp_root, "db")
+  dir.create(csv_folder, recursive = TRUE)
+  dir.create(db_folder, recursive = TRUE)
+  on.exit(unlink(temp_root, recursive = TRUE), add = TRUE)
+
+  sample1 <- "D20230101T120000_IFCB134"
+  writeLines("file_name,class_name", file.path(csv_folder, paste0(sample1, ".csv")))
+
+  local_mocked_bindings(
+    list_dashboard_bins = function(...) c(sample1),
+    parse_dashboard_url = function(url) list(base_url = "https://example.com/", dataset_name = "test"),
+    save_file_index = function(data) invisible(NULL),
+    .package = "ClassiPyR"
+  )
+
+  result <- rescan_file_index(
+    data_source = "dashboard",
+    dashboard_url = "https://example.com/timeline?dataset=test",
+    csv_folder = csv_folder,
+    db_folder = db_folder,
+    dashboard_autoclass = TRUE,
+    verbose = FALSE
+  )
+
+  expect_type(result, "list")
+  # With dashboard_autoclass=TRUE, local files should NOT be scanned
+  expect_equal(length(result$classified_samples), 0)
+  expect_equal(length(result$csv_path_map), 0)
+  expect_equal(length(result$classifier_h5_files), 0)
+  expect_equal(length(result$classifier_mat_files), 0)
+})

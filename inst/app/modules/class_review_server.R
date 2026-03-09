@@ -337,7 +337,7 @@ setup_class_review_server <- function(input, output, session, rv, config,
     rv$original_classifications <- classifications
     rv$class_review_original <- classifications
     rv$is_annotation_mode <- TRUE
-    rv$has_both_modes <- FALSE
+    rv$has_classification <- FALSE
     rv$selected_images <- character()
     rv$current_page <- 1
     rv$changes_log <- create_empty_changes_log()
@@ -485,7 +485,7 @@ setup_class_review_server <- function(input, output, session, rv, config,
     rv$original_classifications <- classifications
     rv$class_review_original <- classifications
     rv$is_annotation_mode <- TRUE
-    rv$has_both_modes <- FALSE
+    rv$has_classification <- FALSE
     rv$selected_images <- character()
     rv$current_page <- 1
     rv$changes_log <- create_empty_changes_log()
