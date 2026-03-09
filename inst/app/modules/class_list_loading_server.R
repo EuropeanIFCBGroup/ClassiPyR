@@ -15,6 +15,7 @@ setup_class_list_loading_server <- function(input, output, session, rv, config,
           if (!"unclassified" %in% db_classes) {
             db_classes <- c("unclassified", db_classes)
           }
+          last_saved_class2use(db_classes)
           rv$class2use <- db_classes
 
           sorted_classes <- sort(rv$class2use)
@@ -65,14 +66,21 @@ setup_class_list_loading_server <- function(input, output, session, rv, config,
   })
 
   # Auto-save class list to SQLite whenever it changes
+  # Track last-saved value to avoid redundant writes (e.g., on startup restore)
+  last_saved_class2use <- reactiveVal(NULL)
+
   observeEvent(rv$class2use, {
     if (!grepl("sqlite", config$save_format, fixed = TRUE)) return()
     classes <- rv$class2use
     if (is.null(classes) || length(classes) == 0) return()
     if (length(classes) == 1 && classes == "unclassified") return()
 
+    # Skip write if identical to what was last saved/loaded
+    if (identical(classes, last_saved_class2use())) return()
+
     db_path <- get_db_path(config$db_folder)
     save_global_class_list_db(db_path, classes)
+    last_saved_class2use(classes)
   })
 
   # Load uploaded class2use file (from settings modal)
