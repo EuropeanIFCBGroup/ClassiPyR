@@ -311,6 +311,8 @@ download_dashboard_adc <- function(base_url, sample_name,
 #' @param base_url Character. Dashboard base URL.
 #' @param sample_name Character. Sample name.
 #' @param cache_dir Character. Cache directory.
+#' @param dataset_name Optional character. Dataset slug (e.g. \code{"mvco"}).
+#'   If NULL, resolved automatically via \code{\link{resolve_sample_dataset}}.
 #' @param parallel_downloads Integer. Number of parallel downloads.
 #' @param sleep_time Numeric. Seconds to sleep between download batches.
 #' @param multi_timeout Numeric. Timeout in seconds for multi-file downloads.

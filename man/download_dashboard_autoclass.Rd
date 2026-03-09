@@ -22,6 +22,9 @@ download_dashboard_autoclass(
 
 \item{cache_dir}{Character. Cache directory.}
 
+\item{dataset_name}{Optional character. Dataset slug (e.g. \code{"mvco"}).
+If NULL, resolved automatically via \code{\link{resolve_sample_dataset}}.}
+
 \item{parallel_downloads}{Integer. Number of parallel downloads.}
 
 \item{sleep_time}{Numeric. Seconds to sleep between download batches.}
