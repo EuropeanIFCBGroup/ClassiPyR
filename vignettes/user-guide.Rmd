@@ -399,8 +399,10 @@ ClassiPyR supports two data source modes, selectable in Settings:
 
 When "IFCB Dashboard" is selected, enter a Dashboard URL such as:
 
+- `https://habon-ifcb.whoi.edu/timeline?dataset=tangosund` — a specific dataset (recommended)
 - `https://habon-ifcb.whoi.edu/` — all datasets on the dashboard
-- `https://habon-ifcb.whoi.edu/timeline?dataset=tangosund` — a specific dataset
+
+> **Tip**: Always include `?dataset=` in the URL when working with large Dashboard instances. Dashboards like `habon-ifcb.whoi.edu` host hundreds of thousands of samples across many datasets — loading all of them at once will be very slow and may cause the interface to become unresponsive. Specifying a dataset keeps the sample list manageable and ensures faster startup.
 
 The app fetches the sample list from the Dashboard API. When you load a sample, PNG images are downloaded from the dashboard and cached locally at `tools::R_user_dir("ClassiPyR", "cache")/dashboard/`. ADC files are downloaded on demand for image dimensions and MAT export.
 

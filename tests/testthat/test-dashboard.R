@@ -185,6 +185,26 @@ test_that("download_dashboard_adc returns NULL on download failure", {
 })
 
 # ---------------------------------------------------------------------------
+# resolve_sample_dataset — offline-safe
+# ---------------------------------------------------------------------------
+
+test_that("resolve_sample_dataset returns NULL on connection failure", {
+  result <- resolve_sample_dataset(
+    "https://this-host-does-not-exist.invalid",
+    "D20160810T104734_IFCB110"
+  )
+  expect_null(result)
+})
+
+test_that("resolve_sample_dataset returns NULL for non-existent sample", {
+  result <- resolve_sample_dataset(
+    "https://this-host-does-not-exist.invalid",
+    "D99991231T235959_IFCB999"
+  )
+  expect_null(result)
+})
+
+# ---------------------------------------------------------------------------
 # download_dashboard_autoclass — error handling (offline-safe)
 # ---------------------------------------------------------------------------
 
@@ -611,13 +631,45 @@ test_that("download_dashboard_adc uses cache on second call", {
   expect_equal(r1, r2)
 })
 
+test_that("resolve_sample_dataset returns correct dataset for known sample", {
+  skip_if_dashboard_unavailable()
+
+  result <- resolve_sample_dataset(DASHBOARD_BASE, DASHBOARD_SAMPLE)
+  expect_type(result, "character")
+  expect_equal(result, DASHBOARD_DATASET)
+})
+
+test_that("resolve_sample_dataset returns dataset for class_scores sample", {
+  skip_if_dashboard_unavailable()
+
+  result <- resolve_sample_dataset(DASHBOARD_BASE, DASHBOARD_CLASS_SAMPLE)
+  expect_type(result, "character")
+  expect_equal(result, DASHBOARD_CLASS_DATASET)
+})
+
+test_that("download_dashboard_autoclass auto-resolves dataset when not provided", {
+  skip_if_dashboard_unavailable()
+
+  tmp <- file.path(tempdir(), "dashboard_integ_autoclass_resolve")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+
+  # Call without dataset_name — should auto-resolve via bin API
+  result <- download_dashboard_autoclass(DASHBOARD_BASE, DASHBOARD_CLASS_SAMPLE, tmp)
+
+  skip_if(is.null(result), "No autoclass data available for test sample")
+
+  expect_s3_class(result, "data.frame")
+  expect_true(all(c("file_name", "class_name", "score") %in% names(result)))
+  expect_true(nrow(result) > 0)
+})
+
 test_that("download_dashboard_autoclass returns data frame with expected columns", {
   skip_if_dashboard_unavailable()
 
   tmp <- file.path(tempdir(), "dashboard_integ_autoclass")
   on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
 
-  result <- download_dashboard_autoclass(paste0(DASHBOARD_BASE, "/", DASHBOARD_CLASS_DATASET), DASHBOARD_CLASS_SAMPLE, tmp)
+  result <- download_dashboard_autoclass(DASHBOARD_BASE, DASHBOARD_CLASS_SAMPLE, tmp, dataset_name = DASHBOARD_CLASS_DATASET)
 
   # autoclass may not be available for every sample — skip if NULL
   skip_if(is.null(result), "No autoclass data available for test sample")

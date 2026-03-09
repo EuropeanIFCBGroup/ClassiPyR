@@ -8,6 +8,7 @@ download_dashboard_autoclass(
   base_url,
   sample_name,
   cache_dir = get_dashboard_cache_dir(),
+  dataset_name = NULL,
   parallel_downloads = 5,
   sleep_time = 2,
   multi_timeout = 120,

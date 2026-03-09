@@ -603,6 +603,8 @@ A: In the same config directory as your settings:
 
 6. **Scheduled rescans** - On servers with regularly arriving data, use `ClassiPyR::rescan_file_index()` in a cron job to keep the cache current without manual intervention
 
+7. **Dashboard: specify a dataset** - Large Dashboard instances (e.g., `habon-ifcb.whoi.edu` with 900,000+ samples) will be very slow to load without a dataset filter. Always include `?dataset=` in the URL, e.g. `https://habon-ifcb.whoi.edu/timeline?dataset=tangosund`
+
 ---
 
 ## Getting Help

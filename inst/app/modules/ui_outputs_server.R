@@ -191,6 +191,11 @@ setup_ui_outputs_server <- function(input, output, session, rv, config,
     png_map <- png_sample_path_map()
     path <- png_map[[sample_name]]
     if (!is.null(path) && dir.exists(path)) return(path)
+    # Fall back to dashboard cache folder (PNGs stored in temp_png_folder/sample_name/)
+    if (!is.null(rv$temp_png_folder)) {
+      dash_path <- file.path(rv$temp_png_folder, sample_name)
+      if (dir.exists(dash_path)) return(dash_path)
+    }
     NULL
   }
 

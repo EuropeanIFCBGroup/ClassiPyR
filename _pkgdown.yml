@@ -109,6 +109,7 @@ reference:
   - download_dashboard_images_individual
   - download_dashboard_adc
   - download_dashboard_autoclass
+  - resolve_sample_dataset
   - get_dashboard_cache_dir
 - title: Utilities
   desc: Helper functions for IFCB data processing

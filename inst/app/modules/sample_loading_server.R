@@ -275,6 +275,7 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
           out <- tryCatch(
             withCallingHandlers(
               download_dashboard_autoclass(parsed$base_url, sample_name, cache_dir,
+                                           dataset_name = parsed$dataset_name,
                                            parallel_downloads = config$dashboard_parallel_downloads,
                                            sleep_time = config$dashboard_sleep_time,
                                            multi_timeout = config$dashboard_multi_timeout,
