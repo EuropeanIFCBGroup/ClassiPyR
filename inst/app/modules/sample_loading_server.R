@@ -161,6 +161,7 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
   finalize_sample_load <- function(classifications, sample_name, mode_message) {
     rv$original_classifications <- classifications
     rv$classifications <- classifications
+    rv$cached_validation_classifications <- NULL
     rv$current_sample <- sample_name
     rv$selected_images <- character()
     rv$current_page <- 1

@@ -260,6 +260,11 @@ setup_ui_outputs_server <- function(input, output, session, rv, config,
         use_threshold = config$use_threshold
       )
       showNotification("Switched to Validation mode (MAT)", type = "message")
+    } else if (!is.null(rv$cached_validation_classifications) &&
+               nrow(rv$cached_validation_classifications) > 0) {
+      # Restore cached validation classifications (e.g., dashboard autoclass)
+      classifications <- rv$cached_validation_classifications
+      showNotification("Switched to Validation mode (cached)", type = "message")
     } else {
       showNotification("No classification data available", type = "warning")
       return()
@@ -288,6 +293,11 @@ setup_ui_outputs_server <- function(input, output, session, rv, config,
 
   observeEvent(input$switch_to_annotation, {
     req(rv$current_sample, rv$has_classification)
+
+    # Save current validation classifications so we can switch back
+    if (!isTRUE(rv$is_annotation_mode) && !is.null(rv$original_classifications)) {
+      rv$cached_validation_classifications <- rv$original_classifications
+    }
 
     sample_name <- rv$current_sample
     roi_path <- roi_path_map()[[sample_name]]
