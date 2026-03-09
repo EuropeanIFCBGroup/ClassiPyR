@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">ClassiPyR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0.9000</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -42,9 +42,46 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.svg" class="logo" alt=""><h1>Changelog</h1>
-      <small>Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.2.0/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
+      <small>Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="development version" id="classipyr-development-version">ClassiPyR (development version)<a class="anchor" aria-label="anchor" href="#classipyr-development-version"></a></h2>
+<div class="section level3">
+<h3 id="new-features-development-version">New features<a class="anchor" aria-label="anchor" href="#new-features-development-version"></a></h3>
+<ul><li>
+<strong>Export SQLite → MATLAB ZIP</strong>: New “SQLite → MATLAB ZIP” button in Settings that bundles <code>.mat</code> annotation files, feature CSVs, a <code>class2use.mat</code> config file, optional raw data, and READMEs into a distributable MATLAB-format ZIP archive via <code><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_zip_matlab.html" class="external-link">iRfcb::ifcb_zip_matlab()</a></code>. When using SQLite-only storage, annotations are automatically converted to <code>.mat</code> files (requires Python with scipy). Supports the same README metadata fields as the existing PNG ZIP export.</li>
+<li>
+<strong>IFCB instrument filter for ZIP exports</strong>: Both ZIP and MATLAB ZIP export dialogs now include a “Filter by IFCB” dropdown when the database contains samples from multiple instruments. Select one or more instruments to include; deselect instruments to exclude them from the archive.</li>
+<li>
+<strong>Local classifier files in dashboard mode</strong>: When “Use dashboard auto-classifications” is disabled and a Classification Folder is configured, local classifier output files (CSV/H5/MAT) are now scanned during dashboard sync. Classified samples show the correct status (checkmark) in the sample dropdown, consistent with the loading behavior.</li>
+<li>
+<strong>Clear Annotations</strong>: Added a “Clear Annotations” button in sample mode that permanently deletes a sample’s annotations from the SQLite database (and removes the <code>.mat</code> file if present). The button is disabled outside annotation mode and shows a confirmation dialog before proceeding. After clearing, the sample resets to a blank unclassified state.</li>
+<li>New exported function <code><a href="../reference/delete_annotations_db.html">delete_annotations_db()</a></code> for programmatic deletion of a sample’s annotations from the database.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="ui-improvements-development-version">UI Improvements<a class="anchor" aria-label="anchor" href="#ui-improvements-development-version"></a></h3>
+<ul><li>
+<strong>Reorganised Settings panel</strong>: Folder paths are now grouped into clear “Input Folders” and “Output” sections. The ROI/PNG data folder is listed first as the primary input. Database folder and annotation storage format are grouped together under Output. The former standalone “Annotation Storage” section has been merged into Output.</li>
+<li>Added descriptive help text to all folder path fields in Settings.</li>
+<li>Help text is now visually closer to the field it describes, with more spacing before the next field.</li>
+<li>The <strong>Predict</strong> button is now always visible (greyed out when disabled).</li>
+</ul></div>
+<div class="section level3">
+<h3 id="bug-fixes-development-version">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-development-version"></a></h3>
+<ul><li>
+<strong>Dashboard auto-classification URL</strong>: Fixed class_scores CSV download failing for dashboard URLs without a <code>?dataset=</code> parameter. The IFCB Dashboard serves class_scores files from a dataset-specific path (e.g., <code>/mvco/</code>) rather than the generic <code>/data/</code> endpoint used for other file types. The new <code><a href="../reference/resolve_sample_dataset.html">resolve_sample_dataset()</a></code> function automatically queries the Dashboard bin API to determine the correct dataset when not explicitly provided in the URL.</li>
+<li>
+<strong>Mode switching in dashboard mode</strong>: Fixed “No ROI dimensions available to create annotations” error when switching from validation to annotation mode for dashboard-loaded samples. The mode-switching code now checks the dashboard PNG cache for ROI dimension inference, not just local PNG paths.</li>
+<li>
+<strong>Python environment detection</strong>: Fixed <code>py_discover_config()</code> returning system Python instead of the active virtualenv in the Shiny runtime, causing iRfcb’s scipy check to fail for all <code>.mat</code> file operations (class list download, SQLite → .mat export, MATLAB ZIP export). The fix sets <code>RETICULATE_PYTHON</code> before Python initialization so that <code>py_discover_config()</code> resolves to the correct virtualenv binary.</li>
+<li>
+<strong>Dashboard auto-classification fallback</strong>: When “Use dashboard auto-classifications” is enabled but the dashboard has no classifier output for a sample, a user-friendly notification is now shown instead of only logging a console warning. Local classifier files are no longer loaded as an unintended fallback in this mode.</li>
+<li>The validation/annotation mode toggle now appears whenever auto-classification data exists for a sample, not only when both manual annotations AND auto-classifications pre-exist. This allows switching to annotation mode for samples that only have auto-classifications (✓), creating blank annotations on the fly. Previously these samples had no toggle and were locked in validation mode.</li>
+<li>The session cache now stores and restores the mode toggle state, so the toggle no longer disappears after switching between cached samples.</li>
+<li>Fixed “argument is of length zero” warning when closing the app, caused by the autosave-on-close handler failing to read the annotator name and class list after the session had already ended.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.2.0" id="classipyr-020">ClassiPyR 0.2.0<a class="anchor" aria-label="anchor" href="#classipyr-020"></a></h2>
 <div class="section level3">
@@ -139,7 +176,7 @@
 <li>Resume previous annotations from saved files</li>
 <li>Navigate between samples with previous/next/random buttons</li>
 <li>Filter samples by classification status (all/classified/annotated/unannotated)</li>
-<li>Samples with both manual annotations AND auto-classifications can switch between modes</li>
+<li>Samples with auto-classifications can switch between validation and annotation modes</li>
 </ul></div>
 <div class="section level4">
 <h4 id="classification-loading-0-1-0">Classification Loading<a class="anchor" aria-label="anchor" href="#classification-loading-0-1-0"></a></h4>
@@ -149,7 +186,7 @@
 <li>Automatic sample status indicators in dropdown:
 <ul><li>✎ = Has manual annotation</li>
 <li>✓ = Has auto-classification</li>
-<li>✎✓ = Has both (can switch between modes)</li>
+<li>✎✓ = Has both</li>
 <li><ul><li>= Unannotated</li>
 </ul></li>
 </ul></li>

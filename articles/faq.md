@@ -485,6 +485,22 @@ result <- export_all_db_to_mat(get_db_path(get_default_db_dir()), "/data/manual"
 cat(result$success, "exported,", result$failed, "failed\n")
 ```
 
+**Q: Can I create a MATLAB-format ZIP archive for sharing?**
+
+A: Yes. Use the **Export SQLite → MATLAB ZIP** button in Settings \>
+Export from SQLite. This bundles `.mat` annotation files, feature CSVs,
+a `class2use.mat` config file, optional raw data, and README files into
+a distributable ZIP archive via
+[`iRfcb::ifcb_zip_matlab()`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_zip_matlab.html).
+You need to provide a features folder; a data folder with raw IFCB files
+is optional.
+
+If your storage format is SQLite-only, annotations are automatically
+converted to temporary `.mat` files (requires Python with scipy). See
+the [iRfcb image export
+tutorial](https://europeanifcbgroup.github.io/iRfcb/articles/image-export-tutorial.html)
+for more details on the archive format.
+
 **Q: Can I import images classified in another tool?**
 
 A: Yes. Organize your PNG images into subfolders named after each class
@@ -619,11 +635,18 @@ class list for consistency.
 does that mean?**
 
 A: This sample has both manual annotations AND auto-classifications
-available. When you load it:
+available. When you load it, the app defaults to manual annotation mode.
+A toggle in the header lets you switch between annotation and validation
+mode.
 
-- The app defaults to manual annotation mode
-- You can switch to validation mode using the button in the header
-- Each mode maintains its state independently
+**Q: Can I switch to annotation mode for a sample that only has
+auto-classifications?**
+
+A: Yes. Any sample with auto-classification data (✓ or ✎✓) shows a mode
+toggle in the header. Clicking **→ Manual** creates blank “unclassified”
+annotations if no manual annotations exist yet, so you can annotate from
+scratch while keeping the option to switch back to the
+auto-classifications.
 
 ------------------------------------------------------------------------
 
@@ -709,6 +732,11 @@ A: In the same config directory as your settings:
 6.  **Scheduled rescans** - On servers with regularly arriving data, use
     [`ClassiPyR::rescan_file_index()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/rescan_file_index.md)
     in a cron job to keep the cache current without manual intervention
+
+7.  **Dashboard: specify a dataset** - Large Dashboard instances (e.g.,
+    `habon-ifcb.whoi.edu` with 900,000+ samples) will be very slow to
+    load without a dataset filter. Always include `?dataset=` in the
+    URL, e.g. `https://habon-ifcb.whoi.edu/timeline?dataset=tangosund`
 
 ------------------------------------------------------------------------
 

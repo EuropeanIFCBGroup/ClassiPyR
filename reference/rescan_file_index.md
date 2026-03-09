@@ -17,6 +17,7 @@ rescan_file_index(
   db_folder = NULL,
   data_source = "local",
   dashboard_url = NULL,
+  dashboard_autoclass = FALSE,
   progress = NULL
 )
 ```
@@ -56,6 +57,12 @@ rescan_file_index(
 
   When `data_source = "dashboard"`, the full Dashboard URL (e.g.
   `"https://habon-ifcb.whoi.edu/timeline?dataset=tangosund"`).
+
+- dashboard_autoclass:
+
+  Logical. When `TRUE` and `data_source = "dashboard"`, skip scanning
+  the local `csv_folder` for classifier output files (the dashboard's
+  own auto-classifications are used instead). Defaults to `FALSE`.
 
 - progress:
 

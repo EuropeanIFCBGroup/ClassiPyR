@@ -13,7 +13,7 @@ the cache up to date without manually clicking the rescan button."><meta propert
 
     <a class="navbar-brand me-2" href="../index.html">ClassiPyR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0.9000</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -48,7 +48,7 @@ the cache up to date without manually clicking the rescan button."><meta propert
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.svg" class="logo" alt=""><h1>Rescan folders and rebuild the file index cache</h1>
-      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.2.0/R/utils.R" class="external-link"><code>R/utils.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/R/utils.R" class="external-link"><code>R/utils.R</code></a></small>
       <div class="d-none name"><code>rescan_file_index.Rd</code></div>
     </div>
 
@@ -69,6 +69,7 @@ the cache up to date without manually clicking the rescan button.</p>
 <span>  db_folder <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  data_source <span class="op">=</span> <span class="st">"local"</span>,</span>
 <span>  dashboard_url <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  dashboard_autoclass <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  progress <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -107,6 +108,13 @@ or <code>"dashboard"</code> to fetch the sample list from a remote IFCB Dashboar
 <dt id="arg-dashboard-url">dashboard_url<a class="anchor" aria-label="anchor" href="#arg-dashboard-url"></a></dt>
 <dd><p>When <code>data_source = "dashboard"</code>, the full Dashboard
 URL (e.g. <code>"https://habon-ifcb.whoi.edu/timeline?dataset=tangosund"</code>).</p></dd>
+
+
+<dt id="arg-dashboard-autoclass">dashboard_autoclass<a class="anchor" aria-label="anchor" href="#arg-dashboard-autoclass"></a></dt>
+<dd><p>Logical. When <code>TRUE</code> and
+<code>data_source = "dashboard"</code>, skip scanning the local
+<code>csv_folder</code> for classifier output files (the dashboard's own
+auto-classifications are used instead). Defaults to <code>FALSE</code>.</p></dd>
 
 
 <dt id="arg-progress">progress<a class="anchor" aria-label="anchor" href="#arg-progress"></a></dt>

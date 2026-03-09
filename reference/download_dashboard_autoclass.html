@@ -9,7 +9,7 @@ class (column with max score) per ROI."><meta property="og:image" content="https
 
     <a class="navbar-brand me-2" href="../index.html">ClassiPyR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0.9000</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -44,7 +44,7 @@ class (column with max score) per ROI."><meta property="og:image" content="https
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.svg" class="logo" alt=""><h1>Download and parse autoclass scores from the Dashboard</h1>
-      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.2.0/R/dashboard.R" class="external-link"><code>R/dashboard.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/R/dashboard.R" class="external-link"><code>R/dashboard.R</code></a></small>
       <div class="d-none name"><code>download_dashboard_autoclass.Rd</code></div>
     </div>
 
@@ -59,6 +59,7 @@ class (column with max score) per ROI.</p>
 <span>  <span class="va">base_url</span>,</span>
 <span>  <span class="va">sample_name</span>,</span>
 <span>  cache_dir <span class="op">=</span> <span class="fu"><a href="get_dashboard_cache_dir.html">get_dashboard_cache_dir</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  dataset_name <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  parallel_downloads <span class="op">=</span> <span class="fl">5</span>,</span>
 <span>  sleep_time <span class="op">=</span> <span class="fl">2</span>,</span>
 <span>  multi_timeout <span class="op">=</span> <span class="fl">120</span>,</span>
@@ -80,6 +81,11 @@ class (column with max score) per ROI.</p>
 
 <dt id="arg-cache-dir">cache_dir<a class="anchor" aria-label="anchor" href="#arg-cache-dir"></a></dt>
 <dd><p>Character. Cache directory.</p></dd>
+
+
+<dt id="arg-dataset-name">dataset_name<a class="anchor" aria-label="anchor" href="#arg-dataset-name"></a></dt>
+<dd><p>Optional character. Dataset slug (e.g. <code>"mvco"</code>).
+If NULL, resolved automatically via <code><a href="resolve_sample_dataset.html">resolve_sample_dataset</a></code>.</p></dd>
 
 
 <dt id="arg-parallel-downloads">parallel_downloads<a class="anchor" aria-label="anchor" href="#arg-parallel-downloads"></a></dt>

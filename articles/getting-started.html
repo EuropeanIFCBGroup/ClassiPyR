@@ -25,7 +25,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">ClassiPyR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0.9000</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -75,7 +75,7 @@
       <img src="../logo.svg" class="logo" alt=""><h1>Getting Started</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.2.0/vignettes/getting-started.Rmd" class="external-link"><code>vignettes/getting-started.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/vignettes/getting-started.Rmd" class="external-link"><code>vignettes/getting-started.Rmd</code></a></small>
       <div class="d-none name"><code>getting-started.Rmd</code></div>
     </div>
 
@@ -294,9 +294,9 @@ the <strong>Sync</strong> button (circular arrow icon) next to the
 navigation buttons to rescan your folders.</p>
 </blockquote>
 <blockquote>
-<p><strong>Tip</strong>: Samples with ✎✓ let you switch between viewing
-your manual annotations and the auto-classifications using a button in
-the header.</p>
+<p><strong>Tip</strong>: Any sample with auto-classifications (✓ or ✎✓)
+shows a toggle in the header to switch between validation and annotation
+mode.</p>
 </blockquote>
 <hr>
 </div>
@@ -438,10 +438,10 @@ Dashboard</strong>
 <li>Enter the Dashboard URL, e.g.:
 <ul>
 <li>
-<code>https://habon-ifcb.whoi.edu/</code> (all datasets)</li>
-<li>
 <code>https://habon-ifcb.whoi.edu/timeline?dataset=tangosund</code>
-(specific dataset)</li>
+(specific dataset — recommended)</li>
+<li>
+<code>https://habon-ifcb.whoi.edu/</code> (all datasets)</li>
 </ul>
 </li>
 <li>Optionally check <strong>Use dashboard auto-classifications</strong>
@@ -458,6 +458,12 @@ for fast subsequent access. ADC files (for image dimensions and MAT
 export) are also downloaded as needed. Download parameters (parallel
 downloads, timeout, retries) can be tuned via the <strong>Advanced
 Download Settings</strong> section.</p>
+<blockquote>
+<p><strong>Tip</strong>: For large Dashboard instances with many
+datasets, always include <code>?dataset=</code> in the URL to filter to
+a specific dataset. Loading all samples from a large dashboard (e.g.,
+900,000+ samples) will be very slow.</p>
+</blockquote>
 <blockquote>
 <p><strong>Note</strong>: MAT file export in dashboard mode requires
 downloading the ADC file for each sample. If the download fails, the app

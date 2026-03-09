@@ -173,8 +173,8 @@ Click **Load**.
 > button (circular arrow icon) next to the navigation buttons to rescan
 > your folders.
 
-> **Tip**: Samples with ✎✓ let you switch between viewing your manual
-> annotations and the auto-classifications using a button in the header.
+> **Tip**: Any sample with auto-classifications (✓ or ✎✓) shows a toggle
+> in the header to switch between validation and annotation mode.
 
 ------------------------------------------------------------------------
 
@@ -291,9 +291,9 @@ directly with the Dashboard without downloading data locally:
 1.  Open **Settings** (gear icon)
 2.  Under **Data Source**, select **IFCB Dashboard**
 3.  Enter the Dashboard URL, e.g.:
-    - `https://habon-ifcb.whoi.edu/` (all datasets)
     - `https://habon-ifcb.whoi.edu/timeline?dataset=tangosund` (specific
-      dataset)
+      dataset — recommended)
+    - `https://habon-ifcb.whoi.edu/` (all datasets)
 4.  Optionally check **Use dashboard auto-classifications** to load the
     dashboard’s automated classifications for validation
 5.  Optionally set a **Classification Folder** to use local CSV/H5/MAT
@@ -306,6 +306,11 @@ fast subsequent access. ADC files (for image dimensions and MAT export)
 are also downloaded as needed. Download parameters (parallel downloads,
 timeout, retries) can be tuned via the **Advanced Download Settings**
 section.
+
+> **Tip**: For large Dashboard instances with many datasets, always
+> include `?dataset=` in the URL to filter to a specific dataset.
+> Loading all samples from a large dashboard (e.g., 900,000+ samples)
+> will be very slow.
 
 > **Note**: MAT file export in dashboard mode requires downloading the
 > ADC file for each sample. If the download fails, the app falls back to

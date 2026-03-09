@@ -6,7 +6,13 @@ into class subfolders.
 ## Usage
 
 ``` r
-export_all_db_to_png(db_path, png_folder, roi_path_map, skip_class = NULL)
+export_all_db_to_png(
+  db_path,
+  png_folder,
+  roi_path_map,
+  skip_class = NULL,
+  samples = NULL
+)
 ```
 
 ## Arguments
@@ -28,6 +34,11 @@ export_all_db_to_png(db_path, png_folder, roi_path_map, skip_class = NULL)
 
   Character vector of class names to exclude from export (e.g.
   `"unclassified"`). Default `NULL` exports all classes.
+
+- samples:
+
+  Optional character vector of sample names to export. When `NULL` (the
+  default), all annotated samples in the database are exported.
 
 ## Value
 

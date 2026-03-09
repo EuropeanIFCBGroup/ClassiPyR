@@ -10,6 +10,7 @@ download_dashboard_autoclass(
   base_url,
   sample_name,
   cache_dir = get_dashboard_cache_dir(),
+  dataset_name = NULL,
   parallel_downloads = 5,
   sleep_time = 2,
   multi_timeout = 120,
@@ -30,6 +31,12 @@ download_dashboard_autoclass(
 - cache_dir:
 
   Character. Cache directory.
+
+- dataset_name:
+
+  Optional character. Dataset slug (e.g. `"mvco"`). If NULL, resolved
+  automatically via
+  [`resolve_sample_dataset`](https://europeanifcbgroup.github.io/ClassiPyR/reference/resolve_sample_dataset.md).
 
 - parallel_downloads:
 

@@ -25,7 +25,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">ClassiPyR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0.9000</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -75,7 +75,7 @@
       <img src="../logo.svg" class="logo" alt=""><h1>FAQ &amp; Troubleshooting</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.2.0/vignettes/faq.Rmd" class="external-link"><code>vignettes/faq.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/vignettes/faq.Rmd" class="external-link"><code>vignettes/faq.Rmd</code></a></small>
       <div class="d-none name"><code>faq.Rmd</code></div>
     </div>
 
@@ -536,6 +536,18 @@ once. This requires Python with scipy.</p>
 <span><span class="co"># All samples</span></span>
 <span><span class="va">result</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/export_all_db_to_mat.html">export_all_db_to_mat</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_db_path.html">get_db_path</a></span><span class="op">(</span><span class="fu"><a href="../reference/get_default_db_dir.html">get_default_db_dir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span>, <span class="st">"/data/manual"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="va">result</span><span class="op">$</span><span class="va">success</span>, <span class="st">"exported,"</span>, <span class="va">result</span><span class="op">$</span><span class="va">failed</span>, <span class="st">"failed\n"</span><span class="op">)</span></span></code></pre></div>
+<p><strong>Q: Can I create a MATLAB-format ZIP archive for
+sharing?</strong></p>
+<p>A: Yes. Use the <strong>Export SQLite → MATLAB ZIP</strong> button in
+Settings &gt; Export from SQLite. This bundles <code>.mat</code>
+annotation files, feature CSVs, a <code>class2use.mat</code> config
+file, optional raw data, and README files into a distributable ZIP
+archive via <code><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_zip_matlab.html" class="external-link">iRfcb::ifcb_zip_matlab()</a></code>. You need to provide a
+features folder; a data folder with raw IFCB files is optional.</p>
+<p>If your storage format is SQLite-only, annotations are automatically
+converted to temporary <code>.mat</code> files (requires Python with
+scipy). See the <a href="https://europeanifcbgroup.github.io/iRfcb/articles/image-export-tutorial.html" class="external-link">iRfcb
+image export tutorial</a> for more details on the archive format.</p>
 <p><strong>Q: Can I import images classified in another
 tool?</strong></p>
 <p>A: Yes. Organize your PNG images into subfolders named after each
@@ -656,13 +668,16 @@ your class list for consistency.</p>
 <p><strong>Q: A sample shows both annotation and classification markers
 - what does that mean?</strong></p>
 <p>A: This sample has both manual annotations AND auto-classifications
-available. When you load it:</p>
-<ul>
-<li>The app defaults to manual annotation mode</li>
-<li>You can switch to validation mode using the button in the
-header</li>
-<li>Each mode maintains its state independently</li>
-</ul>
+available. When you load it, the app defaults to manual annotation mode.
+A toggle in the header lets you switch between annotation and validation
+mode.</p>
+<p><strong>Q: Can I switch to annotation mode for a sample that only has
+auto-classifications?</strong></p>
+<p>A: Yes. Any sample with auto-classification data (✓ or ✎✓) shows a
+mode toggle in the header. Clicking <strong>→ Manual</strong> creates
+blank “unclassified” annotations if no manual annotations exist yet, so
+you can annotate from scratch while keeping the option to switch back to
+the auto-classifications.</p>
 <hr>
 </div>
 <div class="section level2">
@@ -776,6 +791,11 @@ memory</p></li>
 <li><p><strong>Scheduled rescans</strong> - On servers with regularly
 arriving data, use <code><a href="../reference/rescan_file_index.html">ClassiPyR::rescan_file_index()</a></code> in a cron
 job to keep the cache current without manual intervention</p></li>
+<li><p><strong>Dashboard: specify a dataset</strong> - Large Dashboard
+instances (e.g., <code>habon-ifcb.whoi.edu</code> with 900,000+ samples)
+will be very slow to load without a dataset filter. Always include
+<code>?dataset=</code> in the URL,
+e.g. <code>https://habon-ifcb.whoi.edu/timeline?dataset=tangosund</code></p></li>
 </ol>
 <hr>
 </div>

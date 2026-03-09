@@ -1,5 +1,92 @@
 # Changelog
 
+## ClassiPyR (development version)
+
+### New features
+
+- **Export SQLite → MATLAB ZIP**: New “SQLite → MATLAB ZIP” button in
+  Settings that bundles `.mat` annotation files, feature CSVs, a
+  `class2use.mat` config file, optional raw data, and READMEs into a
+  distributable MATLAB-format ZIP archive via
+  [`iRfcb::ifcb_zip_matlab()`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_zip_matlab.html).
+  When using SQLite-only storage, annotations are automatically
+  converted to `.mat` files (requires Python with scipy). Supports the
+  same README metadata fields as the existing PNG ZIP export.
+- **IFCB instrument filter for ZIP exports**: Both ZIP and MATLAB ZIP
+  export dialogs now include a “Filter by IFCB” dropdown when the
+  database contains samples from multiple instruments. Select one or
+  more instruments to include; deselect instruments to exclude them from
+  the archive.
+- **Local classifier files in dashboard mode**: When “Use dashboard
+  auto-classifications” is disabled and a Classification Folder is
+  configured, local classifier output files (CSV/H5/MAT) are now scanned
+  during dashboard sync. Classified samples show the correct status
+  (checkmark) in the sample dropdown, consistent with the loading
+  behavior.
+- **Clear Annotations**: Added a “Clear Annotations” button in sample
+  mode that permanently deletes a sample’s annotations from the SQLite
+  database (and removes the `.mat` file if present). The button is
+  disabled outside annotation mode and shows a confirmation dialog
+  before proceeding. After clearing, the sample resets to a blank
+  unclassified state.
+- New exported function
+  [`delete_annotations_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/delete_annotations_db.md)
+  for programmatic deletion of a sample’s annotations from the database.
+
+### UI Improvements
+
+- **Reorganised Settings panel**: Folder paths are now grouped into
+  clear “Input Folders” and “Output” sections. The ROI/PNG data folder
+  is listed first as the primary input. Database folder and annotation
+  storage format are grouped together under Output. The former
+  standalone “Annotation Storage” section has been merged into Output.
+- Added descriptive help text to all folder path fields in Settings.
+- Help text is now visually closer to the field it describes, with more
+  spacing before the next field.
+- The **Predict** button is now always visible (greyed out when
+  disabled).
+
+### Bug fixes
+
+- **Dashboard auto-classification URL**: Fixed class_scores CSV download
+  failing for dashboard URLs without a `?dataset=` parameter. The IFCB
+  Dashboard serves class_scores files from a dataset-specific path
+  (e.g., `/mvco/`) rather than the generic `/data/` endpoint used for
+  other file types. The new
+  [`resolve_sample_dataset()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/resolve_sample_dataset.md)
+  function automatically queries the Dashboard bin API to determine the
+  correct dataset when not explicitly provided in the URL.
+- **Mode switching in dashboard mode**: Fixed “No ROI dimensions
+  available to create annotations” error when switching from validation
+  to annotation mode for dashboard-loaded samples. The mode-switching
+  code now checks the dashboard PNG cache for ROI dimension inference,
+  not just local PNG paths.
+- **Python environment detection**: Fixed `py_discover_config()`
+  returning system Python instead of the active virtualenv in the Shiny
+  runtime, causing iRfcb’s scipy check to fail for all `.mat` file
+  operations (class list download, SQLite → .mat export, MATLAB ZIP
+  export). The fix sets `RETICULATE_PYTHON` before Python initialization
+  so that `py_discover_config()` resolves to the correct virtualenv
+  binary.
+- **Dashboard auto-classification fallback**: When “Use dashboard
+  auto-classifications” is enabled but the dashboard has no classifier
+  output for a sample, a user-friendly notification is now shown instead
+  of only logging a console warning. Local classifier files are no
+  longer loaded as an unintended fallback in this mode.
+- The validation/annotation mode toggle now appears whenever
+  auto-classification data exists for a sample, not only when both
+  manual annotations AND auto-classifications pre-exist. This allows
+  switching to annotation mode for samples that only have
+  auto-classifications (✓), creating blank annotations on the fly.
+  Previously these samples had no toggle and were locked in validation
+  mode.
+- The session cache now stores and restores the mode toggle state, so
+  the toggle no longer disappears after switching between cached
+  samples.
+- Fixed “argument is of length zero” warning when closing the app,
+  caused by the autosave-on-close handler failing to read the annotator
+  name and class list after the session had already ended.
+
 ## ClassiPyR 0.2.0
 
 ### New features
@@ -218,8 +305,8 @@ images.
 - Navigate between samples with previous/next/random buttons
 - Filter samples by classification status
   (all/classified/annotated/unannotated)
-- Samples with both manual annotations AND auto-classifications can
-  switch between modes
+- Samples with auto-classifications can switch between validation and
+  annotation modes
 
 #### Classification Loading
 
@@ -229,7 +316,7 @@ images.
 - Automatic sample status indicators in dropdown:
   - ✎ = Has manual annotation
   - [x] = Has auto-classification
-  - ✎✓ = Has both (can switch between modes)
+  - ✎✓ = Has both
   - - = Unannotated
 
 #### Image Gallery

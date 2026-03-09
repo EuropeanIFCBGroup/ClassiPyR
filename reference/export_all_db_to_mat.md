@@ -6,7 +6,7 @@ file. Requires Python with scipy.
 ## Usage
 
 ``` r
-export_all_db_to_mat(db_path, output_folder)
+export_all_db_to_mat(db_path, output_folder, samples = NULL)
 ```
 
 ## Arguments
@@ -18,6 +18,11 @@ export_all_db_to_mat(db_path, output_folder)
 - output_folder:
 
   Folder where .mat files will be written
+
+- samples:
+
+  Optional character vector of sample names to export. When `NULL` (the
+  default), all annotated samples in the database are exported.
 
 ## Value
 

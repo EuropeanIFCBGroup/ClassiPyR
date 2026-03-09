@@ -57,6 +57,8 @@ SQLite database functions for annotation storage
   : Get path to the annotations SQLite database
 - [`save_annotations_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/save_annotations_db.md)
   : Save annotations to SQLite
+- [`delete_annotations_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/delete_annotations_db.md)
+  : Delete annotations for a sample from the SQLite database
 - [`load_annotations_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/load_annotations_db.md)
   : Load annotations from the SQLite database
 - [`list_annotated_samples_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/list_annotated_samples_db.md)
@@ -139,6 +141,8 @@ Functions for working with remote IFCB Dashboard instances
   : Download ADC file from the Dashboard
 - [`download_dashboard_autoclass()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/download_dashboard_autoclass.md)
   : Download and parse autoclass scores from the Dashboard
+- [`resolve_sample_dataset()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/resolve_sample_dataset.md)
+  : Resolve the dataset name for a sample from the Dashboard API
 - [`get_dashboard_cache_dir()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_dashboard_cache_dir.md)
   : Get persistent cache directory for dashboard downloads
 

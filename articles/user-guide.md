@@ -31,6 +31,8 @@ gallery area. Click to enlarge.*
 - **Cache age**: Shows when folders were last scanned
 - **Save button**: Manual save trigger
 - **Predict button**: One-click CNN classification (when configured)
+- **Clear Annotations**: Delete a sample’s annotations from the database
+  (annotation mode only)
 
 ### Main Area (Tabs)
 
@@ -56,16 +58,19 @@ gallery area. Click to enlarge.*
 - Progress shows classified vs remaining
 - Validation statistics tab shows annotation progress instead
 
-### Samples with Both Modes
+### Switching Between Modes
 
-Some samples may have both manual annotations AND auto-classifications
-(e.g., you previously annotated a sample, then ran a classifier on it).
-For these samples:
+Any sample with auto-classification data (✓ or ✎✓) shows a mode toggle
+button in the header bar:
 
-- The sample dropdown shows ✎✓ indicator
-- When loaded, you can switch between modes using the button in the
-  header
-- Each mode maintains its own state independently
+- **→ Manual** (in validation mode): Switch to annotation mode. If
+  manual annotations exist they are loaded; otherwise blank
+  “unclassified” annotations are created.
+- **→ Validation** (in annotation mode): Switch back to the original
+  auto-classifications.
+
+Samples with only manual annotations (✎) or no data at all (\*) do not
+show the toggle.
 
 ------------------------------------------------------------------------
 
@@ -474,9 +479,16 @@ ClassiPyR supports two data source modes, selectable in Settings:
 
 When “IFCB Dashboard” is selected, enter a Dashboard URL such as:
 
-- `https://habon-ifcb.whoi.edu/` — all datasets on the dashboard
 - `https://habon-ifcb.whoi.edu/timeline?dataset=tangosund` — a specific
-  dataset
+  dataset (recommended)
+- `https://habon-ifcb.whoi.edu/` — all datasets on the dashboard
+
+> **Tip**: Always include `?dataset=` in the URL when working with large
+> Dashboard instances. Dashboards like `habon-ifcb.whoi.edu` host
+> hundreds of thousands of samples across many datasets — loading all of
+> them at once will be very slow and may cause the interface to become
+> unresponsive. Specifying a dataset keeps the sample list manageable
+> and ensures faster startup.
 
 The app fetches the sample list from the Dashboard API. When you load a
 sample, PNG images are downloaded from the dashboard and cached locally
@@ -490,15 +502,24 @@ downloaded on demand for image dimensions and MAT export.
 | Advanced Download Settings         | Parallel downloads, sleep time, timeout, and max retries for dashboard downloads |
 
 The **Classification Folder** setting is available in both local and
-dashboard mode. In dashboard mode, local classification files
-(CSV/H5/MAT) take priority over dashboard auto-classifications. The
-priority order is:
+dashboard mode. In dashboard mode, the classification source depends on
+the “Use dashboard auto-classifications” checkbox:
+
+**When “Use dashboard auto-classifications” is disabled** (default):
 
 1.  Database annotations (manual, existing)
 2.  Local classification files (CSV \> H5 \> MAT) — if Classification
     Folder is configured
-3.  Dashboard auto-classifications (if enabled)
-4.  New annotation mode
+3.  New annotation mode
+
+**When “Use dashboard auto-classifications” is enabled**:
+
+1.  Database annotations (manual, existing)
+2.  Dashboard auto-classifications (downloaded `_class_scores.csv`)
+3.  New annotation mode
+
+Local classification files and dashboard auto-classifications are
+mutually exclusive — the checkbox determines which source is used.
 
 > **Note**: In dashboard mode, the ROI/PNG Data Folder setting is not
 > used. The Output Folder, Database Folder, and PNG Output Folder still
@@ -549,9 +570,18 @@ formats:
   general repositories (for example Zenodo or Figshare). The export
   writes class-organized PNGs, per-class inventories
   (`ecotaxa_<CLASSNAME>.tsv`), and a README file.
+- **Export SQLite → MATLAB ZIP**: Builds a MATLAB-format ZIP archive via
+  [`iRfcb::ifcb_zip_matlab()`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_zip_matlab.html),
+  bundling `.mat` annotation files, feature CSVs, a `class2use.mat`
+  config file, optional raw data (.roi, .adc, .hdr), and README files.
+  When using SQLite-only storage the annotations are automatically
+  converted to temporary `.mat` files (requires Python with scipy). See
+  the [iRfcb image export
+  tutorial](https://europeanifcbgroup.github.io/iRfcb/articles/image-export-tutorial.html)
+  for more details on the MATLAB ZIP format.
 
-The **Export SQLite → ZIP** dialog includes optional README metadata
-fields:
+The **Export SQLite → ZIP** and **Export SQLite → MATLAB ZIP** dialogs
+include optional README metadata fields:
 
 - Author
 - Contact e-mail
@@ -567,6 +597,17 @@ Empty fields are omitted from the README.
 ZIP export also supports archive splitting via `split_zip` and
 `max_size` (MB), matching
 [`iRfcb::ifcb_zip_pngs()`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_zip_pngs.html).
+
+The MATLAB ZIP dialog additionally requires a **Features folder**
+(top-level folder containing feature CSV files) and an optional **Data
+folder** (raw IFCB data). Both have a “search recursively” checkbox
+enabled by default so that files in year-based subdirectories are
+included automatically.
+
+Both ZIP export dialogs include an optional **Filter by IFCB** dropdown
+(shown when the database contains samples from more than one
+instrument). This lets you restrict the export to a single instrument,
+e.g. to exclude data from a test or development instrument.
 
 > **Note**: External datasets can be viewed without ROI files when
 > extracted PNGs are available under sample-named folders in the ROI/PNG
@@ -646,6 +687,23 @@ under the PNG Output Folder section.
   - ClassiPyR version used for export
   - ClassiPyR citation text
 - Per-class inventory files are named `ecotaxa_<CLASSNAME>.tsv`.
+
+### MATLAB ZIP Export Notes
+
+- MATLAB ZIP export bundles `.mat` annotations, feature CSVs,
+  `class2use.mat`, and optionally raw data into a single archive
+  suitable for sharing (e.g. for the [SMHI IFCB Plankton Image Reference
+  Library](https://doi.org/10.17044/scilifelab.25883455)).
+- If your storage format is SQLite-only, annotations are converted to
+  `.mat` files on the fly (requires Python with scipy). When using MAT
+  or Both storage, existing `.mat` files from the Output Folder are used
+  directly.
+- The `class2use.mat` config file is generated automatically from the
+  current class list.
+- For details on the archive structure and the underlying
+  [`iRfcb::ifcb_zip_matlab()`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_zip_matlab.html)
+  function, see the [iRfcb image export
+  tutorial](https://europeanifcbgroup.github.io/iRfcb/articles/image-export-tutorial.html).
 
 ------------------------------------------------------------------------
 

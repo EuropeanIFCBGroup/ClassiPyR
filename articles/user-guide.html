@@ -25,7 +25,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">ClassiPyR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0.9000</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -75,7 +75,7 @@
       <img src="../logo.svg" class="logo" alt=""><h1>User Guide</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/v0.2.0/vignettes/user-guide.Rmd" class="external-link"><code>vignettes/user-guide.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/blob/main/vignettes/user-guide.Rmd" class="external-link"><code>vignettes/user-guide.Rmd</code></a></small>
       <div class="d-none name"><code>user-guide.Rmd</code></div>
     </div>
 
@@ -129,6 +129,9 @@ scanned</li>
 <li>
 <strong>Predict button</strong>: One-click CNN classification (when
 configured)</li>
+<li>
+<strong>Clear Annotations</strong>: Delete a sample’s annotations
+from the database (annotation mode only)</li>
 </ul>
 </div>
 <div class="section level3">
@@ -171,17 +174,21 @@ auto-classifications</li>
 </ul>
 </div>
 <div class="section level3">
-<h3 id="samples-with-both-modes">Samples with Both Modes<a class="anchor" aria-label="anchor" href="#samples-with-both-modes"></a>
+<h3 id="switching-between-modes">Switching Between Modes<a class="anchor" aria-label="anchor" href="#switching-between-modes"></a>
 </h3>
-<p>Some samples may have both manual annotations AND
-auto-classifications (e.g., you previously annotated a sample, then ran
-a classifier on it). For these samples:</p>
+<p>Any sample with auto-classification data (✓ or ✎✓) shows a mode
+toggle button in the header bar:</p>
 <ul>
-<li>The sample dropdown shows ✎✓ indicator</li>
-<li>When loaded, you can switch between modes using the button in the
-header</li>
-<li>Each mode maintains its own state independently</li>
+<li>
+<strong>→ Manual</strong> (in validation mode): Switch to annotation
+mode. If manual annotations exist they are loaded; otherwise blank
+“unclassified” annotations are created.</li>
+<li>
+<strong>→ Validation</strong> (in annotation mode): Switch back to
+the original auto-classifications.</li>
 </ul>
+<p>Samples with only manual annotations (✎) or no data at all (*) do not
+show the toggle.</p>
 <hr>
 </div>
 </div>
@@ -694,12 +701,20 @@ classifiers.</p>
 <p>When “IFCB Dashboard” is selected, enter a Dashboard URL such as:</p>
 <ul>
 <li>
+<code>https://habon-ifcb.whoi.edu/timeline?dataset=tangosund</code>
+— a specific dataset (recommended)</li>
+<li>
 <code>https://habon-ifcb.whoi.edu/</code> — all datasets on the
 dashboard</li>
-<li>
-<code>https://habon-ifcb.whoi.edu/timeline?dataset=tangosund</code>
-— a specific dataset</li>
 </ul>
+<blockquote>
+<p><strong>Tip</strong>: Always include <code>?dataset=</code> in the
+URL when working with large Dashboard instances. Dashboards like
+<code>habon-ifcb.whoi.edu</code> host hundreds of thousands of samples
+across many datasets — loading all of them at once will be very slow and
+may cause the interface to become unresponsive. Specifying a dataset
+keeps the sample list manageable and ensures faster startup.</p>
+</blockquote>
 <p>The app fetches the sample list from the Dashboard API. When you load
 a sample, PNG images are downloaded from the dashboard and cached
 locally at
@@ -733,16 +748,26 @@ dashboard downloads</td>
 </tbody>
 </table>
 <p>The <strong>Classification Folder</strong> setting is available in
-both local and dashboard mode. In dashboard mode, local classification
-files (CSV/H5/MAT) take priority over dashboard auto-classifications.
-The priority order is:</p>
+both local and dashboard mode. In dashboard mode, the classification
+source depends on the “Use dashboard auto-classifications” checkbox:</p>
+<p><strong>When “Use dashboard auto-classifications” is
+disabled</strong> (default):</p>
 <ol style="list-style-type: decimal">
 <li>Database annotations (manual, existing)</li>
 <li>Local classification files (CSV &gt; H5 &gt; MAT) — if
 Classification Folder is configured</li>
-<li>Dashboard auto-classifications (if enabled)</li>
 <li>New annotation mode</li>
 </ol>
+<p><strong>When “Use dashboard auto-classifications” is
+enabled</strong>:</p>
+<ol style="list-style-type: decimal">
+<li>Database annotations (manual, existing)</li>
+<li>Dashboard auto-classifications (downloaded
+<code>_class_scores.csv</code>)</li>
+<li>New annotation mode</li>
+</ol>
+<p>Local classification files and dashboard auto-classifications are
+mutually exclusive — the checkbox determines which source is used.</p>
 <blockquote>
 <p><strong>Note</strong>: In dashboard mode, the ROI/PNG Data Folder
 setting is not used. The Output Folder, Database Folder, and PNG Output
@@ -849,9 +874,19 @@ archive from SQLite annotations that is also suitable for sharing
 datasets in general repositories (for example Zenodo or Figshare). The
 export writes class-organized PNGs, per-class inventories
 (<code>ecotaxa_&lt;CLASSNAME&gt;.tsv</code>), and a README file.</li>
+<li>
+<strong>Export SQLite → MATLAB ZIP</strong>: Builds a MATLAB-format
+ZIP archive via <code><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_zip_matlab.html" class="external-link">iRfcb::ifcb_zip_matlab()</a></code>, bundling
+<code>.mat</code> annotation files, feature CSVs, a
+<code>class2use.mat</code> config file, optional raw data (.roi, .adc,
+.hdr), and README files. When using SQLite-only storage the annotations
+are automatically converted to temporary <code>.mat</code> files
+(requires Python with scipy). See the <a href="https://europeanifcbgroup.github.io/iRfcb/articles/image-export-tutorial.html" class="external-link">iRfcb
+image export tutorial</a> for more details on the MATLAB ZIP
+format.</li>
 </ul>
-<p>The <strong>Export SQLite → ZIP</strong> dialog includes optional
-README metadata fields:</p>
+<p>The <strong>Export SQLite → ZIP</strong> and <strong>Export SQLite →
+MATLAB ZIP</strong> dialogs include optional README metadata fields:</p>
 <ul>
 <li>Author</li>
 <li>Contact e-mail</li>
@@ -866,6 +901,16 @@ Empty fields are omitted from the README.</p>
 <p>ZIP export also supports archive splitting via <code>split_zip</code>
 and <code>max_size</code> (MB), matching
 <code><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_zip_pngs.html" class="external-link">iRfcb::ifcb_zip_pngs()</a></code>.</p>
+<p>The MATLAB ZIP dialog additionally requires a <strong>Features
+folder</strong> (top-level folder containing feature CSV files) and an
+optional <strong>Data folder</strong> (raw IFCB data). Both have a
+“search recursively” checkbox enabled by default so that files in
+year-based subdirectories are included automatically.</p>
+<p>Both ZIP export dialogs include an optional <strong>Filter by
+IFCB</strong> dropdown (shown when the database contains samples from
+more than one instrument). This lets you restrict the export to a single
+instrument, e.g. to exclude data from a test or development
+instrument.</p>
 <blockquote>
 <p><strong>Note</strong>: External datasets can be viewed without ROI
 files when extracted PNGs are available under sample-named folders in
@@ -993,6 +1038,25 @@ archive provenance:
 </li>
 <li>Per-class inventory files are named
 <code>ecotaxa_&lt;CLASSNAME&gt;.tsv</code>.</li>
+</ul>
+</div>
+<div class="section level3">
+<h3 id="matlab-zip-export-notes">MATLAB ZIP Export Notes<a class="anchor" aria-label="anchor" href="#matlab-zip-export-notes"></a>
+</h3>
+<ul>
+<li>MATLAB ZIP export bundles <code>.mat</code> annotations, feature
+CSVs, <code>class2use.mat</code>, and optionally raw data into a single
+archive suitable for sharing (e.g. for the <a href="https://doi.org/10.17044/scilifelab.25883455" class="external-link">SMHI IFCB Plankton
+Image Reference Library</a>).</li>
+<li>If your storage format is SQLite-only, annotations are converted to
+<code>.mat</code> files on the fly (requires Python with scipy). When
+using MAT or Both storage, existing <code>.mat</code> files from the
+Output Folder are used directly.</li>
+<li>The <code>class2use.mat</code> config file is generated
+automatically from the current class list.</li>
+<li>For details on the archive structure and the underlying
+<code><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_zip_matlab.html" class="external-link">iRfcb::ifcb_zip_matlab()</a></code> function, see the <a href="https://europeanifcbgroup.github.io/iRfcb/articles/image-export-tutorial.html" class="external-link">iRfcb
+image export tutorial</a>.</li>
 </ul>
 <hr>
 </div>
