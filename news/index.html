@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">ClassiPyR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -46,9 +46,9 @@
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="development version" id="classipyr-development-version">ClassiPyR (development version)<a class="anchor" aria-label="anchor" href="#classipyr-development-version"></a></h2>
+<h2 class="pkg-version" data-toc-text="0.2.1" id="classipyr-021">ClassiPyR 0.2.1<a class="anchor" aria-label="anchor" href="#classipyr-021"></a></h2>
 <div class="section level3">
-<h3 id="new-features-development-version">New features<a class="anchor" aria-label="anchor" href="#new-features-development-version"></a></h3>
+<h3 id="new-features-0-2-1">New features<a class="anchor" aria-label="anchor" href="#new-features-0-2-1"></a></h3>
 <ul><li>
 <strong>Export SQLite → MATLAB ZIP</strong>: New “SQLite → MATLAB ZIP” button in Settings that bundles <code>.mat</code> annotation files, feature CSVs, a <code>class2use.mat</code> config file, optional raw data, and READMEs into a distributable MATLAB-format ZIP archive via <code><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_zip_matlab.html" class="external-link">iRfcb::ifcb_zip_matlab()</a></code>. When using SQLite-only storage, annotations are automatically converted to <code>.mat</code> files (requires Python with scipy). Supports the same README metadata fields as the existing PNG ZIP export.</li>
 <li>
@@ -60,7 +60,7 @@
 <li>New exported function <code><a href="../reference/delete_annotations_db.html">delete_annotations_db()</a></code> for programmatic deletion of a sample’s annotations from the database.</li>
 </ul></div>
 <div class="section level3">
-<h3 id="ui-improvements-development-version">UI Improvements<a class="anchor" aria-label="anchor" href="#ui-improvements-development-version"></a></h3>
+<h3 id="ui-improvements-0-2-1">UI Improvements<a class="anchor" aria-label="anchor" href="#ui-improvements-0-2-1"></a></h3>
 <ul><li>
 <strong>Reorganised Settings panel</strong>: Folder paths are now grouped into clear “Input Folders” and “Output” sections. The ROI/PNG data folder is listed first as the primary input. Database folder and annotation storage format are grouped together under Output. The former standalone “Annotation Storage” section has been merged into Output.</li>
 <li>Added descriptive help text to all folder path fields in Settings.</li>
@@ -68,7 +68,7 @@
 <li>The <strong>Predict</strong> button is now always visible (greyed out when disabled).</li>
 </ul></div>
 <div class="section level3">
-<h3 id="bug-fixes-development-version">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-development-version"></a></h3>
+<h3 id="bug-fixes-0-2-1">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-0-2-1"></a></h3>
 <ul><li>
 <strong>Dashboard auto-classification URL</strong>: Fixed class_scores CSV download failing for dashboard URLs without a <code>?dataset=</code> parameter. The IFCB Dashboard serves class_scores files from a dataset-specific path (e.g., <code>/mvco/</code>) rather than the generic <code>/data/</code> endpoint used for other file types. The new <code><a href="../reference/resolve_sample_dataset.html">resolve_sample_dataset()</a></code> function automatically queries the Dashboard bin API to determine the correct dataset when not explicitly provided in the URL.</li>
 <li>
