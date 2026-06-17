@@ -560,13 +560,10 @@ test_that("list_dashboard_bins returns character vector from real API", {
   expect_true(all(grepl("^D\\d{8}T\\d{6}_IFCB\\d+", bins)))
 })
 
-test_that("list_dashboard_bins without dataset returns bins", {
-  skip_if_dashboard_unavailable()
-
-  bins <- list_dashboard_bins(DASHBOARD_BASE)
-  expect_type(bins, "character")
-  expect_true(length(bins) > 0)
-})
+# Note: a no-dataset call (list_dashboard_bins(DASHBOARD_BASE)) is intentionally
+# not tested against the live API. The api/export_metadata endpoint downloads
+# metadata for *every* dataset when no slug is given, which times out (504) on
+# production dashboards. The dataset-scoped path above covers the real usage.
 
 test_that("list_dashboard_bins includes known sample", {
   skip_if_dashboard_unavailable()
