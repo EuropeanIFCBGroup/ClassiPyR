@@ -73,7 +73,7 @@ test_that("list_dashboard_bins errors on unreachable host", {
 })
 
 test_that("list_dashboard_bins builds correct API URL without dataset", {
-  # Trailing slashes should be stripped before appending /api/list_bins
+  # Trailing slashes should be stripped before building the export_metadata URL.
   # We cannot hit the network here, but we can verify the error message
   # contains the expected URL fragment
 
@@ -532,7 +532,7 @@ skip_if_dashboard_unavailable <- function() {
   skip_if_offline()
   avail <- tryCatch({
     resp <- curl::curl_fetch_memory(
-      "https://habon-ifcb.whoi.edu/api/list_bins?dataset=tangosund",
+      "https://habon-ifcb.whoi.edu/api/export_metadata/tangosund",
       handle = curl::new_handle(timeout = 15)
     )
     resp$status_code == 200
