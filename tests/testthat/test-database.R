@@ -2040,3 +2040,153 @@ test_that("export_all_db_to_png filters by samples parameter", {
   expect_equal(result$failed, 0L)
   expect_equal(result$skipped, 0L)  # sample_no_roi not even considered
 })
+
+# fill_unclassified_db tests
+
+# Helper: write a mock ADC file with n_roi rows in the standard IFCB folder
+# structure under roi_folder. Columns 16/17 are width/height; ROIs listed in
+# zero_dims get width/height 0 (no image).
+write_mock_adc <- function(roi_folder, sample_name, n_roi, zero_dims = integer(0)) {
+  year <- substr(sample_name, 2, 5)
+  date_part <- substr(sample_name, 1, 9)
+  adc_dir <- file.path(roi_folder, year, date_part)
+  dir.create(adc_dir, recursive = TRUE, showWarnings = FALSE)
+  adc_path <- file.path(adc_dir, paste0(sample_name, ".adc"))
+
+  width <- rep(100L, n_roi)
+  height <- rep(80L, n_roi)
+  width[zero_dims] <- 0L
+  height[zero_dims] <- 0L
+
+  mock <- data.frame(
+    V1 = seq_len(n_roi), V2 = 0, V3 = 0, V4 = 0, V5 = 0,
+    V6 = 0, V7 = 0, V8 = 0, V9 = 0, V10 = 0,
+    V11 = 0, V12 = 0, V13 = 0, V14 = 0, V15 = 0,
+    V16 = width, V17 = height
+  )
+  write.table(mock, adc_path, row.names = FALSE, col.names = FALSE, sep = ",")
+  adc_path
+}
+
+test_that("fill_unclassified_db backfills missing ROIs as unclassified", {
+  db_dir <- tempfile("db_")
+  roi_dir <- tempfile("roi_")
+  dir.create(db_dir)
+  on.exit(unlink(c(db_dir, roi_dir), recursive = TRUE), add = TRUE)
+  db_path <- get_db_path(db_dir)
+
+  sample_name <- "D20230101T120000_IFCB134"
+  class2use <- c("unclassified", "Diatom")
+
+  # Only ROIs 2 and 4 imported (the selected taxa)
+  save_annotations_db(db_path, sample_name,
+    data.frame(file_name = paste0(sample_name, c("_00002.png", "_00004.png")),
+               class_name = c("Diatom", "Diatom"),
+               stringsAsFactors = FALSE),
+    class2use, "Jane")
+
+  # Sample actually has 5 ROIs
+  write_mock_adc(roi_dir, sample_name, n_roi = 5)
+
+  result <- fill_unclassified_db(db_path, roi_dir)
+
+  expect_equal(result$added, 3L)    # ROIs 1, 3, 5
+  expect_equal(result$samples, 1L)
+  expect_equal(result$skipped, 0L)
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+  rows <- dbGetQuery(con,
+    "SELECT roi_number, class_name, is_manual FROM annotations
+     WHERE sample_name = ? ORDER BY roi_number", params = list(sample_name))
+
+  expect_equal(rows$roi_number, 1:5)
+  expect_equal(rows$class_name, c("unclassified", "Diatom", "unclassified",
+                                  "Diatom", "unclassified"))
+  # Imported rows stay reviewed; backfilled rows are unreviewed
+  expect_equal(rows$is_manual, c(0L, 1L, 0L, 1L, 0L))
+})
+
+test_that("fill_unclassified_db leaves existing annotations untouched", {
+  db_dir <- tempfile("db_")
+  roi_dir <- tempfile("roi_")
+  dir.create(db_dir)
+  on.exit(unlink(c(db_dir, roi_dir), recursive = TRUE), add = TRUE)
+  db_path <- get_db_path(db_dir)
+
+  sample_name <- "D20230101T120000_IFCB134"
+  save_annotations_db(db_path, sample_name,
+    data.frame(file_name = paste0(sample_name, "_00002.png"),
+               class_name = "Diatom", stringsAsFactors = FALSE),
+    c("unclassified", "Diatom"), "Jane")
+
+  write_mock_adc(roi_dir, sample_name, n_roi = 3)
+  fill_unclassified_db(db_path, roi_dir)
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+  kept <- dbGetQuery(con,
+    "SELECT class_name, annotator, is_manual FROM annotations
+     WHERE sample_name = ? AND roi_number = 2", params = list(sample_name))
+
+  expect_equal(kept$class_name, "Diatom")
+  expect_equal(kept$annotator, "Jane")
+  expect_equal(kept$is_manual, 1L)
+})
+
+test_that("fill_unclassified_db skips ROIs without a real image", {
+  db_dir <- tempfile("db_")
+  roi_dir <- tempfile("roi_")
+  dir.create(db_dir)
+  on.exit(unlink(c(db_dir, roi_dir), recursive = TRUE), add = TRUE)
+  db_path <- get_db_path(db_dir)
+
+  sample_name <- "D20230101T120000_IFCB134"
+  save_annotations_db(db_path, sample_name,
+    data.frame(file_name = paste0(sample_name, "_00001.png"),
+               class_name = "Diatom", stringsAsFactors = FALSE),
+    c("unclassified", "Diatom"), "Jane")
+
+  # 4 ROIs, but ROIs 3 and 4 have zero dimensions (no image)
+  write_mock_adc(roi_dir, sample_name, n_roi = 4, zero_dims = c(3L, 4L))
+
+  result <- fill_unclassified_db(db_path, roi_dir)
+
+  expect_equal(result$added, 1L)  # only ROI 2 is a real, missing image
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+  roi_nums <- dbGetQuery(con,
+    "SELECT roi_number FROM annotations WHERE sample_name = ? ORDER BY roi_number",
+    params = list(sample_name))$roi_number
+  expect_equal(roi_nums, c(1L, 2L))
+})
+
+test_that("fill_unclassified_db skips samples with no ADC file", {
+  db_dir <- tempfile("db_")
+  roi_dir <- tempfile("roi_")
+  dir.create(db_dir)
+  dir.create(roi_dir)
+  on.exit(unlink(c(db_dir, roi_dir), recursive = TRUE), add = TRUE)
+  db_path <- get_db_path(db_dir)
+
+  sample_name <- "D20230101T120000_IFCB134"
+  save_annotations_db(db_path, sample_name,
+    data.frame(file_name = paste0(sample_name, "_00001.png"),
+               class_name = "Diatom", stringsAsFactors = FALSE),
+    c("unclassified", "Diatom"), "Jane")
+
+  result <- suppressWarnings(fill_unclassified_db(db_path, roi_dir))
+
+  expect_equal(result$added, 0L)
+  expect_equal(result$samples, 0L)
+  expect_equal(result$skipped, 1L)
+})
+
+test_that("fill_unclassified_db returns zero counts for non-existent database", {
+  db_path <- file.path(tempfile("db_"), "annotations.sqlite")
+  result <- suppressWarnings(fill_unclassified_db(db_path, tempfile("roi_")))
+  expect_equal(result$added, 0L)
+  expect_equal(result$samples, 0L)
+  expect_equal(result$skipped, 0L)
+})

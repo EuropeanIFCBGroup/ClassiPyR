@@ -970,6 +970,106 @@ import_png_folder_to_db <- function(png_folder, db_path, class2use,
   counts
 }
 
+#' Backfill missing ROIs as "unclassified" in the database
+#'
+#' After a partial import (e.g. \code{\link{import_png_folder_to_db}} with only
+#' a few selected taxa per sample), the database holds annotations for just the
+#' imported ROIs. This helper reads each sample's complete ROI list from its
+#' \code{.adc} file and inserts the ROIs that are not yet in the database as
+#' \code{"unclassified"}, so the full sample is represented. Existing
+#' annotations are never modified.
+#'
+#' Only ROIs with a real image (non-zero width and height) are added. Inserted
+#' rows are marked \code{is_manual = 0} (not yet reviewed).
+#'
+#' @param db_path Path to the SQLite database file
+#' @param roi_folder Base ROI folder path, following the standard IFCB folder
+#'   structure (\code{roi_folder/YYYY/DYYYYMMDD/sample_name.adc}). Used to
+#'   locate each sample's \code{.adc} file via \code{\link{get_sample_paths}}.
+#' @param samples Optional character vector of sample names to backfill. When
+#'   \code{NULL} (the default), all annotated samples in the database are used.
+#' @param class_name Class name to assign to the missing ROIs. Default
+#'   \code{"unclassified"}.
+#' @param annotator Annotator name recorded for the inserted rows. Default
+#'   \code{"imported"}.
+#' @return Named list with counts: \code{added} (ROIs inserted), \code{samples}
+#'   (samples that received at least one new ROI), \code{skipped} (samples with
+#'   no reachable \code{.adc} file).
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path("/data/manual")
+#' fill_unclassified_db(db_path, "/data/ifcb/raw")
+#' }
+fill_unclassified_db <- function(db_path, roi_folder, samples = NULL,
+                                 class_name = "unclassified",
+                                 annotator = "imported") {
+  counts <- list(added = 0L, samples = 0L, skipped = 0L)
+
+  if (!file.exists(db_path)) {
+    warning("Database file does not exist: ", db_path)
+    return(counts)
+  }
+
+  if (is.null(samples)) {
+    samples <- list_annotated_samples_db(db_path)
+  }
+
+  if (length(samples) == 0) {
+    return(counts)
+  }
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+
+  for (sn in samples) {
+    paths <- get_sample_paths(sn, roi_folder)
+    if (!file.exists(paths$adc_path)) {
+      warning("ADC file not found for ", sn, ": ", paths$adc_path)
+      counts$skipped <- counts$skipped + 1L
+      next
+    }
+
+    # Complete ROI list from the raw data; keep only ROIs with a real image
+    dims <- read_roi_dimensions(paths$adc_path)
+    all_roi <- dims$roi_number[dims$width > 0 & dims$height > 0]
+
+    have <- dbGetQuery(con,
+      "SELECT roi_number FROM annotations WHERE sample_name = ?",
+      params = list(sn))$roi_number
+
+    missing <- setdiff(all_roi, have)
+    if (length(missing) == 0) {
+      next
+    }
+
+    new_rows <- data.frame(
+      sample_name = sn,
+      roi_number = as.integer(missing),
+      class_name = class_name,
+      annotator = annotator,
+      timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+      is_manual = 0L,
+      stringsAsFactors = FALSE
+    )
+
+    ok <- tryCatch({
+      dbWriteTable(con, "annotations", new_rows, append = TRUE)
+      TRUE
+    }, error = function(e) {
+      warning("Failed to backfill ", sn, ": ", e$message)
+      FALSE
+    })
+
+    if (isTRUE(ok)) {
+      counts$added <- counts$added + nrow(new_rows)
+      counts$samples <- counts$samples + 1L
+    }
+  }
+
+  counts
+}
+
 #' Bulk export all annotated samples from SQLite to class-organized PNGs
 #'
 #' Exports every annotated sample in the database to PNG images organized
