@@ -1070,6 +1070,68 @@ fill_unclassified_db <- function(db_path, roi_folder, samples = NULL,
   counts
 }
 
+#' Import a PNG class folder and backfill the rest as "unclassified"
+#'
+#' Convenience wrapper that runs \code{\link{import_png_folder_to_db}} followed
+#' by \code{\link{fill_unclassified_db}} in a single call. After importing the
+#' selected-taxa PNGs, it backfills the remaining ROIs of \emph{only the samples
+#' that were just imported} as \code{"unclassified"}, so each imported sample is
+#' fully represented in the database without touching samples from earlier
+#' import sessions.
+#'
+#' @param png_folder Path to the top-level folder containing class subfolders
+#' @param db_path Path to the SQLite database file
+#' @param class2use Character vector of class names (preserves index order for
+#'   .mat export)
+#' @param roi_folder Base ROI folder path, following the standard IFCB folder
+#'   structure (\code{roi_folder/YYYY/DYYYYMMDD/sample_name.adc}). Used by the
+#'   backfill step to read each sample's complete ROI list.
+#' @param class_mapping Optional named character vector mapping scanned class
+#'   names to target class names. Passed to \code{\link{import_png_folder_to_db}}.
+#' @param annotator Annotator name (defaults to \code{"imported"}). Applied to
+#'   both the import and the backfill.
+#' @param fill Logical. When \code{TRUE} (the default), backfill the imported
+#'   samples with \code{"unclassified"} ROIs. Set to \code{FALSE} to import only.
+#' @return Named list with two elements: \code{import} (the result of
+#'   \code{\link{import_png_folder_to_db}}) and \code{filled} (the result of
+#'   \code{\link{fill_unclassified_db}}, or zero counts when \code{fill} is
+#'   \code{FALSE} or no samples were imported).
+#' @seealso \code{\link{import_png_folder_to_db}}, \code{\link{fill_unclassified_db}}
+#' @export
+#' @examples
+#' \dontrun{
+#' db_path <- get_db_path("/data/manual")
+#' class2use <- c("Diatom", "Dinoflagellate", "Ciliate")
+#' result <- import_png_folder_with_unclassified(
+#'   "/data/png_export", db_path, class2use,
+#'   roi_folder = "/data/ifcb/raw"
+#' )
+#' cat(result$import$success, "imported,",
+#'     result$filled$added, "backfilled\n")
+#' }
+import_png_folder_with_unclassified <- function(png_folder, db_path, class2use,
+                                                roi_folder,
+                                                class_mapping = NULL,
+                                                annotator = "imported",
+                                                fill = TRUE) {
+  import <- import_png_folder_to_db(png_folder, db_path, class2use,
+                                    class_mapping = class_mapping,
+                                    annotator = annotator)
+
+  filled <- list(added = 0L, samples = 0L, skipped = 0L)
+
+  if (isTRUE(fill)) {
+    samples <- unique(scan_png_class_folder(png_folder)$annotations$sample_name)
+    if (length(samples) > 0) {
+      filled <- fill_unclassified_db(db_path, roi_folder,
+                                     samples = samples,
+                                     annotator = annotator)
+    }
+  }
+
+  list(import = import, filled = filled)
+}
+
 #' Bulk export all annotated samples from SQLite to class-organized PNGs
 #'
 #' Exports every annotated sample in the database to PNG images organized

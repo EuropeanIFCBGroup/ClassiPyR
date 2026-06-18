@@ -3,6 +3,7 @@
 ## New features
 
 - New exported function `fill_unclassified_db()` backfills a partially imported sample. After importing only selected taxa with `import_png_folder_to_db()`, it reads each sample's complete ROI list from its `.adc` file and inserts the remaining ROIs as `unclassified` (marked as not yet reviewed), leaving existing annotations untouched.
+- New exported function `import_png_folder_with_unclassified()` wraps `import_png_folder_to_db()` and `fill_unclassified_db()` into a single call. It imports the selected-taxa PNGs and then backfills the remaining ROIs as `unclassified` for **only the samples that were just imported**, so each imported sample is fully represented without touching samples from earlier import sessions.
 
 ## Bug fixes
 

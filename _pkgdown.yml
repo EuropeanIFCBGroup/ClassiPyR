@@ -80,6 +80,7 @@ reference:
   - export_all_db_to_zip
   - import_png_folder_to_db
   - fill_unclassified_db
+  - import_png_folder_with_unclassified
   - list_classes_db
   - save_class_taxonomy_db
   - load_class_taxonomy_db
