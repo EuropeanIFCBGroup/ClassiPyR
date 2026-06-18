@@ -298,3 +298,111 @@ test_that("scan_png_class_folder parses example_data/png correctly", {
   # Known classes from example data (without _NNN suffix)
   expect_true("Mesodinium_rubrum" %in% result$classes_found)
 })
+
+# ===========================================================================
+# import_png_folder_with_unclassified tests
+# ===========================================================================
+
+test_that("import_png_folder_with_unclassified imports then backfills", {
+  png_folder <- create_test_png_folder()
+  db_dir <- tempfile("db_")
+  roi_dir <- tempfile("roi_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+  on.exit({
+    unlink(png_folder, recursive = TRUE)
+    unlink(c(db_dir, roi_dir), recursive = TRUE)
+  })
+
+  class2use <- c("unclassified", "Diatom", "Ciliate")
+
+  # Sample 1 has ROIs 1,2,3 imported; the .adc says it really has 5 ROIs
+  write_mock_adc(roi_dir, "D20230101T120000_IFCB134", n_roi = 5)
+  # Sample 2 has ROI 1 imported; the .adc says it really has 3 ROIs
+  write_mock_adc(roi_dir, "D20230202T080000_IFCB134", n_roi = 3)
+
+  result <- import_png_folder_with_unclassified(
+    png_folder, db_path, class2use, roi_folder = roi_dir,
+    annotator = "TestUser"
+  )
+
+  expect_equal(result$import$success, 2L)
+  expect_equal(result$import$failed, 0L)
+  # Sample 1: ROIs 4,5 missing; Sample 2: ROIs 2,3 missing
+  expect_equal(result$filled$added, 4L)
+  expect_equal(result$filled$samples, 2L)
+  expect_equal(result$filled$skipped, 0L)
+
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+
+  s1 <- dbGetQuery(con,
+    "SELECT roi_number, class_name, is_manual FROM annotations
+     WHERE sample_name = ? ORDER BY roi_number",
+    params = list("D20230101T120000_IFCB134"))
+  expect_equal(s1$roi_number, 1:5)
+  expect_equal(s1$class_name[4:5], c("unclassified", "unclassified"))
+  expect_equal(s1$is_manual[4:5], c(0L, 0L))
+})
+
+test_that("import_png_folder_with_unclassified only backfills imported samples", {
+  png_folder <- create_test_png_folder()
+  db_dir <- tempfile("db_")
+  roi_dir <- tempfile("roi_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+  on.exit({
+    unlink(png_folder, recursive = TRUE)
+    unlink(c(db_dir, roi_dir), recursive = TRUE)
+  })
+
+  class2use <- c("unclassified", "Diatom", "Ciliate")
+
+  # A pre-existing sample from an earlier session, present in the DB but NOT
+  # in the PNG folder being imported now.
+  other_sample <- "D20221231T000000_IFCB134"
+  save_annotations_db(db_path, other_sample,
+    data.frame(file_name = paste0(other_sample, "_00001.png"),
+               class_name = "Diatom", stringsAsFactors = FALSE),
+    class2use, "Earlier")
+  write_mock_adc(roi_dir, other_sample, n_roi = 9)
+
+  # ADCs for the samples actually in the PNG folder
+  write_mock_adc(roi_dir, "D20230101T120000_IFCB134", n_roi = 5)
+  write_mock_adc(roi_dir, "D20230202T080000_IFCB134", n_roi = 3)
+
+  import_png_folder_with_unclassified(
+    png_folder, db_path, class2use, roi_folder = roi_dir
+  )
+
+  # The earlier sample must be untouched (still just its 1 imported ROI)
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+  n_other <- dbGetQuery(con,
+    "SELECT COUNT(*) AS n FROM annotations WHERE sample_name = ?",
+    params = list(other_sample))$n
+  expect_equal(n_other, 1L)
+})
+
+test_that("import_png_folder_with_unclassified skips backfill when fill = FALSE", {
+  png_folder <- create_test_png_folder()
+  db_dir <- tempfile("db_")
+  roi_dir <- tempfile("roi_")
+  dir.create(db_dir)
+  db_path <- get_db_path(db_dir)
+  on.exit({
+    unlink(png_folder, recursive = TRUE)
+    unlink(c(db_dir, roi_dir), recursive = TRUE)
+  })
+
+  class2use <- c("unclassified", "Diatom", "Ciliate")
+  write_mock_adc(roi_dir, "D20230101T120000_IFCB134", n_roi = 5)
+
+  result <- import_png_folder_with_unclassified(
+    png_folder, db_path, class2use, roi_folder = roi_dir, fill = FALSE
+  )
+
+  expect_equal(result$import$success, 2L)
+  expect_equal(result$filled$added, 0L)
+  expect_equal(result$filled$samples, 0L)
+})
