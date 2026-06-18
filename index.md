@@ -51,6 +51,7 @@ development.
 Install the latest release from GitHub using the `remotes` package:
 
 ``` r
+
 # Install remotes
 if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
 
@@ -66,6 +67,7 @@ handling, which is installed automatically.
 ## Quick Start
 
 ``` r
+
 library(ClassiPyR)
 run_app()
 ```
@@ -85,6 +87,7 @@ files for use with
 using `iRfcb`:
 
 ``` r
+
 library(iRfcb)
 
 # Define a path were the venv will be installed
@@ -115,6 +118,7 @@ run_app(venv_path = venv_path)
 ## Citation
 
 ``` r
+
 citation("ClassiPyR")
 ```
 

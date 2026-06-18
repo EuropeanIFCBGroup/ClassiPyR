@@ -204,12 +204,12 @@ Each image card displays:
 
 ### Selecting Images
 
-| Method                   | Action                                                                                 |
-|--------------------------|----------------------------------------------------------------------------------------|
-| Click                    | Toggle single image selection                                                          |
-| Drag                     | Draw rectangle to select multiple                                                      |
+| Method | Action |
+|----|----|
+| Click | Toggle single image selection |
+| Drag | Draw rectangle to select multiple |
 | Select Page / Select All | First click selects the current page; second click selects all images across all pages |
-| Deselect                 | Clear all selections                                                                   |
+| Deselect | Clear all selections |
 
 [![Drag-select: draw a rectangle to select multiple images at
 once.](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/drag-select.png)](https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/drag-select.png)
@@ -389,6 +389,7 @@ This is useful for scheduled updates (e.g. cron jobs) on servers where
 new data arrives regularly:
 
 ``` r
+
 # Rescan using saved settings
 ClassiPyR::rescan_file_index()
 
@@ -495,11 +496,11 @@ sample, PNG images are downloaded from the dashboard and cached locally
 at `tools::R_user_dir("ClassiPyR", "cache")/dashboard/`. ADC files are
 downloaded on demand for image dimensions and MAT export.
 
-| Dashboard Setting                  | Description                                                                      |
-|------------------------------------|----------------------------------------------------------------------------------|
-| Dashboard URL                      | The full URL of the IFCB Dashboard (with optional `?dataset=` parameter)         |
-| Use dashboard auto-classifications | When checked, downloads the dashboard’s `_class_scores.csv` for validation mode  |
-| Advanced Download Settings         | Parallel downloads, sleep time, timeout, and max retries for dashboard downloads |
+| Dashboard Setting | Description |
+|----|----|
+| Dashboard URL | The full URL of the IFCB Dashboard (with optional `?dataset=` parameter) |
+| Use dashboard auto-classifications | When checked, downloads the dashboard’s `_class_scores.csv` for validation mode |
+| Advanced Download Settings | Parallel downloads, sleep time, timeout, and max retries for dashboard downloads |
 
 The **Classification Folder** setting is available in both local and
 dashboard mode. In dashboard mode, the classification source depends on
@@ -527,13 +528,13 @@ mutually exclusive — the checkbox determines which source is used.
 
 ### Folder Paths
 
-| Setting               | Description                                                                    |
-|-----------------------|--------------------------------------------------------------------------------|
-| Classification Folder | Source of CSV/H5/MAT classifications (both local and dashboard mode)           |
-| ROI/PNG Data Folder   | IFCB raw files (ROI/ADC/HDR) or extracted PNG sample folders (local mode only) |
-| Output Folder         | Where MAT files and statistics go (can be on a network drive)                  |
-| Database Folder       | Where the SQLite database is stored (must be a local drive)                    |
-| PNG Output Folder     | Where organized images go                                                      |
+| Setting | Description |
+|----|----|
+| Classification Folder | Source of CSV/H5/MAT classifications (both local and dashboard mode) |
+| ROI/PNG Data Folder | IFCB raw files (ROI/ADC/HDR) or extracted PNG sample folders (local mode only) |
+| Output Folder | Where MAT files and statistics go (can be on a network drive) |
+| Database Folder | Where the SQLite database is stored (must be a local drive) |
+| PNG Output Folder | Where organized images go |
 
 Folder paths are configured using a web-based folder browser that works
 on all platforms (Linux, macOS, Windows). Changing folder paths in
@@ -542,11 +543,11 @@ fresh scan.
 
 ### Annotation Storage
 
-| Format               | Description                                                                                                              |
-|----------------------|--------------------------------------------------------------------------------------------------------------------------|
-| SQLite (recommended) | Default. Stores annotations in `annotations.sqlite` in the Database Folder. No Python needed.                            |
-| MAT file             | MATLAB-compatible `.mat` files for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis). Requires Python with scipy. |
-| Both                 | Writes to both SQLite and `.mat` for maximum compatibility.                                                              |
+| Format | Description |
+|----|----|
+| SQLite (recommended) | Default. Stores annotations in `annotations.sqlite` in the Database Folder. No Python needed. |
+| MAT file | MATLAB-compatible `.mat` files for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis). Requires Python with scipy. |
+| Both | Writes to both SQLite and `.mat` for maximum compatibility. |
 
 Below the format selector, two buttons allow bulk conversion between
 formats:
@@ -640,8 +641,8 @@ table) and shown inline in the class list display as `[AphiaID: ...]`.
 
 ### Auto-Sync
 
-| Setting                      | Description                                                                                                                          |
-|------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| Setting | Description |
+|----|----|
 | Auto-sync folders on startup | When enabled (default), the app checks and refreshes the file index on launch. Disable for instant startup using the existing cache. |
 
 ### Python Configuration
@@ -650,6 +651,7 @@ The Python virtual environment path is configured when launching the
 app:
 
 ``` r
+
 run_app(venv_path = "/path/to/your/venv")
 ```
 
@@ -658,10 +660,10 @@ The path is remembered for future sessions. **Priority order**:
 
 ### Live Prediction
 
-| Setting          | Description                                                                               |
-|------------------|-------------------------------------------------------------------------------------------|
-| Gradio API URL   | URL of a Gradio-hosted CNN classification server (e.g. `https://irfcb-classify.hf.space`) |
-| Prediction Model | CNN model to use for classification. Choices are fetched from the Gradio server.          |
+| Setting | Description |
+|----|----|
+| Gradio API URL | URL of a Gradio-hosted CNN classification server (e.g. `https://irfcb-classify.hf.space`) |
+| Prediction Model | CNN model to use for classification. Choices are fetched from the Gradio server. |
 
 When both fields are configured, a **Predict** button appears in the
 sidebar for Sample Mode. See [Live Prediction](#live-prediction) for

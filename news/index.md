@@ -1,5 +1,28 @@
 # Changelog
 
+## ClassiPyR (development version)
+
+### New features
+
+- New exported function
+  [`fill_unclassified_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/fill_unclassified_db.md)
+  backfills a partially imported sample. After importing only selected
+  taxa with
+  [`import_png_folder_to_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/import_png_folder_to_db.md),
+  it reads each sample’s complete ROI list from its `.adc` file and
+  inserts the remaining ROIs as `unclassified` (marked as not yet
+  reviewed), leaving existing annotations untouched.
+
+### Bug fixes
+
+- **Dashboard bin listing**:
+  [`list_dashboard_bins()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/list_dashboard_bins.md)
+  now uses
+  [`iRfcb::ifcb_download_dashboard_metadata()`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_download_dashboard_metadata.html)
+  (the `api/export_metadata` endpoint) instead of the `api/list_bins`
+  endpoint, which was removed from the upstream IFCB Dashboard
+  (2026-03-08) and no longer worked.
+
 ## ClassiPyR 0.2.1
 
 ### New features

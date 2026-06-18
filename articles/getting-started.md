@@ -55,6 +55,7 @@ Only needed if you plan to export `.mat` files. Skip this step if using
 the default SQLite storage.
 
 ``` r
+
 library(iRfcb)
 ifcb_py_install()  # Creates venv at ~/.virtualenvs/iRfcb by default
 ```
@@ -66,6 +67,7 @@ ifcb_py_install()  # Creates venv at ~/.virtualenvs/iRfcb by default
 Launch the app:
 
 ``` r
+
 library(ClassiPyR)
 run_app()
 
@@ -84,13 +86,13 @@ annotation storage, and import/export options. Click to enlarge.*
 
 Configure your folders using the built-in folder browser:
 
-| Setting               | Description                                         | Example             |
-|-----------------------|-----------------------------------------------------|---------------------|
-| Classification Folder | Where your CSV/H5/MAT classifications are           | `/ifcb/classified/` |
-| ROI/PNG Data Folder   | IFCB raw files or extracted PNG sample folders      | `/ifcb/raw/`        |
-| Output Folder         | Where MAT files and statistics go                   | `/ifcb/manual/`     |
-| Database Folder       | Where the SQLite database is stored (must be local) | auto-detected       |
-| PNG Output Folder     | Where images will be organized by class             | `/ifcb/png/`        |
+| Setting | Description | Example |
+|----|----|----|
+| Classification Folder | Where your CSV/H5/MAT classifications are | `/ifcb/classified/` |
+| ROI/PNG Data Folder | IFCB raw files or extracted PNG sample folders | `/ifcb/raw/` |
+| Output Folder | Where MAT files and statistics go | `/ifcb/manual/` |
+| Database Folder | Where the SQLite database is stored (must be local) | auto-detected |
+| PNG Output Folder | Where images will be organized by class | `/ifcb/png/` |
 
 > **Network drives**: The Output Folder can safely reside on a network
 > share (e.g., for MAT files and statistics). However, the Database

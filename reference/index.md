@@ -84,6 +84,8 @@ SQLite database functions for annotation storage
   : Bulk export all annotated samples from SQLite to EcoTaxa-ready ZIP
 - [`import_png_folder_to_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/import_png_folder_to_db.md)
   : Import annotations from a PNG class folder into the SQLite database
+- [`fill_unclassified_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/fill_unclassified_db.md)
+  : Backfill missing ROIs as "unclassified" in the database
 - [`list_classes_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/list_classes_db.md)
   : List all classes with counts in the annotations database
 - [`save_class_taxonomy_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/save_class_taxonomy_db.md)

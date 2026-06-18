@@ -25,6 +25,7 @@ document provides guidelines for contributing to the project.
 3.  Install the package in development mode:
 
     ``` r
+
     devtools::install_deps(dependencies = TRUE)
     devtools::load_all()
     ```
@@ -33,6 +34,7 @@ document provides guidelines for contributing to the project.
     files):
 
     ``` r
+
     library(iRfcb)
     ifcb_py_install(envname = "./venv")
     ```
@@ -40,6 +42,7 @@ document provides guidelines for contributing to the project.
 ### Running the App During Development
 
 ``` r
+
 # From the repository root
 shiny::runApp()
 
@@ -100,6 +103,7 @@ how it would benefit IFCB researchers
 3.  Run tests and checks:
 
     ``` r
+
     devtools::test()
     devtools::check()
     ```
@@ -139,12 +143,14 @@ modifications - `refactor:` code refactoring
 Run the test suite before submitting:
 
 ``` r
+
 devtools::test()
 ```
 
 Check for R CMD check issues:
 
 ``` r
+
 devtools::check()
 ```
 
@@ -160,6 +166,7 @@ please include appropriate tests.
 To preview documentation locally:
 
 ``` r
+
 devtools::document()
 pkgdown::build_site()
 ```

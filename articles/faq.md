@@ -70,6 +70,7 @@ If you see this warning and don’t need `.mat` files, switch to SQLite in
 Settings \> Annotation Storage. Otherwise, to enable `.mat` support:
 
 ``` r
+
 library(iRfcb)
 ifcb_py_install()  # Creates venv in current working directory
 ```
@@ -91,12 +92,14 @@ creates a virtual environment at `~/.virtualenvs/iRfcb`. You can specify
 a different location:
 
 ``` r
+
 ifcb_py_install("/path/to/your/venv")
 ```
 
 You can also specify the venv path when launching the app:
 
 ``` r
+
 run_app(venv_path = "/path/to/your/venv")
 ```
 
@@ -120,6 +123,7 @@ overriding any previously saved path.
 A: Make sure you have remotes installed and try:
 
 ``` r
+
 if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
 remotes::install_github("EuropeanIFCBGroup/ClassiPyR")
 ```
@@ -129,6 +133,7 @@ remotes::install_github("EuropeanIFCBGroup/ClassiPyR")
 A: Try reinstalling the package:
 
 ``` r
+
 remotes::install_github("EuropeanIFCBGroup/ClassiPyR")
 ```
 
@@ -139,6 +144,7 @@ dependency for `ClassiPyR` and is installed automatically. If you
 encounter issues:
 
 ``` r
+
 install.packages("iRfcb")
 ```
 
@@ -226,6 +232,7 @@ your classifier uses different names, rename the columns before loading.
 For example in R:
 
 ``` r
+
 df <- read.csv("my_classifications.csv")
 names(df)[names(df) == "predicted_class"] <- "class_name"
 names(df)[names(df) == "filename"] <- "file_name"
@@ -380,6 +387,7 @@ A: The default Database Folder is a platform-specific local directory:
 You can find the exact path with:
 
 ``` r
+
 ClassiPyR::get_default_db_dir()
 ```
 
@@ -403,6 +411,7 @@ format:
 1.  **Export** from the source computer (requires Python with scipy):
 
 ``` r
+
 library(ClassiPyR)
 db_path <- get_db_path(get_default_db_dir())
 # Export all annotations to .mat files in a shared output folder
@@ -415,6 +424,7 @@ Or use the **Export SQLite → .mat** button in Settings.
 2.  **Import** on the target computer:
 
 ``` r
+
 library(ClassiPyR)
 db_path <- get_db_path(get_default_db_dir())
 # Import .mat files from the shared folder into the local database
@@ -453,6 +463,7 @@ your output folder.
 You can also import programmatically — a single file:
 
 ``` r
+
 library(ClassiPyR)
 import_mat_to_db(
   mat_path = "/data/manual/D20230101T120000_IFCB134.mat",
@@ -464,6 +475,7 @@ import_mat_to_db(
 Or bulk-import all `.mat` files in a folder:
 
 ``` r
+
 result <- import_all_mat_to_db("/data/manual", get_db_path(get_default_db_dir()))
 cat(result$success, "imported,", result$failed, "failed,", result$skipped, "skipped\n")
 ```
@@ -477,6 +489,7 @@ requires Python with scipy.
 You can also export programmatically:
 
 ``` r
+
 # Single sample
 export_db_to_mat(get_db_path(get_default_db_dir()), "D20230101T120000_IFCB134", "/data/manual")
 
@@ -520,6 +533,7 @@ displayed in the gallery.
 You can also import programmatically:
 
 ``` r
+
 library(ClassiPyR)
 result <- import_png_folder_to_db(
   "/data/png_export",
@@ -537,6 +551,7 @@ A: Yes. Use
 from the R console:
 
 ``` r
+
 library(ClassiPyR)
 db_path <- get_db_path(get_default_db_dir())
 
@@ -598,6 +613,7 @@ automatically restored when you restart the app.
 A: Use the `reset_settings` argument when launching the app:
 
 ``` r
+
 run_app(reset_settings = TRUE)
 ```
 
@@ -615,6 +631,7 @@ useful if:
 You can also combine it with other arguments:
 
 ``` r
+
 # Reset settings and specify a new Python environment
 run_app(reset_settings = TRUE, venv_path = "/path/to/your/venv")
 ```
@@ -678,6 +695,7 @@ A: Yes. Use
 from the R console or a scheduled script:
 
 ``` r
+
 ClassiPyR::rescan_file_index()
 ```
 
@@ -685,6 +703,7 @@ This reads folder paths from your saved settings and rebuilds the cache.
 You can also pass paths explicitly:
 
 ``` r
+
 ClassiPyR::rescan_file_index(
   roi_folder = "/data/ifcb/raw",
   csv_folder = "/data/ifcb/classified",
@@ -705,14 +724,14 @@ A: In the same config directory as your settings:
 
 ## Error Messages
 
-| Error                      | Solution                                                                                                                                                                |
-|----------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| “ROI file not found”       | Check ROI/PNG Data Folder path. If no ROI exists, provide extracted PNG sample folders named by sample and click Sync                                                   |
-| “ADC file not found”       | ADC file must be alongside ROI file                                                                                                                                     |
-| “Python not available”     | Only affects `.mat` export. Switch to SQLite in Settings, or run [`iRfcb::ifcb_py_install()`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html) |
-| “Error loading class list” | Check file format (.mat or .txt)                                                                                                                                        |
-| “No samples found”         | Check ROI/PNG Data Folder configuration and naming                                                                                                                      |
-| App fails to start         | Try `run_app(reset_settings = TRUE)` to clear saved settings                                                                                                            |
+| Error | Solution |
+|----|----|
+| “ROI file not found” | Check ROI/PNG Data Folder path. If no ROI exists, provide extracted PNG sample folders named by sample and click Sync |
+| “ADC file not found” | ADC file must be alongside ROI file |
+| “Python not available” | Only affects `.mat` export. Switch to SQLite in Settings, or run [`iRfcb::ifcb_py_install()`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html) |
+| “Error loading class list” | Check file format (.mat or .txt) |
+| “No samples found” | Check ROI/PNG Data Folder configuration and naming |
+| App fails to start | Try `run_app(reset_settings = TRUE)` to clear saved settings |
 
 ------------------------------------------------------------------------
 
