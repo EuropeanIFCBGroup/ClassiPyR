@@ -1,6 +1,6 @@
 Package: ClassiPyR
 Title: A Shiny App for Manual Image Classification and Validation of IFCB Data
-Version: 0.2.1
+Version: 0.2.1.9000
 Authors@R: c(
     person("Anders", "Torstensson", email = "anders.torstensson@smhi.se", role = c("aut", "cre"),
            comment = c("Swedish Meteorological and Hydrological Institute", ORCID = "0000-0002-8283-656X")),
@@ -41,4 +41,4 @@ Config/testthat/edition: 3
 VignetteBuilder: knitr
 URL: https://EuropeanIFCBGroup.github.io/ClassiPyR/, https://github.com/EuropeanIFCBGroup/ClassiPyR, https://europeanifcbgroup.github.io/ClassiPyR/
 BugReports: https://github.com/EuropeanIFCBGroup/ClassiPyR/issues
-RoxygenNote: 7.3.3
+Config/roxygen2/version: 8.0.0

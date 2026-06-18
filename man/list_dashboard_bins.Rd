@@ -15,12 +15,17 @@ list_dashboard_bins(base_url, dataset_name = NULL)
 Character vector of bin (sample) names.
 }
 \description{
-Fetches the bin list from the Dashboard API. This is a vendored copy of
-\code{iRfcb::ifcb_list_dashboard_bins()} from the development version that
-supports the \code{dataset_name} parameter.
+Fetches the list of bin (sample) names for a dashboard dataset. Delegates to
+\code{\link[iRfcb]{ifcb_download_dashboard_metadata}}, which retrieves
+per-bin metadata from the \code{api/export_metadata} endpoint, and returns
+the \code{pid} column.
+}
+\details{
+The previous implementation used the \code{api/list_bins} endpoint, which was
+removed from the upstream IFCB Dashboard (2026-03-08) and no longer works.
 }
 \examples{
-\donttest{
+\dontrun{
   bins <- list_dashboard_bins("https://ifcb-data.whoi.edu", "mvco")
 }
 }

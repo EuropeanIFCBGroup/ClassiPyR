@@ -5,7 +5,7 @@
 
 #' @importFrom jsonlite fromJSON
 #' @importFrom curl curl_fetch_memory curl_fetch_disk new_handle
-#' @importFrom iRfcb ifcb_download_dashboard_data
+#' @importFrom iRfcb ifcb_download_dashboard_data ifcb_download_dashboard_metadata
 NULL
 
 #' Get persistent cache directory for dashboard downloads
@@ -63,64 +63,32 @@ parse_dashboard_url <- function(url) {
 
 #' List bins from an IFCB Dashboard
 #'
-#' Fetches the bin list from the Dashboard API. This is a vendored copy of
-#' \code{iRfcb::ifcb_list_dashboard_bins()} from the development version that
-#' supports the \code{dataset_name} parameter.
+#' Fetches the list of bin (sample) names for a dashboard dataset. Delegates to
+#' \code{\link[iRfcb]{ifcb_download_dashboard_metadata}}, which retrieves
+#' per-bin metadata from the \code{api/export_metadata} endpoint, and returns
+#' the \code{pid} column.
+#'
+#' The previous implementation used the \code{api/list_bins} endpoint, which was
+#' removed from the upstream IFCB Dashboard (2026-03-08) and no longer works.
 #'
 #' @param base_url Character. Base URL (e.g. \code{"https://habon-ifcb.whoi.edu"}).
 #' @param dataset_name Optional character. Dataset slug (e.g. \code{"tangosund"}).
 #' @return Character vector of bin (sample) names.
 #' @export
 #' @examples
-#' \donttest{
+#' \dontrun{
 #'   bins <- list_dashboard_bins("https://ifcb-data.whoi.edu", "mvco")
 #' }
-# TODO: Replace with iRfcb::ifcb_list_dashboard_bins() once iRfcb >= 0.9.0
-# ships dataset_name support.
 list_dashboard_bins <- function(base_url, dataset_name = NULL) {
-  base_url <- sub("/+$", "", base_url)
-
-  api_url <- paste0(base_url, "/api/list_bins")
-
-  if (!is.null(dataset_name) && nzchar(dataset_name)) {
-    dataset_name <- utils::URLencode(dataset_name, reserved = TRUE)
-    api_url <- paste0(api_url, "?dataset=", dataset_name)
-  }
-
-  response <- tryCatch(
-    curl::curl_fetch_memory(api_url,
-      handle = curl::new_handle(httpheader = c(Accept = "application/json"))),
-    error = function(e) stop("Failed to connect to IFCB Dashboard API: ", e$message)
+  metadata <- ifcb_download_dashboard_metadata(
+    base_url, dataset_name = dataset_name, quiet = TRUE
   )
 
-  if (response$status_code != 200) {
-    stop("API request failed [", response$status_code, "]: ", api_url)
+  if (is.null(metadata) || !"pid" %in% names(metadata)) {
+    return(character(0))
   }
 
-  json_content <- rawToChar(response$content)
-  Encoding(json_content) <- "UTF-8"
-
-  parsed <- tryCatch(
-    jsonlite::fromJSON(json_content, flatten = TRUE),
-    error = function(e) stop("Failed to parse JSON content: ", e$message)
-  )
-
-  # The API returns a list with one element containing a data frame with a
-  # "pid" column (or similar). Extract the sample names.
-  if (is.data.frame(parsed)) {
-    bins <- parsed[[1]]
-  } else if (is.list(parsed) && length(parsed) > 0) {
-    first <- parsed[[1]]
-    if (is.data.frame(first)) {
-      bins <- first[[1]]
-    } else {
-      bins <- as.character(first)
-    }
-  } else {
-    bins <- as.character(parsed)
-  }
-
-  as.character(bins)
+  as.character(metadata$pid)
 }
 
 #' Resolve the dataset name for a sample from the Dashboard API
