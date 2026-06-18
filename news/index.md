@@ -12,6 +12,16 @@
   it reads each sample’s complete ROI list from its `.adc` file and
   inserts the remaining ROIs as `unclassified` (marked as not yet
   reviewed), leaving existing annotations untouched.
+- New exported function
+  [`import_png_folder_with_unclassified()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/import_png_folder_with_unclassified.md)
+  wraps
+  [`import_png_folder_to_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/import_png_folder_to_db.md)
+  and
+  [`fill_unclassified_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/fill_unclassified_db.md)
+  into a single call. It imports the selected-taxa PNGs and then
+  backfills the remaining ROIs as `unclassified` for **only the samples
+  that were just imported**, so each imported sample is fully
+  represented without touching samples from earlier import sessions.
 
 ### Bug fixes
 

@@ -225,6 +225,8 @@ SQLite database functions for annotation storage
   : Import annotations from a PNG class folder into the SQLite database
 - [`fill_unclassified_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/fill_unclassified_db.md)
   : Backfill missing ROIs as "unclassified" in the database
+- [`import_png_folder_with_unclassified()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/import_png_folder_with_unclassified.md)
+  : Import a PNG class folder and backfill the rest as "unclassified"
 - [`list_classes_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/list_classes_db.md)
   : List all classes with counts in the annotations database
 - [`save_class_taxonomy_db()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/save_class_taxonomy_db.md)

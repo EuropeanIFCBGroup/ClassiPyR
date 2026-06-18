@@ -50,6 +50,7 @@
 <div class="section level3">
 <h3 id="new-features-development-version">New features<a class="anchor" aria-label="anchor" href="#new-features-development-version"></a></h3>
 <ul><li>New exported function <code><a href="../reference/fill_unclassified_db.html">fill_unclassified_db()</a></code> backfills a partially imported sample. After importing only selected taxa with <code><a href="../reference/import_png_folder_to_db.html">import_png_folder_to_db()</a></code>, it reads each sample’s complete ROI list from its <code>.adc</code> file and inserts the remaining ROIs as <code>unclassified</code> (marked as not yet reviewed), leaving existing annotations untouched.</li>
+<li>New exported function <code><a href="../reference/import_png_folder_with_unclassified.html">import_png_folder_with_unclassified()</a></code> wraps <code><a href="../reference/import_png_folder_to_db.html">import_png_folder_to_db()</a></code> and <code><a href="../reference/fill_unclassified_db.html">fill_unclassified_db()</a></code> into a single call. It imports the selected-taxa PNGs and then backfills the remaining ROIs as <code>unclassified</code> for <strong>only the samples that were just imported</strong>, so each imported sample is fully represented without touching samples from earlier import sessions.</li>
 </ul></div>
 <div class="section level3">
 <h3 id="bug-fixes-development-version">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-development-version"></a></h3>
