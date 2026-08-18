@@ -408,6 +408,7 @@ setup_class_list_server <- function(input, output, session, rv, config,
     }
 
     updated_map <- rv$class_aphia_map
+    effective_names <- matched$class_name
     for (i in seq_len(nrow(matched))) {
       key <- matched$class_name[i]
       if (rename_requested && !is.na(matched$accepted_name[i]) && nzchar(matched$accepted_name[i])) {
@@ -415,10 +416,16 @@ setup_class_list_server <- function(input, output, session, rv, config,
           key <- matched$accepted_name[i]
         }
       }
+      effective_names[i] <- key
       updated_map[[key]] <- matched$aphia_id[i]
     }
     rv$class_aphia_map <- updated_map
-    save_worms_map(updated_map, db_folder = config$db_folder, matches_df = matched)
+    # Key the taxonomy lookups by the same (possibly renamed) class names as
+    # the AphiaID map; keyed by the old names, renamed classes would lose
+    # their scientific/accepted name fields in the class_taxonomy table
+    matched_for_save <- matched
+    matched_for_save$class_name <- effective_names
+    save_worms_map(updated_map, db_folder = config$db_folder, matches_df = matched_for_save)
 
     if (rename_requested) {
       updateTextAreaInput(session, "class_list_edit", value = paste(rv$class2use, collapse = "\n"))
