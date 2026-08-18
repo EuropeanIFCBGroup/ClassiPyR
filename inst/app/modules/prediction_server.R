@@ -68,6 +68,12 @@ setup_prediction_server <- function(input, output, session, rv, config,
       changed_rows <- merged$class_name_current != merged$class_name_original
       manually_changed <- merged$file_name[changed_rows]
     }
+    # original_classifications is rebaselined to the prediction result below,
+    # so the diff above forgets relabels made before an earlier prediction.
+    # The changes log keeps every manual relabel since the sample was loaded.
+    if (!is.null(rv$changes_log) && nrow(rv$changes_log) > 0) {
+      manually_changed <- union(manually_changed, rv$changes_log$image)
+    }
 
     all_filenames <- basename(png_files)
     files_to_predict <- png_files[!all_filenames %in% manually_changed]
@@ -147,7 +153,7 @@ setup_prediction_server <- function(input, output, session, rv, config,
                       selected = "all")
 
     n_predicted <- nrow(predictions)
-    n_skipped <- length(manually_changed)
+    n_skipped <- sum(all_filenames %in% manually_changed)
     msg <- paste0("Predicted ", n_predicted, " images.")
     if (n_skipped > 0) {
       msg <- paste0(msg, " Skipped ", n_skipped, " manually reclassified images.")
