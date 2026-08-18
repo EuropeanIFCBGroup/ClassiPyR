@@ -35,13 +35,16 @@ setup_statistics_server <- function(input, output, session, rv,
     has_scores <- !all(is.na(rv$classifications$score))
 
     if (has_scores) {
+      # A class whose scores are all NA (e.g. images skipped by prediction)
+      # would yield NaN/Inf/-Inf from mean/min/max with na.rm = TRUE and
+      # render as "NaN%"/"Inf%"; show NA for those classes instead
       summary_df <- rv$classifications %>%
         group_by(class_name) %>%
         summarise(
           count = n(),
-          avg_score = mean(score, na.rm = TRUE),
-          min_score = min(score, na.rm = TRUE),
-          max_score = max(score, na.rm = TRUE),
+          avg_score = if (all(is.na(score))) NA_real_ else mean(score, na.rm = TRUE),
+          min_score = if (all(is.na(score))) NA_real_ else min(score, na.rm = TRUE),
+          max_score = if (all(is.na(score))) NA_real_ else max(score, na.rm = TRUE),
           .groups = "drop"
         ) %>%
         arrange(class_name)
