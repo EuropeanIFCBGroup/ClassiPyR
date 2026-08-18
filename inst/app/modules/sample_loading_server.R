@@ -496,12 +496,31 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
 
   # Load from session cache
   load_from_cache <- function(sample_name, roi_path) {
+    is_dashboard <- identical(config$data_source, "dashboard")
+
+    # Validate the image source before mutating any state, so a failed cache
+    # load leaves the currently displayed sample intact
+    sample_png_dir <- NULL
+    if (!is_dashboard) {
+      sample_png_dir <- find_sample_png_dir(sample_name)
+      if (!(is.null(roi_path) && !is.null(sample_png_dir)) &&
+          (is.null(roi_path) || !file.exists(roi_path))) {
+        showNotification(paste("ROI file not found for:", sample_name), type = "error")
+        return(FALSE)
+      }
+    }
+
     cached <- rv$session_cache[[sample_name]]
     rv$classifications <- cached$classifications
     rv$original_classifications <- cached$original_classifications
     rv$changes_log <- cached$changes_log
+    # Clear the stale validation snapshot from the previously loaded sample,
+    # like finalize_sample_load() does; otherwise switching to validation
+    # mode can restore another sample's classifications into this one
+    rv$cached_validation_classifications <- NULL
     rv$current_sample <- sample_name
     rv$selected_images <- character()
+    rv$current_page <- 1
     rv$is_annotation_mode <- cached$is_annotation_mode
     rv$has_classification <- cached$has_classification %||% FALSE
 
@@ -512,8 +531,6 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
     })
     updateSelectInput(session, "class_filter",
                       choices = c("All" = "all", setNames(available_classes, display_names)))
-
-    is_dashboard <- identical(config$data_source, "dashboard")
 
     if (is_dashboard) {
       cache_dir <- get_dashboard_cache_dir()
@@ -527,14 +544,9 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
       rv$temp_png_folder <- png_folder
       rv$temp_png_is_managed <- TRUE
     } else {
-      sample_png_dir <- find_sample_png_dir(sample_name)
       if (is.null(roi_path) && !is.null(sample_png_dir)) {
         set_active_png_folder(dirname(sample_png_dir), managed = FALSE)
       } else {
-        if (is.null(roi_path) || !file.exists(roi_path)) {
-          showNotification(paste("ROI file not found for:", sample_name), type = "error")
-          return(FALSE)
-        }
         cleanup_temp_png_folder()
 
         rv$temp_png_folder <- tempfile(pattern = "ifcb_validator_")
