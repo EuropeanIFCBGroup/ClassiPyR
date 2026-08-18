@@ -85,6 +85,12 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
 
   # Save current sample to cache with LRU eviction
   save_to_cache <- function() {
+    # Never cache/auto-save class review data: it is not a real sample
+    # (external review uses the synthetic name "__external_review__")
+    if (isTRUE(rv$class_review_mode) ||
+        identical(rv$current_sample, "__external_review__")) {
+      return(invisible(NULL))
+    }
     if (!is.null(rv$current_sample) && !is.null(rv$classifications)) {
       if (length(rv$session_cache) >= MAX_CACHED_SAMPLES &&
           !(rv$current_sample %in% names(rv$session_cache))) {

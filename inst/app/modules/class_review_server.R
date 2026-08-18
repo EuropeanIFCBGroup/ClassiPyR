@@ -105,7 +105,21 @@ setup_class_review_server <- function(input, output, session, rv, config,
         populate_cr_database_filters()
       }
     } else {
-      # Leaving class review mode - clear state
+      # Leaving class review mode - clear state. If a review was actually
+      # loaded, also drop the review data itself so it can't be mistaken for
+      # a regular sample and auto-saved (e.g. "__external_review__" ending up
+      # in the annotations database via save_to_cache/session cleanup).
+      if (isTRUE(rv$class_review_mode)) {
+        rv$current_sample <- NULL
+        rv$classifications <- NULL
+        rv$original_classifications <- NULL
+        rv$selected_images <- character()
+        rv$current_page <- 1
+        rv$changes_log <- create_empty_changes_log()
+        rv$is_annotation_mode <- FALSE
+        rv$has_classification <- FALSE
+        updateSelectInput(session, "class_filter", choices = c("All" = "all"), selected = "all")
+      }
       rv$class_review_mode <- FALSE
       rv$class_review_source <- "database"
       rv$class_review_class <- NULL

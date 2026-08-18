@@ -7,8 +7,11 @@ setup_session_cleanup_server <- function(input, session, rv, config) {
       current_sample <- isolate(rv$current_sample)
       current_classifications <- isolate(rv$classifications)
       resource_path_name <- isolate(rv$resource_path_name)
+      in_class_review <- isTRUE(isolate(rv$class_review_mode))
 
-      if (!is.null(current_sample) && !is.null(current_classifications)) {
+      if (!in_class_review &&
+          !is.null(current_sample) && !is.null(current_classifications) &&
+          !identical(current_sample, "__external_review__")) {
         isolate({
           rv$session_cache[[current_sample]] <- list(
             classifications = rv$classifications,
@@ -31,6 +34,7 @@ setup_session_cleanup_server <- function(input, session, rv, config) {
 
       # Save any unsaved samples with changes
       for (sample_name in names(session_cache)) {
+        if (identical(sample_name, "__external_review__")) next
         cached <- session_cache[[sample_name]]
         if (!is.null(cached$changes_log) && nrow(cached$changes_log) > 0) {
           tryCatch({
