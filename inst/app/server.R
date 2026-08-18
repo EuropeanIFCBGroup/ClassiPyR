@@ -167,7 +167,8 @@ server <- function(input, output, session) {
     input, output, session, rv, config,
     roi_path_map, annotated_samples,
     loading$disable_nav_buttons, loading$enable_nav_buttons,
-    update_current_sample_status_fn
+    update_current_sample_status_fn,
+    loading$find_sample_png_dir
   )
 
   # 15. Session cleanup

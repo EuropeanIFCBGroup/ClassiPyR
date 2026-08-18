@@ -133,3 +133,80 @@ test_that("class list auto-saves to and restores from DB with save_format 'both'
     expect_setequal(rv$class2use, classes)
   })
 })
+
+test_that("Save button saves PNG-only samples to SQLite (no ROI file needed)", {
+  app_dir <- system.file("app", package = "ClassiPyR")
+  skip_if(app_dir == "", "Package not installed")
+
+  module_env <- new.env(parent = globalenv())
+  source(file.path(app_dir, "modules", "manual_save_server.R"),
+         local = module_env)
+
+  base_dir <- tempfile("classipyr_pngsave_")
+  dir.create(base_dir)
+  on.exit(unlink(base_dir, recursive = TRUE), add = TRUE)
+  db_folder <- file.path(base_dir, "db")
+  png_dir <- file.path(base_dir, "png", "D20230101T120000_IFCB134")
+  dir.create(png_dir, recursive = TRUE)
+
+  sample_name <- "D20230101T120000_IFCB134"
+  cls <- data.frame(
+    file_name = paste0(sample_name, "_", sprintf("%05d", 1:2), ".png"),
+    class_name = c("Diatoma", "unclassified"),
+    score = NA_real_,
+    width = c(10, 20), height = c(10, 20), roi_area = c(100, 400),
+    stringsAsFactors = FALSE
+  )
+  orig <- cls
+  orig$class_name <- c("unclassified", "unclassified")
+  changes <- data.frame(
+    image = cls$file_name[1],
+    original_class = "unclassified",
+    new_class = "Diatoma",
+    stringsAsFactors = FALSE
+  )
+
+  server_fn <- function(input, output, session) {
+    rv <- reactiveValues(
+      current_sample = sample_name,
+      classifications = cls,
+      original_classifications = orig,
+      changes_log = changes,
+      class2use = c("unclassified", "Diatoma"),
+      class2use_path = NULL,
+      temp_png_folder = dirname(png_dir),
+      is_annotation_mode = TRUE,
+      class_review_mode = FALSE,
+      is_loading = FALSE
+    )
+    config <- reactiveValues(
+      save_format = "sqlite",
+      data_source = "local",
+      db_folder = db_folder,
+      output_folder = file.path(base_dir, "out"),
+      png_output_folder = file.path(base_dir, "png_out"),
+      roi_folder = base_dir,
+      export_statistics = FALSE
+    )
+    module_env$setup_manual_save_server(
+      input, output, session, rv, config,
+      roi_path_map = reactiveVal(list()),  # PNG-only: no ROI files known
+      annotated_samples = reactiveVal(character()),
+      disable_nav_buttons = function() invisible(NULL),
+      enable_nav_buttons = function() invisible(NULL),
+      update_current_sample_status_fn = function(sample_name) invisible(NULL),
+      find_sample_png_dir = function(sample_name) png_dir
+    )
+  }
+
+  shiny::testServer(server_fn, {
+    session$setInputs(annotator_name = "Tester", save_btn = 1)
+  })
+
+  db_path <- get_db_path(db_folder)
+  expect_true(file.exists(db_path))
+  dims <- data.frame(roi_number = 1:2, width = c(10, 20), height = c(10, 20),
+                     area = c(100, 400), stringsAsFactors = FALSE)
+  saved <- load_annotations_db(db_path, sample_name, dims)
+  expect_true(!is.null(saved) && nrow(saved) == 2)
+})

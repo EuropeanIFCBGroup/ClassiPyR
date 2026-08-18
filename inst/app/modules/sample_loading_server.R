@@ -725,6 +725,7 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
     save_to_cache = save_to_cache,
     load_from_cache = load_from_cache,
     disable_nav_buttons = disable_nav_buttons,
-    enable_nav_buttons = enable_nav_buttons
+    enable_nav_buttons = enable_nav_buttons,
+    find_sample_png_dir = find_sample_png_dir
   )
 }

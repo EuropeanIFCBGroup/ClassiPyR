@@ -3,7 +3,8 @@
 setup_manual_save_server <- function(input, output, session, rv, config,
                                      roi_path_map, annotated_samples,
                                      disable_nav_buttons, enable_nav_buttons,
-                                     update_current_sample_status_fn) {
+                                     update_current_sample_status_fn,
+                                     find_sample_png_dir) {
   # --- Clear Annotations button (conditionally rendered) ---
   output$clear_btn_ui <- renderUI({
     is_enabled <- isTRUE(rv$is_annotation_mode) &&
@@ -120,6 +121,12 @@ setup_manual_save_server <- function(input, output, session, rv, config,
       roi_path <- roi_path_map()[[rv$current_sample]]
       adc_folder <- if (!is.null(roi_path)) dirname(roi_path) else NULL
 
+      # PNG-only samples have no ROI file; fall back to the sample's PNG
+      # folder like the navigation autosave (save_to_cache) does
+      if (is.null(adc_folder) && !is_dashboard) {
+        adc_folder <- find_sample_png_dir(rv$current_sample)
+      }
+
       # In dashboard mode, adc_folder may be NULL since there are no local ROI files
       if (is.null(adc_folder) && is_dashboard) {
         # Try to get ADC from dashboard cache for MAT saving
@@ -148,8 +155,13 @@ setup_manual_save_server <- function(input, output, session, rv, config,
         }
       }
 
-      if (is.null(adc_folder) && !is_dashboard) {
-        showNotification("Cannot find ROI data folder for this sample", type = "error")
+      # adc_folder is only consumed by the MAT backend; SQLite saves must not
+      # be blocked when it cannot be found
+      if (is.null(adc_folder) && !is_dashboard && save_fmt %in% c("mat", "both")) {
+        showNotification(
+          "Cannot find ROI data folder for this sample (required for MAT export)",
+          type = "error"
+        )
         return()
       }
 
@@ -181,7 +193,9 @@ setup_manual_save_server <- function(input, output, session, rv, config,
       })
 
       if (!isTRUE(result)) {
-        showNotification("Save returned no changes", type = "warning")
+        # save_sample_annotations() raises errors on failed saves (caught
+        # below), so FALSE here genuinely means there was nothing to save
+        showNotification("No changes to save", type = "message")
         return()
       }
 
