@@ -154,10 +154,12 @@ setup_init_server <- function(input, output, session) {
     defaults
   }
 
-  # Save settings to file
+  # Save settings to file. Merges into the existing file so call sites that
+  # pass only a subset of keys don't erase the others (a NULL value removes
+  # its key from the file).
   persist_settings <- function(settings) {
     tryCatch({
-      jsonlite::write_json(settings, settings_file, auto_unbox = TRUE, pretty = TRUE)
+      update_settings_file(settings, settings_file)
     }, error = function(e) {
       message("Could not save settings: ", e$message)
     })
