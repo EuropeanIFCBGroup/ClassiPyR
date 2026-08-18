@@ -359,7 +359,9 @@ setup_class_list_server <- function(input, output, session, rv, config,
       return()
     }
 
-    matches[unmatched_idx, c("class_name", "query_name", "matched_name", "accepted_name", "aphia_id", "status", "note")] <- updated_rows
+    # Assign by the result's own column names so the target list always
+    # matches what build_worms_match_rows() returns (9 columns)
+    matches[unmatched_idx, names(updated_rows)] <- updated_rows
     rv$worms_matches <- matches
 
     matched_n <- sum(!is.na(rv$worms_matches$aphia_id) & nzchar(rv$worms_matches$aphia_id))
