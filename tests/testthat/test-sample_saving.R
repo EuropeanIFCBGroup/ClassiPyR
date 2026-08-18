@@ -491,3 +491,41 @@ test_that("save_sample_annotations with save_format='both' creates both outputs"
   unlink(png_output_folder, recursive = TRUE)
   unlink(db_folder, recursive = TRUE)
 })
+
+test_that("save_sample_annotations propagates backend errors", {
+  # Parent of db_folder is a regular file, so the SQLite database can never
+  # be created. This must raise an error, not silently return FALSE, so that
+  # callers can distinguish a failed save from an empty one.
+  blocking_file <- tempfile()
+  file.create(blocking_file)
+  on.exit(unlink(blocking_file), add = TRUE)
+
+  cls <- data.frame(
+    file_name = "S_00001.png",
+    class_name = "b",
+    score = NA_real_,
+    stringsAsFactors = FALSE
+  )
+  changes <- data.frame(
+    image = "S_00001.png",
+    original_class = "a",
+    new_class = "b",
+    stringsAsFactors = FALSE
+  )
+
+  expect_error(save_sample_annotations(
+    sample_name = "S",
+    classifications = cls,
+    original_classifications = cls,
+    changes_log = changes,
+    temp_png_folder = tempdir(),
+    output_folder = file.path(tempdir(), "out"),
+    png_output_folder = file.path(tempdir(), "png_out"),
+    roi_folder = tempdir(),
+    class2use_path = NULL,
+    class2use = c("a", "b"),
+    save_format = "sqlite",
+    db_folder = file.path(blocking_file, "sub"),
+    export_statistics = FALSE
+  ))
+})

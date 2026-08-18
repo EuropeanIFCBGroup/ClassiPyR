@@ -63,7 +63,10 @@ subfolder inside \code{output_folder}. Set to \code{FALSE} to skip this
 export, e.g. when annotating from scratch.}
 }
 \value{
-TRUE on success, FALSE on failure
+TRUE on success, FALSE when there is nothing to save (empty changes
+  log) or required inputs are missing. Errors raised while writing any
+  backend propagate to the caller, so callers can distinguish a failed save
+  from an empty one.
 }
 \description{
 Saves the current annotations for a sample. By default annotations are
