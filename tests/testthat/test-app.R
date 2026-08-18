@@ -87,3 +87,49 @@ test_that("run_app errors for non-existent app directory", {
   expect_error(run_app(appDir= "not_an_app_dir"),
                "No Shiny application exists at the path")
 })
+
+test_that("class list auto-saves to and restores from DB with save_format 'both'", {
+  app_dir <- system.file("app", package = "ClassiPyR")
+  skip_if(app_dir == "", "Package not installed")
+
+  module_env <- new.env(parent = globalenv())
+  source(file.path(app_dir, "modules", "class_list_loading_server.R"),
+         local = module_env)
+
+  db_folder <- tempfile("classipyr_db_")
+  dir.create(db_folder)
+  on.exit(unlink(db_folder, recursive = TRUE), add = TRUE)
+
+  make_server <- function() {
+    function(input, output, session) {
+      rv <- reactiveValues(class2use = NULL, class2use_path = NULL)
+      config <- reactiveValues(save_format = "both", db_folder = db_folder)
+      module_env$setup_class_list_loading_server(
+        input, output, session, rv, config,
+        saved_settings = list(),
+        persist_settings = function(settings) invisible(NULL),
+        update_month_choices = function() invisible(NULL),
+        update_sample_list = function() invisible(NULL)
+      )
+    }
+  }
+
+  classes <- c("unclassified", "Diatoma", "Ciliophora")
+
+  # The auto-save observer must fire when save_format is "both"
+  shiny::testServer(make_server(), {
+    rv$class2use <- classes
+    session$flushReact()
+  })
+
+  db_path <- get_db_path(db_folder)
+  expect_true(file.exists(db_path))
+  expect_setequal(load_global_class_list_db(db_path), classes)
+
+  # The startup restore observer must also fire: a fresh session picks the
+  # class list up from the database
+  shiny::testServer(make_server(), {
+    session$flushReact()
+    expect_setequal(rv$class2use, classes)
+  })
+})

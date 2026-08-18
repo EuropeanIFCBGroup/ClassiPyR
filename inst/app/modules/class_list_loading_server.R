@@ -7,7 +7,7 @@ setup_class_list_loading_server <- function(input, output, session, rv, config,
   observe({
     if (!is.null(rv$class2use_path)) return()
 
-    if (grepl("sqlite", config$save_format, fixed = TRUE)) {
+    if (config$save_format %in% c("sqlite", "both")) {
       db_path <- get_db_path(config$db_folder)
       if (file.exists(db_path)) {
         db_classes <- load_global_class_list_db(db_path)
@@ -70,7 +70,7 @@ setup_class_list_loading_server <- function(input, output, session, rv, config,
   last_saved_class2use <- reactiveVal(NULL)
 
   observeEvent(rv$class2use, {
-    if (!grepl("sqlite", config$save_format, fixed = TRUE)) return()
+    if (!config$save_format %in% c("sqlite", "both")) return()
     classes <- rv$class2use
     if (is.null(classes) || length(classes) == 0) return()
     if (length(classes) == 1 && classes == "unclassified") return()
