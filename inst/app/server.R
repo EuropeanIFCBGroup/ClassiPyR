@@ -86,7 +86,8 @@ server <- function(input, output, session) {
     classifier_mat_files, classifier_h5_files,
     annotated_samples, classified_samples,
     discovery$get_filtered_samples,
-    update_current_sample_status_fn
+    update_current_sample_status_fn,
+    discovery$update_sample_list
   )
 
   # 4. Gallery: image rendering, pagination

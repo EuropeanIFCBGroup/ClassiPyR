@@ -6,7 +6,8 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
                                         classifier_h5_files, annotated_samples,
                                         classified_samples,
                                         get_filtered_samples,
-                                        update_current_sample_status_fn) {
+                                        update_current_sample_status_fn,
+                                        update_sample_list) {
   # Helper functions for classification file discovery
   find_csv_file <- function(sample_name) {
     csv_map <- csv_path_map()
@@ -103,7 +104,10 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
         original_classifications = rv$original_classifications,
         changes_log = rv$changes_log,
         is_annotation_mode = rv$is_annotation_mode,
-        has_classification = rv$has_classification
+        has_classification = rv$has_classification,
+        # Stored so the session-end autosave can find this sample's images
+        # even after navigation switched the active PNG folder
+        temp_png_folder = rv$temp_png_folder
       )
 
       tryCatch({
@@ -135,7 +139,11 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
           roi_folder = config$roi_folder,
           class2use_path = rv$class2use_path,
           class2use = rv$class2use,
-          annotator = input$annotator_name,
+          annotator = if (is.null(input$annotator_name) || !nzchar(input$annotator_name)) {
+            "Unknown"
+          } else {
+            input$annotator_name
+          },
           adc_folder = adc_folder_for_save,
           save_format = save_fmt_for_autosave,
           db_folder = config$db_folder,
@@ -463,7 +471,10 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
         mode_message <- "New annotation"
       }
 
-      finalize_sample_load(classifications, sample_name, mode_message)
+      # Suppress finalize's notification here: both branches below notify with
+      # the post-filter image count, and two toasts with differing counts is
+      # confusing (dashboard loads notify once, via finalize)
+      finalize_sample_load(classifications, sample_name, mode_message = NULL)
 
       if (!is.null(roi_path)) {
         extract_sample_images(sample_name, roi_path, classifications, mode_message = mode_message)
@@ -691,13 +702,13 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
       if (length(samples) > 0) {
         prev_sample <- samples[length(samples)]
         rv$pending_sample_select <- prev_sample
-        updateSelectizeInput(session, "sample_select", selected = prev_sample)
+        update_sample_list()
         load_sample_data(prev_sample)
       }
     } else if (current_idx > 1) {
       prev_sample <- samples[current_idx - 1]
       rv$pending_sample_select <- prev_sample
-      updateSelectizeInput(session, "sample_select", selected = prev_sample)
+      update_sample_list()
       load_sample_data(prev_sample)
     } else {
       showNotification("Already at first sample", type = "warning")
@@ -720,13 +731,13 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
       if (length(samples) > 0) {
         next_sample <- samples[1]
         rv$pending_sample_select <- next_sample
-        updateSelectizeInput(session, "sample_select", selected = next_sample)
+        update_sample_list()
         load_sample_data(next_sample)
       }
     } else if (current_idx < length(samples)) {
       next_sample <- samples[current_idx + 1]
       rv$pending_sample_select <- next_sample
-      updateSelectizeInput(session, "sample_select", selected = next_sample)
+      update_sample_list()
       load_sample_data(next_sample)
     } else {
       showNotification("No more samples in list", type = "warning")
