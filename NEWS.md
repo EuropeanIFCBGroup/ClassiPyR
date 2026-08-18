@@ -2,6 +2,10 @@
 
 ## New features
 
+- **Generic instrument mode**: ClassiPyR can now annotate images from *any* imaging instrument — or any image-labelling task — not just the IFCB. A new **Instrument** setting (IFCB / Generic) is available in the Settings panel. In generic mode, any folder of image files (PNG, JPEG, etc.) can be annotated: each subfolder (or the image folder itself) is treated as a sample, regardless of naming convention, and arbitrarily named images are supported. Generic mode also supports bulk-importing class-organised image folders via **Images → SQLite**. Annotations are stored in the portable SQLite database. The IFCB workflow is unchanged and remains the default. See the new "Annotating Images from Any Instrument (Generic Mode)" article for details.
+- The annotations database now stores the original image `file_name` alongside each ROI, so images with arbitrary names round-trip exactly. A transparent migration adds the column to existing databases; legacy IFCB annotations continue to load via the standard naming convention.
+- New exported helper functions for the generic image profile: `normalize_instrument_type()`, `parse_image_extensions()`, `image_file_pattern()`, and `assign_roi_numbers()`.
+- `is_valid_sample_name()`, `rescan_file_index()`, `scan_png_class_folder()`, `import_png_folder_to_db()`, `save_annotations_db()`, and `save_sample_annotations()` gained an `instrument_type` argument (default `"IFCB"`) to support generic, non-IFCB images. Image dimensions are now read from both PNG and JPEG headers.
 - New exported function `fill_unclassified_db()` backfills a partially imported sample. After importing only selected taxa with `import_png_folder_to_db()`, it reads each sample's complete ROI list from its `.adc` file and inserts the remaining ROIs as `unclassified` (marked as not yet reviewed), leaving existing annotations untouched.
 
 ## Bug fixes

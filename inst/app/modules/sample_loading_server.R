@@ -34,8 +34,18 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
     NULL
   }
 
+  get_instrument_type <- function() {
+    if (!is.null(config$instrument_type)) config$instrument_type else "IFCB"
+  }
+
   list_sample_png_files <- function(sample_name, sample_png_dir) {
     if (is.null(sample_png_dir) || !dir.exists(sample_png_dir)) return(character())
+    if (identical(get_instrument_type(), "generic")) {
+      # Any image with a configured extension; the whole folder is the sample
+      pattern <- ClassiPyR::image_file_pattern(config$image_extensions)
+      return(list.files(sample_png_dir, pattern = pattern,
+                        ignore.case = TRUE, full.names = FALSE))
+    }
     pattern <- paste0("^", sample_name, "_\\d+\\.png$")
     list.files(sample_png_dir, pattern = pattern, full.names = FALSE)
   }
@@ -44,15 +54,19 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
     png_files <- list_sample_png_files(sample_name, sample_png_dir)
     if (length(png_files) == 0) return(NULL)
 
-    rows <- lapply(png_files, function(fn) {
-      roi_number <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", fn))
-      dims <- ClassiPyR:::read_png_dimensions(file.path(sample_png_dir, fn))
-      data.frame(roi_number = roi_number, width = dims$width, height = dims$height, stringsAsFactors = FALSE)
+    instrument_type <- get_instrument_type()
+    roi_numbers <- ClassiPyR::assign_roi_numbers(png_files, instrument_type)
+
+    rows <- lapply(seq_along(png_files), function(i) {
+      dims <- ClassiPyR:::read_image_dimensions(file.path(sample_png_dir, png_files[i]))
+      data.frame(roi_number = roi_numbers[i], file_name = png_files[i],
+                 width = dims$width, height = dims$height,
+                 stringsAsFactors = FALSE)
     })
     dims_df <- do.call(rbind, rows)
     dims_df <- dims_df[!is.na(dims_df$roi_number), ]
     if (nrow(dims_df) == 0) return(NULL)
-    dims_df <- dims_df[!duplicated(dims_df$roi_number), ]
+    dims_df <- dims_df[!duplicated(dims_df$file_name), ]
     dims_df <- dims_df[order(dims_df$roi_number), ]
     dims_df$area <- dims_df$width * dims_df$height
     dims_df
@@ -62,8 +76,14 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
     if (is.null(classifications) || is.null(roi_dims) || nrow(classifications) == 0) {
       return(classifications)
     }
-    roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", classifications$file_name))
-    idx <- match(roi_numbers, roi_dims$roi_number)
+    # Match dimensions by file name when available (the stable identity for
+    # generic images); otherwise fall back to the IFCB ROI-number suffix.
+    if ("file_name" %in% names(roi_dims)) {
+      idx <- match(classifications$file_name, roi_dims$file_name)
+    } else {
+      roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", classifications$file_name))
+      idx <- match(roi_numbers, roi_dims$roi_number)
+    }
     classifications$width <- ifelse(!is.na(idx), roi_dims$width[idx], NA_real_)
     classifications$height <- ifelse(!is.na(idx), roi_dims$height[idx], NA_real_)
     classifications$roi_area <- ifelse(!is.na(idx), roi_dims$area[idx], NA_real_)

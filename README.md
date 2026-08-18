@@ -7,6 +7,8 @@
 
 A Shiny application for manual (human) image classification and validation of Imaging FlowCytobot (IFCB) plankton images. Built for researchers who need to validate automated classifications or create training datasets for machine learning classifiers.
 
+A **generic instrument mode** extends the same gallery-based, drag-select workflow to images (PNG, JPEG, etc.) from *any* imaging instrument — or any image-labelling task — storing annotations in a portable SQLite database.
+
 **Full documentation:** [europeanifcbgroup.github.io/ClassiPyR](https://europeanifcbgroup.github.io/ClassiPyR/)
 
 ## Background
@@ -16,6 +18,7 @@ A Shiny application for manual (human) image classification and validation of Im
 ## Features
 
 - **Dual Mode**: Validate existing classifications or annotate from scratch
+- **Generic Instrument Mode**: Annotate images (PNG/JPEG/…) from any imaging instrument or image-labelling task, with arbitrary file and folder names
 - **Class Review**: Review and reclassify all images of a specific class across the entire database
 - **IFCB Dashboard**: Work directly with remote IFCB Dashboard instances - no local data files needed
 - **Live Prediction**: One-click CNN classification via a remote Gradio API using [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb)
@@ -73,6 +76,7 @@ run_app(venv_path = venv_path)
 
 - [Getting Started](https://europeanifcbgroup.github.io/ClassiPyR/articles/getting-started.html) - First-time setup
 - [User Guide](https://europeanifcbgroup.github.io/ClassiPyR/articles/user-guide.html) - Complete feature reference
+- [Annotating Images from Any Instrument (Generic Mode)](https://europeanifcbgroup.github.io/ClassiPyR/articles/generic-instrument-mode.html) - Using ClassiPyR with non-IFCB images
 - [Class List Management](https://europeanifcbgroup.github.io/ClassiPyR/articles/class-management.html) - Managing classes for ifcb-analysis
 - [FAQ & Troubleshooting](https://europeanifcbgroup.github.io/ClassiPyR/articles/faq.html) - Common issues
 

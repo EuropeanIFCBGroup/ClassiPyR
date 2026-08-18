@@ -54,10 +54,13 @@ setup_manual_save_server <- function(input, output, session, rv, config,
       file.remove(mat_path)
     }
 
-    # Reconstruct roi_dimensions from current classifications
-    roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", rv$classifications$file_name))
+    # Reconstruct roi_dimensions from current classifications. Carry file_name
+    # so generic (non-IFCB) images keep their real names when reset.
+    instrument_type <- if (!is.null(config$instrument_type)) config$instrument_type else "IFCB"
+    roi_numbers <- ClassiPyR::assign_roi_numbers(rv$classifications$file_name, instrument_type)
     roi_dimensions <- data.frame(
       roi_number = roi_numbers,
+      file_name = rv$classifications$file_name,
       width = rv$classifications$width,
       height = rv$classifications$height,
       area = rv$classifications$roi_area,
@@ -115,7 +118,9 @@ setup_manual_save_server <- function(input, output, session, rv, config,
     }
 
     tryCatch({
-      is_dashboard <- identical(config$data_source, "dashboard")
+      instrument_type <- if (!is.null(config$instrument_type)) config$instrument_type else "IFCB"
+      is_generic <- identical(instrument_type, "generic")
+      is_dashboard <- !is_generic && identical(config$data_source, "dashboard")
 
       roi_path <- roi_path_map()[[rv$current_sample]]
       adc_folder <- if (!is.null(roi_path)) dirname(roi_path) else NULL
@@ -133,7 +138,7 @@ setup_manual_save_server <- function(input, output, session, rv, config,
         adc_folder <- if (!is.null(adc_path)) dirname(adc_path) else NULL
       }
 
-      save_fmt <- config$save_format
+      save_fmt <- if (is_generic) "sqlite" else config$save_format
 
       # In dashboard mode, if MAT save is requested but no ADC available, fall back to SQLite
       if (is_dashboard && is.null(adc_folder) && save_fmt %in% c("mat", "both")) {
@@ -148,7 +153,7 @@ setup_manual_save_server <- function(input, output, session, rv, config,
         }
       }
 
-      if (is.null(adc_folder) && !is_dashboard) {
+      if (is.null(adc_folder) && !is_dashboard && !is_generic) {
         showNotification("Cannot find ROI data folder for this sample", type = "error")
         return()
       }
@@ -176,7 +181,8 @@ setup_manual_save_server <- function(input, output, session, rv, config,
           adc_folder = adc_folder,
           save_format = save_fmt,
           db_folder = config$db_folder,
-          export_statistics = config$export_statistics
+          export_statistics = if (is_generic) FALSE else config$export_statistics,
+          instrument_type = instrument_type
         )
       })
 

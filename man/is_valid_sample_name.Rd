@@ -2,27 +2,39 @@
 % Please edit documentation in R/utils.R
 \name{is_valid_sample_name}
 \alias{is_valid_sample_name}
-\title{Validate IFCB sample name format}
+\title{Validate a sample name}
 \usage{
-is_valid_sample_name(sample_name)
+is_valid_sample_name(sample_name, instrument_type = "IFCB")
 }
 \arguments{
 \item{sample_name}{Sample name to validate}
+
+\item{instrument_type}{Instrument profile, \code{"IFCB"} (default) or
+\code{"generic"}.}
 }
 \value{
 TRUE if valid, FALSE otherwise
 }
 \description{
-Checks if a sample name matches the expected IFCB naming convention:
-DYYYYMMDDTHHMMSS_IFCBNNN (e.g., D20230101T120000_IFCB134).
+Checks whether a sample name is acceptable for the given instrument profile.
+}
+\details{
+In \code{"IFCB"} mode (default) the name must match the strict IFCB naming
+convention DYYYYMMDDTHHMMSS_IFCBNNN (e.g., \code{D20230101T120000_IFCB134}).
+
+In \code{"generic"} mode any non-empty name is accepted as long as it is safe
+to use as a folder name and HTML token: it must contain no path separators,
+no path-traversal sequences (\code{..}) and none of the HTML/filesystem
+unsafe characters (angle brackets, quotes, ampersand, colon, asterisk,
+question mark or pipe). This lets images from any imaging instrument - or any
+image labelling task - be annotated without the IFCB naming convention.
 }
 \examples{
-# Valid sample names
+# IFCB mode (default)
 is_valid_sample_name("D20230101T120000_IFCB134")
-is_valid_sample_name("D20220522T000439_IFCB1")
+is_valid_sample_name("invalid_name")                 # FALSE
 
-# Invalid sample names
-is_valid_sample_name("invalid_name")
-is_valid_sample_name("20230101T120000_IFCB134")  # Missing 'D' prefix
-is_valid_sample_name(NULL)
+# Generic mode accepts arbitrary safe names
+is_valid_sample_name("Station_A_slide3", "generic")  # TRUE
+is_valid_sample_name("../etc/passwd", "generic")      # FALSE (path traversal)
 }

@@ -9,7 +9,9 @@ import_png_folder_to_db(
   db_path,
   class2use,
   class_mapping = NULL,
-  annotator = "imported"
+  annotator = "imported",
+  instrument_type = "IFCB",
+  image_extensions = NULL
 )
 }
 \arguments{
@@ -25,6 +27,13 @@ names to target class names. Names are the source classes, values are the
 target classes. Classes not in the mapping are kept as-is.}
 
 \item{annotator}{Annotator name (defaults to \code{"imported"})}
+
+\item{instrument_type}{Instrument profile, \code{"IFCB"} (default) or
+\code{"generic"}. Passed to \code{\link{scan_png_class_folder}} so that
+generic, arbitrarily named images are accepted.}
+
+\item{image_extensions}{Image file extensions to scan in generic mode
+(default png/jpg/jpeg). Ignored in IFCB mode.}
 }
 \value{
 Named list with counts: \code{success}, \code{failed}

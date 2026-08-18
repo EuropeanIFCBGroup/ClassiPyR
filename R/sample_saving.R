@@ -27,6 +27,10 @@ NULL
 #'   This supports non-standard folder structures.
 #' @param save_format One of \code{"sqlite"} (default), \code{"mat"}, or
 #'   \code{"both"}. Controls which backend(s) are written.
+#' @param instrument_type Instrument profile, \code{"IFCB"} (default) or
+#'   \code{"generic"}. In generic mode only the SQLite backend is written
+#'   (MAT export is IFCB-specific) and ROI numbers are assigned from the image
+#'   file names.
 #' @param db_folder Path to the database folder for SQLite storage. Defaults to
 #'   \code{\link{get_default_db_dir}()}. Should be a local filesystem path,
 #'   not a network drive.
@@ -66,10 +70,17 @@ save_sample_annotations <- function(sample_name,
                                      adc_folder = NULL,
                                      save_format = "sqlite",
                                      db_folder = get_default_db_dir(),
-                                     export_statistics = TRUE) {
+                                     export_statistics = TRUE,
+                                     instrument_type = "IFCB") {
 
   if (is.null(sample_name) || is.null(classifications)) {
     return(FALSE)
+  }
+
+  # Generic mode is SQLite-only; MAT export is IFCB-specific.
+  instrument_type <- normalize_instrument_type(instrument_type)
+  if (instrument_type == "generic") {
+    save_format <- "sqlite"
   }
 
   # class2use_path is only required for MAT format (SQLite uses class2use vector)
@@ -110,7 +121,8 @@ save_sample_annotations <- function(sample_name,
         c2u <- load_class_list(class2use_path)
       }
       db_path <- get_db_path(db_folder)
-      save_annotations_db(db_path, sample_name, classifications, c2u, annotator)
+      save_annotations_db(db_path, sample_name, classifications, c2u, annotator,
+                          instrument_type = instrument_type)
     }
 
     # Save to .mat (requires Python + scipy)

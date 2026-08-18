@@ -19,7 +19,8 @@ save_sample_annotations(
   adc_folder = NULL,
   save_format = "sqlite",
   db_folder = get_default_db_dir(),
-  export_statistics = TRUE
+  export_statistics = TRUE,
+  instrument_type = "IFCB"
 )
 }
 \arguments{
@@ -61,6 +62,11 @@ not a network drive.}
 statistics CSV files are written to a \code{validation_statistics/}
 subfolder inside \code{output_folder}. Set to \code{FALSE} to skip this
 export, e.g. when annotating from scratch.}
+
+\item{instrument_type}{Instrument profile, \code{"IFCB"} (default) or
+\code{"generic"}. In generic mode only the SQLite backend is written
+(MAT export is IFCB-specific) and ROI numbers are assigned from the image
+file names.}
 }
 \value{
 TRUE on success, FALSE on failure

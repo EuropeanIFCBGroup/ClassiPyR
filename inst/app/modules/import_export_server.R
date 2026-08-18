@@ -798,10 +798,12 @@ setup_import_export_server <- function(input, output, session, rv, config,
       return()
     }
 
-    withProgress(message = "Scanning PNG folder...", value = 0, {
+    instrument_type <- if (!is.null(config$instrument_type)) config$instrument_type else "IFCB"
+    withProgress(message = "Scanning image folder...", value = 0, {
       incProgress(0.1, detail = "Reading folder structure...")
       scan_result <- tryCatch(
-        scan_png_class_folder(png_folder),
+        scan_png_class_folder(png_folder, instrument_type = instrument_type,
+                              image_extensions = config$image_extensions),
         error = function(e) {
           showNotification(paste("Scan failed:", e$message), type = "error")
           NULL
@@ -940,7 +942,9 @@ setup_import_export_server <- function(input, output, session, rv, config,
       result <- import_png_folder_to_db(
         png_folder, db_path, rv$class2use,
         class_mapping = png_import_state$class_mapping,
-        annotator = annotator
+        annotator = annotator,
+        instrument_type = if (!is.null(config$instrument_type)) config$instrument_type else "IFCB",
+        image_extensions = config$image_extensions
       )
       incProgress(0.9, detail = "Import complete")
     })

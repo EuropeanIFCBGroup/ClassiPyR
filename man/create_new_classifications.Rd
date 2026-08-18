@@ -9,7 +9,11 @@ create_new_classifications(sample_name, roi_dimensions)
 \arguments{
 \item{sample_name}{Sample name (e.g., "D20230101T120000_IFCB134")}
 
-\item{roi_dimensions}{Data frame from \code{\link{read_roi_dimensions}}}
+\item{roi_dimensions}{Data frame from \code{\link{read_roi_dimensions}}. When
+it contains a \code{file_name} column (as produced for generic,
+non-IFCB images), those file names are used directly; otherwise file names
+are reconstructed from \code{roi_number} using the IFCB convention
+\code{sample_NNNNN.png}.}
 }
 \value{
 Data frame with columns: file_name, class_name, score, width, height, roi_area

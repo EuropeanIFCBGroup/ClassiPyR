@@ -1,0 +1,208 @@
+---
+title: "Annotating Images from Any Instrument (Generic Mode)"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Annotating Images from Any Instrument (Generic Mode)}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+ClassiPyR was originally built for the Imaging FlowCytobot (IFCB), but its
+gallery-based, drag-select annotation workflow is useful for **any** image
+labelling task. **Generic instrument mode** removes the IFCB-specific
+assumptions so you can annotate a folder of ordinary image files — from a
+microscope, a camera trap, a benthic survey, a histology scanner, or any other
+source — and even non-scientific image-classification tasks.
+
+This vignette explains how generic mode differs from IFCB mode, how to lay out
+your images, and how annotations are stored.
+
+---
+
+## When to use generic mode
+
+Use **generic mode** when:
+
+- Your images are already exported as ordinary files (PNG, JPG, JPEG, ...).
+- Your file and folder names do **not** follow the IFCB convention
+  (`DYYYYMMDDTHHMMSS_IFCBNNN`).
+- You do not need MATLAB (`.mat`) output for the `ifcb-analysis` toolbox.
+
+Use the default **IFCB mode** when you work with raw IFCB data (`.roi`/`.adc`),
+the IFCB Dashboard, or need `.mat` export. IFCB mode is unchanged and remains
+the default — switching to generic mode does not affect IFCB workflows.
+
+---
+
+## Switching to generic mode
+
+1. Open **Settings**.
+2. Under **Instrument**, choose **Generic (any image source)**.
+3. Optionally adjust **Image file extensions** (default: `png, jpg, jpeg`).
+4. Set the **Image / ROI Data Folder** to the folder containing your images.
+5. Click **Save Settings**. The app re-scans the folder automatically.
+
+In generic mode the IFCB-specific controls (Dashboard, classification folder,
+threshold, MAT export, live CNN prediction) are hidden, and annotations are
+always stored in SQLite.
+
+---
+
+## Organising your images
+
+A **sample** in ClassiPyR is simply a folder of images. Generic mode supports
+two layouts.
+
+### 1. Flat folders (annotate from scratch)
+
+Point the data folder at a directory whose subfolders each contain a set of
+images. Each subfolder becomes one sample, named after the folder:
+
+```
+my_images/
+├── site_A_2024-05-01/
+│   ├── img_0001.jpg
+│   ├── img_0002.jpg
+│   └── close up (2).jpg
+└── site_B_2024-05-02/
+    ├── scan01.png
+    └── scan02.png
+```
+
+Here `site_A_2024-05-01` and `site_B_2024-05-02` are two samples. All images
+start as `unclassified`, ready for you to label them in the gallery.
+
+A single flat folder of images also works: point the data folder directly at
+`site_A_2024-05-01/` and that folder itself is treated as one sample.
+
+Any folder name is accepted as long as it is safe to use as a folder name (no
+path separators, no `..`, and none of the characters `< > " ' & : * ? |`).
+
+### 2. Class-organised folders (bulk import existing labels)
+
+If your images are already sorted into class subfolders, you can bulk-import
+them via **Settings → Import to SQLite → Images → SQLite**:
+
+```
+labelled_export/
+├── Cat/
+│   ├── photo_01.jpg
+│   └── photo_02.jpg
+└── Dog/
+    └── rex.jpeg
+```
+
+Each top-level subfolder is treated as a **class**. Every image becomes its own
+single-image sample (the sample name is the file name without its extension),
+so each image carries its own label. This is convenient for reviewing or
+correcting an existing classification.
+
+---
+
+## How images are identified
+
+IFCB images are named `SampleName_NNNNN.png`, where `NNNNN` is the ROI number.
+Generic images can have **any** name, so ClassiPyR assigns each image a stable
+*ROI number* derived from the alphabetical order of the file names within its
+folder.
+
+Crucially, the real file name is stored in the annotations database, so your
+arbitrary names (including names with spaces) round-trip exactly and your
+labels stay attached to the correct image across reloads.
+
+---
+
+## Where annotations are stored
+
+Generic mode always uses the **SQLite** backend (`annotations.sqlite` in the
+Database Folder). This is portable, requires no Python, and is the same database
+used by IFCB mode. You can query it directly, or use the package's loading
+functions:
+
+```{r eval=FALSE}
+library(ClassiPyR)
+
+db_path <- get_db_path("/path/to/db_folder")
+
+# List samples that have annotations
+list_annotated_samples_db(db_path)
+
+# Read annotations for one sample (file names are returned as stored)
+load_annotations_db(db_path, "site_A_2024-05-01", roi_dimensions = NULL)
+```
+
+The `annotations` table stores `sample_name`, `roi_number`, `class_name`,
+`annotator`, `timestamp`, and `file_name`. Because the file name is stored,
+annotations made in generic mode are fully self-describing.
+
+---
+
+## Programmatic import
+
+You can import a class-organised folder without the app:
+
+```{r eval=FALSE}
+db_path <- get_db_path("/path/to/db_folder")
+
+import_png_folder_to_db(
+  png_folder = "/data/labelled_export",
+  db_path = db_path,
+  class2use = c("Cat", "Dog"),
+  annotator = "reviewer",
+  instrument_type = "generic",
+  image_extensions = c("png", "jpg", "jpeg")
+)
+```
+
+---
+
+## Limitations in generic mode
+
+- No `.mat` (MATLAB / `ifcb-analysis`) export — SQLite only.
+- No IFCB Dashboard integration or live CNN prediction.
+- The year/month/instrument filters (which rely on IFCB date-stamped names) are
+  disabled; all samples are listed together.
+
+These are intentional: they keep generic mode simple and instrument-agnostic
+while leaving the full IFCB workflow untouched in IFCB mode.
+
+### Sample folder names must be unique
+
+A sample is identified by its folder name, not its full path. If two folders
+anywhere under the image folder share the same name (for example
+`2023/StationA` and `2024/StationA`), only the **first** one found is used as a
+sample and the others are ignored — a warning lists the duplicates during the
+scan. Give each image folder a unique name (e.g. `StationA_2023`,
+`StationA_2024`) so every folder is annotatable.
+
+### Adding images to an already-annotated sample
+
+Annotations are matched to images by file name, so a sample is loaded from the
+set of images that existed when it was last saved. If you add **new** image
+files to a folder that already has saved annotations, those new images are not
+picked up on reload (the previously stored annotations are shown instead). Add
+all of a sample's images before annotating it; if you must extend a sample
+later, remove its existing annotations first so the full folder is re-discovered,
+or re-import the folder with `import_png_folder_to_db()`.
+
+### Navigating large sample sets
+
+Because generic mode does not assume a timestamp in your file or folder names,
+the IFCB year → month → instrument drill-down is unavailable. Samples are
+instead chosen from a single, alphabetically sorted dropdown (which is
+searchable — start typing a sample name to filter it) together with the
+annotated / not-yet-annotated status filter.
+
+This is comfortable for tens or hundreds of samples, but with **thousands** of
+samples the flat list can be harder to navigate than the IFCB date hierarchy.
+If this affects your workflow, a practical workaround is to encode a grouping
+key in your folder names (for example a date or site prefix such as
+`2024-05-01_siteA`) so that related samples sort together and are easy to find
+by typing in the dropdown.

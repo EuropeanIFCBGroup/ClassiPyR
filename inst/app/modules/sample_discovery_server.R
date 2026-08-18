@@ -23,18 +23,36 @@ setup_sample_discovery_server <- function(input, output, session, rv, config,
     classifier_mat_files(safe_list(index_data$classifier_mat_files))
     classifier_h5_files(safe_list(index_data$classifier_h5_files))
 
-    years <- unique(substr(sample_names, 2, 5))
-    years <- sort(years)
-    first_year <- if (length(years) > 0) years[1] else "all"
-    updateSelectInput(session, "year_select",
-                      choices = c("All" = "all", setNames(years, years)),
-                      selected = first_year)
+    instrument_type <- if (!is.null(index_data$instrument_type)) {
+      index_data$instrument_type
+    } else {
+      "IFCB"
+    }
 
-    instruments <- unique(sub(".*_", "", sample_names))
-    instruments <- sort(instruments)
-    updateSelectInput(session, "instrument_select",
-                      choices = c("All" = "all", setNames(instruments, instruments)),
-                      selected = "all")
+    # The year/month filters rely on the IFCB DYYYYMMDD naming convention and
+    # are meaningless for generic samples. In generic mode collapse them to
+    # "All" so every discovered sample stays visible.
+    if (identical(instrument_type, "generic")) {
+      updateSelectInput(session, "year_select",
+                        choices = c("All" = "all"), selected = "all")
+      updateSelectInput(session, "month_select",
+                        choices = c("All" = "all"), selected = "all")
+      updateSelectInput(session, "instrument_select",
+                        choices = c("All" = "all"), selected = "all")
+    } else {
+      years <- unique(substr(sample_names, 2, 5))
+      years <- sort(years)
+      first_year <- if (length(years) > 0) years[1] else "all"
+      updateSelectInput(session, "year_select",
+                        choices = c("All" = "all", setNames(years, years)),
+                        selected = first_year)
+
+      instruments <- unique(sub(".*_", "", sample_names))
+      instruments <- sort(instruments)
+      updateSelectInput(session, "instrument_select",
+                        choices = c("All" = "all", setNames(instruments, instruments)),
+                        selected = "all")
+    }
 
     last_sync_time(index_data$timestamp)
     TRUE
@@ -95,8 +113,12 @@ setup_sample_discovery_server <- function(input, output, session, rv, config,
       roi_valid <- !is.null(roi_folder) && length(roi_folder) == 1 && !isTRUE(is.na(roi_folder)) && nzchar(roi_folder) && dir.exists(roi_folder)
       if (!roi_valid) return()
 
+      instrument_type <- if (!is.null(config$instrument_type)) config$instrument_type else "IFCB"
+
       cached <- load_file_index()
+      cached_instrument <- if (!is.null(cached$instrument_type)) cached$instrument_type else "IFCB"
       cache_valid <- !is.null(cached) &&
+        identical(cached_instrument, instrument_type) &&
         identical(cached$roi_folder, roi_folder) &&
         identical(cached$csv_folder, csv_folder) &&
         identical(cached$output_folder, output_folder)
@@ -107,7 +129,8 @@ setup_sample_discovery_server <- function(input, output, session, rv, config,
       }
 
       auto_sync <- config$auto_sync
-      if (!isTRUE(auto_sync) && !is.null(cached)) {
+      if (!isTRUE(auto_sync) && !is.null(cached) &&
+          identical(cached_instrument, instrument_type)) {
         populate_from_index(cached)
         return()
       }
@@ -117,6 +140,8 @@ setup_sample_discovery_server <- function(input, output, session, rv, config,
           roi_folder = roi_folder,
           csv_folder = csv_folder,
           output_folder = output_folder,
+          instrument_type = instrument_type,
+          image_extensions = config$image_extensions,
           verbose = FALSE,
           progress = function(value = NULL, detail = NULL) {
             if (!is.null(value)) {
@@ -150,10 +175,21 @@ setup_sample_discovery_server <- function(input, output, session, rv, config,
     rescan_trigger(rescan_trigger() + 1)
   })
 
+  # Helper: current instrument profile (defaults to IFCB)
+  current_instrument_type <- function() {
+    if (!is.null(config$instrument_type)) config$instrument_type else "IFCB"
+  }
+
   # Helper: update month and instrument choices
   update_month_choices <- function() {
     samples <- all_samples()
     if (length(samples) == 0) return()
+
+    # The year/month/instrument filters parse the IFCB DYYYYMMDD_IFCBnnn naming
+    # convention, which is meaningless for generic samples. Skip in generic mode
+    # so this does not overwrite the "All" choices set in populate_from_index
+    # (and avoid populating the instrument dropdown with arbitrary name tokens).
+    if (identical(current_instrument_type(), "generic")) return()
 
     year_val <- input$year_select
 

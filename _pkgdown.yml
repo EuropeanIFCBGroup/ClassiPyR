@@ -29,6 +29,8 @@ navbar:
         href: articles/getting-started.html
       - text: User Guide
         href: articles/user-guide.html
+      - text: Generic Instrument Mode
+        href: articles/generic-instrument-mode.html
       - text: Class List Management
         href: articles/class-management.html
       - text: '---'
@@ -112,6 +114,13 @@ reference:
   - download_dashboard_autoclass
   - resolve_sample_dataset
   - get_dashboard_cache_dir
+- title: Instrument Profiles
+  desc: Helpers for generic (non-IFCB) image annotation
+  contents:
+  - normalize_instrument_type
+  - parse_image_extensions
+  - image_file_pattern
+  - assign_roi_numbers
 - title: Utilities
   desc: Helper functions for IFCB data processing
   contents:

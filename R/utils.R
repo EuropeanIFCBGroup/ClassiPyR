@@ -154,6 +154,17 @@ load_file_index <- function() {
 #'   The callback receives named arguments \code{value} (numeric in [0, 1])
 #'   and \code{detail} (character message). Mainly intended for Shiny
 #'   progress bars.
+#' @param instrument_type Instrument profile, \code{"IFCB"} (default) or
+#'   \code{"generic"}. In generic mode any image-containing folder (named with a
+#'   safe folder name) is discovered as a sample and no IFCB
+#'   \code{.roi}/\code{.adc}/classifier scanning is performed. It is read from
+#'   saved settings only for a fully settings-driven rescan (i.e. when
+#'   \code{roi_folder} is also not supplied); when folders are passed explicitly
+#'   the supplied value (default \code{"IFCB"}) is used as-is.
+#' @param image_extensions Image file extensions to scan for in generic mode
+#'   (character vector or comma-separated string; default png/jpg/jpeg). Ignored
+#'   in IFCB mode. Like \code{instrument_type}, it is read from saved settings
+#'   only when \code{roi_folder} is not supplied.
 #' @return Invisibly returns the file index list, or NULL if roi_folder is invalid.
 #' @export
 #' @examples
@@ -180,7 +191,9 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
                               db_folder = NULL, data_source = "local",
                               dashboard_url = NULL,
                               dashboard_autoclass = FALSE,
-                              progress = NULL) {
+                              progress = NULL,
+                              instrument_type = "IFCB",
+                              image_extensions = NULL) {
   report_progress <- function(value = NULL, detail = NULL) {
     if (is.function(progress)) {
       tryCatch(progress(value = value, detail = detail), error = function(e) NULL)
@@ -188,7 +201,13 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
   }
 
   report_progress(0, "Preparing scan...")
-  # Read from saved settings if not provided
+  # Read from saved settings if not provided. A missing primary input folder
+  # (roi_folder) is the signal that this is a fully settings-driven rescan; only
+  # then do we honour the persisted instrument profile and image extensions.
+  # When the caller supplies folders explicitly we must NOT let persisted global
+  # state silently change the instrument mode (that would couple library/test
+  # callers to whatever was last saved in the UI).
+  settings_driven <- is.null(roi_folder)
   if (is.null(roi_folder) || is.null(csv_folder) || is.null(output_folder) ||
       is.null(db_folder)) {
     settings_path <- get_settings_path()
@@ -201,8 +220,17 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
       if (is.null(csv_folder)) csv_folder <- saved$csv_folder
       if (is.null(output_folder)) output_folder <- saved$output_folder
       if (is.null(db_folder)) db_folder <- saved$db_folder
+      if (settings_driven) {
+        if (is.null(image_extensions)) image_extensions <- saved$image_extensions
+        if (missing(instrument_type) && !is.null(saved$instrument_type)) {
+          instrument_type <- saved$instrument_type
+        }
+      }
     }
   }
+
+  instrument_type <- normalize_instrument_type(instrument_type)
+  image_extensions <- parse_image_extensions(image_extensions)
 
   # Fall back to default db folder if still NULL
   if (is.null(db_folder)) {
@@ -328,6 +356,99 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
     if (verbose) message("ROI/PNG source folder not set or does not exist: ", roi_folder)
     return(invisible(NULL))
   }
+
+  # ---- Generic instrument mode ---------------------------------------------
+  # Any image-containing folder is a sample, named after the folder. The folder
+  # may be the image folder itself (a flat set of images) or any of its
+  # subfolders. No IFCB .roi/.adc/.csv/.mat scanning is performed.
+  if (instrument_type == "generic") {
+    report_progress(0.1, "Scanning image folders...")
+    if (verbose) message("Scanning generic image folders in: ", roi_folder)
+
+    img_pattern <- image_file_pattern(image_extensions)
+    candidate_dirs <- c(roi_folder,
+                        list.dirs(roi_folder, recursive = TRUE, full.names = TRUE))
+    candidate_dirs <- unique(candidate_dirs)
+
+    png_map <- list()
+    sample_names <- character()
+    collisions <- character()
+    n_dirs <- length(candidate_dirs)
+
+    for (i in seq_along(candidate_dirs)) {
+      sample_dir <- candidate_dirs[[i]]
+      sn <- basename(sample_dir)
+      if (!is_valid_sample_name(sn, instrument_type = "generic")) next
+
+      has_img <- length(list.files(sample_dir, pattern = img_pattern,
+                                   ignore.case = TRUE, recursive = FALSE)) > 0
+      if (!has_img) next
+
+      # Samples are keyed by folder name. Two image folders sharing a basename
+      # (e.g. .../2023/StationA and .../2024/StationA) would otherwise collapse
+      # into one sample, silently dropping the second folder's images. Keep the
+      # first occurrence and record the collision so it can be surfaced.
+      if (!is.null(png_map[[sn]])) {
+        collisions <- c(collisions, sn)
+        if (verbose) {
+          message("  Duplicate sample folder name '", sn, "': keeping '",
+                  png_map[[sn]], "', ignoring '", sample_dir, "'")
+        }
+      } else {
+        sample_names <- c(sample_names, sn)
+        png_map[[sn]] <- sample_dir
+      }
+
+      if (i %% 500 == 0 || i == n_dirs) {
+        frac <- if (n_dirs > 0) i / n_dirs else 1
+        report_progress(0.1 + 0.6 * frac,
+                        paste0("Checking image folders (", i, "/", n_dirs, ")"))
+      }
+    }
+
+    sample_names <- unique(sample_names)
+    report_progress(0.8, paste0("Found ", length(sample_names), " image samples"))
+    if (verbose) message("  Found ", length(sample_names), " generic image samples")
+
+    if (length(collisions) > 0) {
+      dupes <- unique(collisions)
+      warning(length(dupes), " duplicate sample folder name(s) found while ",
+              "scanning '", roi_folder, "'; only the first folder for each name ",
+              "is used and the rest are ignored. Rename folders so sample names ",
+              "are unique: ", paste(dupes, collapse = ", "), call. = FALSE)
+    }
+
+    annotated <- character()
+    if (length(sample_names) > 0) {
+      db_path <- get_db_path(db_folder)
+      annotated_db <- list_annotated_samples_db(db_path)
+      annotated <- annotated_db[annotated_db %in% sample_names]
+    }
+
+    index_data <- list(
+      instrument_type = "generic",
+      image_extensions = image_extensions,
+      roi_folder = roi_folder,
+      csv_folder = csv_folder,
+      output_folder = output_folder,
+      sample_names = sample_names,
+      classified_samples = character(),
+      annotated_samples = annotated,
+      roi_path_map = list(),
+      png_sample_path_map = png_map,
+      csv_path_map = list(),
+      classifier_mat_files = list(),
+      classifier_h5_files = list(),
+      timestamp = as.character(Sys.time())
+    )
+
+    save_file_index(index_data)
+    report_progress(1, "Sync complete")
+    if (verbose) message("File index saved to: ", get_file_index_path())
+    return(invisible(index_data))
+  }
+  # ---- IFCB mode (default) -------------------------------------------------
+
   report_progress(0.08, "Scanning ROI files...")
 
   # Scan ROI files
@@ -358,7 +479,7 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
   for (i in seq_along(png_dirs)) {
     sample_dir <- png_dirs[[i]]
     sn <- basename(sample_dir)
-    if (!is_valid_sample_name(sn)) next
+    if (!is_valid_sample_name(sn, instrument_type = "IFCB")) next
 
     # Keep directory only when it actually contains sample PNGs
     has_png <- length(list.files(
@@ -472,6 +593,7 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
 
   # Save to cache
   index_data <- list(
+    instrument_type = "IFCB",
     roi_folder = roi_folder,
     csv_folder = csv_folder,
     output_folder = output_folder,
@@ -505,27 +627,47 @@ VALID_SAMPLE_NAME_PATTERN <- "^D\\d{8}T\\d{6}_IFCB\\d+$"
 PATH_SEPARATOR_CHARS <- "[/\\\\]"
 UNSAFE_CLASS_CHARS <- "[<>\"'&:*?|]"
 
-#' Validate IFCB sample name format
+#' Validate a sample name
 #'
-#' Checks if a sample name matches the expected IFCB naming convention:
-#' DYYYYMMDDTHHMMSS_IFCBNNN (e.g., D20230101T120000_IFCB134).
+#' Checks whether a sample name is acceptable for the given instrument profile.
+#'
+#' In \code{"IFCB"} mode (default) the name must match the strict IFCB naming
+#' convention DYYYYMMDDTHHMMSS_IFCBNNN (e.g., \code{D20230101T120000_IFCB134}).
+#'
+#' In \code{"generic"} mode any non-empty name is accepted as long as it is safe
+#' to use as a folder name and HTML token: it must contain no path separators,
+#' no path-traversal sequences (\code{..}) and none of the HTML/filesystem
+#' unsafe characters (angle brackets, quotes, ampersand, colon, asterisk,
+#' question mark or pipe). This lets images from any imaging instrument - or any
+#' image labelling task - be annotated without the IFCB naming convention.
 #'
 #' @param sample_name Sample name to validate
+#' @param instrument_type Instrument profile, \code{"IFCB"} (default) or
+#'   \code{"generic"}.
 #' @return TRUE if valid, FALSE otherwise
 #' @export
 #' @examples
-#' # Valid sample names
+#' # IFCB mode (default)
 #' is_valid_sample_name("D20230101T120000_IFCB134")
-#' is_valid_sample_name("D20220522T000439_IFCB1")
+#' is_valid_sample_name("invalid_name")                 # FALSE
 #'
-#' # Invalid sample names
-#' is_valid_sample_name("invalid_name")
-#' is_valid_sample_name("20230101T120000_IFCB134")  # Missing 'D' prefix
-#' is_valid_sample_name(NULL)
-is_valid_sample_name <- function(sample_name) {
-  if (is.null(sample_name) || length(sample_name) != 1 || !is.character(sample_name)) {
+#' # Generic mode accepts arbitrary safe names
+#' is_valid_sample_name("Station_A_slide3", "generic")  # TRUE
+#' is_valid_sample_name("../etc/passwd", "generic")      # FALSE (path traversal)
+is_valid_sample_name <- function(sample_name, instrument_type = "IFCB") {
+  if (is.null(sample_name) || length(sample_name) != 1 || !is.character(sample_name) ||
+      isTRUE(is.na(sample_name)) || !nzchar(sample_name)) {
     return(FALSE)
   }
+
+  if (normalize_instrument_type(instrument_type) == "generic") {
+    # Reject anything unsafe for a folder name / HTML token
+    if (grepl(PATH_SEPARATOR_CHARS, sample_name)) return(FALSE)
+    if (grepl(UNSAFE_CLASS_CHARS, sample_name)) return(FALSE)
+    if (grepl("\\.\\.", sample_name)) return(FALSE)
+    return(TRUE)
+  }
+
   grepl(VALID_SAMPLE_NAME_PATTERN, sample_name)
 }
 
@@ -702,6 +844,87 @@ read_roi_dimensions <- function(adc_path) {
   }, error = function(e) {
     stop("Failed to read ADC file: ", e$message)
   })
+}
+
+#' Read image dimensions from an image header
+#'
+#' Reads width and height from a PNG or JPEG file by inspecting the header
+#' bytes, without decoding the full image. Dispatches on the file extension and
+#' falls back to PNG. Returns \code{NA} values when the file is missing or not a
+#' recognised image.
+#'
+#' @param image_path Path to a PNG or JPEG file
+#' @return Named list with \code{width} and \code{height} (numeric)
+#' @keywords internal
+read_image_dimensions <- function(image_path) {
+  ext <- tolower(tools::file_ext(image_path))
+  if (ext %in% c("jpg", "jpeg")) {
+    return(read_jpeg_dimensions(image_path))
+  }
+  read_png_dimensions(image_path)
+}
+
+#' Read JPEG dimensions from image header
+#'
+#' Reads width and height from the first Start-Of-Frame (SOFn) marker of a JPEG
+#' file without decoding the image. Returns \code{NA} values when the file is
+#' missing or not a valid JPEG.
+#'
+#' @param jpeg_path Path to JPEG file
+#' @return Named list with \code{width} and \code{height} (numeric)
+#' @keywords internal
+read_jpeg_dimensions <- function(jpeg_path) {
+  na_result <- list(width = NA_real_, height = NA_real_)
+  if (!file.exists(jpeg_path)) return(na_result)
+
+  con <- file(jpeg_path, "rb")
+  on.exit(close(con), add = TRUE)
+
+  # JPEG starts with SOI marker 0xFFD8
+  soi <- readBin(con, what = "raw", n = 2)
+  if (length(soi) < 2 || soi[1] != as.raw(0xFF) || soi[2] != as.raw(0xD8)) {
+    return(na_result)
+  }
+
+  # SOFn markers carrying frame dimensions
+  sof_markers <- as.raw(c(0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
+                          0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF))
+
+  repeat {
+    # Find next marker: a 0xFF byte (possibly padded) followed by marker code
+    b <- readBin(con, what = "raw", n = 1)
+    if (length(b) == 0) return(na_result)
+    if (b != as.raw(0xFF)) next
+
+    marker <- readBin(con, what = "raw", n = 1)
+    if (length(marker) == 0) return(na_result)
+    while (marker == as.raw(0xFF)) {
+      marker <- readBin(con, what = "raw", n = 1)
+      if (length(marker) == 0) return(na_result)
+    }
+    # Standalone markers without a length field
+    if (marker == as.raw(0xD8) || marker == as.raw(0xD9) ||
+        (marker >= as.raw(0xD0) && marker <= as.raw(0xD7))) {
+      next
+    }
+
+    len_raw <- readBin(con, what = "raw", n = 2)
+    if (length(len_raw) < 2) return(na_result)
+    seg_len <- as.numeric(len_raw[1]) * 256 + as.numeric(len_raw[2])
+    if (seg_len < 2) return(na_result)
+
+    if (marker %in% sof_markers) {
+      # SOF payload: precision(1) height(2) width(2) ...
+      payload <- readBin(con, what = "raw", n = 5)
+      if (length(payload) < 5) return(na_result)
+      height <- as.numeric(payload[2]) * 256 + as.numeric(payload[3])
+      width <- as.numeric(payload[4]) * 256 + as.numeric(payload[5])
+      return(list(width = width, height = height))
+    }
+
+    # Skip this segment's payload and continue scanning
+    seek(con, where = seg_len - 2, origin = "current")
+  }
 }
 
 #' Read PNG dimensions from image header

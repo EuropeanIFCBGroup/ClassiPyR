@@ -310,7 +310,11 @@ load_from_classifier_mat <- function(mat_path, sample_name, class2use, roi_dimen
 #' for use when annotating a sample from scratch.
 #'
 #' @param sample_name Sample name (e.g., "D20230101T120000_IFCB134")
-#' @param roi_dimensions Data frame from \code{\link{read_roi_dimensions}}
+#' @param roi_dimensions Data frame from \code{\link{read_roi_dimensions}}. When
+#'   it contains a \code{file_name} column (as produced for generic,
+#'   non-IFCB images), those file names are used directly; otherwise file names
+#'   are reconstructed from \code{roi_number} using the IFCB convention
+#'   \code{sample_NNNNN.png}.
 #' @return Data frame with columns: file_name, class_name, score, width, height, roi_area
 #' @export
 #' @examples
@@ -329,8 +333,16 @@ load_from_classifier_mat <- function(mat_path, sample_name, class2use, roi_dimen
 #' )
 #' print(classifications)
 create_new_classifications <- function(sample_name, roi_dimensions) {
+  # Generic images carry their real file name in roi_dimensions; IFCB ROI
+  # dimensions (from the ADC file) only have roi_number, so reconstruct.
+  file_name <- if ("file_name" %in% names(roi_dimensions)) {
+    roi_dimensions$file_name
+  } else {
+    sprintf("%s_%05d.png", sample_name, roi_dimensions$roi_number)
+  }
+
   classifications <- data.frame(
-    file_name = sprintf("%s_%05d.png", sample_name, roi_dimensions$roi_number),
+    file_name = file_name,
     class_name = "unclassified",
     score = NA_real_,
     width = roi_dimensions$width,
@@ -351,6 +363,13 @@ create_new_classifications <- function(sample_name, roi_dimensions) {
 #' suffix is stripped (e.g. \code{Diatom_001} becomes \code{Diatom}).
 #'
 #' @param png_folder Path to the top-level folder containing class subfolders
+#' @param instrument_type Instrument profile, \code{"IFCB"} (default) or
+#'   \code{"generic"}. In IFCB mode file names must follow the
+#'   \code{SampleName_NNNNN.png} convention. In generic mode any image file name
+#'   is accepted: the file name (without extension) becomes the sample name and
+#'   a single ROI (number 1) is assigned, so each image is its own sample.
+#' @param image_extensions Image file extensions to scan in generic mode
+#'   (default png/jpg/jpeg). Ignored in IFCB mode.
 #' @return A list with components:
 #'   \describe{
 #'     \item{annotations}{Data frame with columns \code{sample_name},
@@ -366,25 +385,35 @@ create_new_classifications <- function(sample_name, roi_dimensions) {
 #' result$classes_found
 #' result$sample_names
 #' }
-scan_png_class_folder <- function(png_folder) {
+scan_png_class_folder <- function(png_folder, instrument_type = "IFCB",
+                                  image_extensions = NULL) {
   if (!dir.exists(png_folder)) {
     stop("PNG folder does not exist: ", png_folder)
   }
 
+  instrument_type <- normalize_instrument_type(instrument_type)
+  img_pattern <- if (instrument_type == "generic") {
+    image_file_pattern(image_extensions)
+  } else {
+    "\\.png$"
+  }
+
+  empty_result <- list(
+    annotations = data.frame(
+      sample_name = character(),
+      roi_number = integer(),
+      file_name = character(),
+      class_name = character(),
+      stringsAsFactors = FALSE
+    ),
+    classes_found = character(),
+    sample_names = character()
+  )
+
   subdirs <- list.dirs(png_folder, recursive = FALSE, full.names = TRUE)
 
   if (length(subdirs) == 0) {
-    return(list(
-      annotations = data.frame(
-        sample_name = character(),
-        roi_number = integer(),
-        file_name = character(),
-        class_name = character(),
-        stringsAsFactors = FALSE
-      ),
-      classes_found = character(),
-      sample_names = character()
-    ))
+    return(empty_result)
   }
 
   all_rows <- list()
@@ -392,19 +421,27 @@ scan_png_class_folder <- function(png_folder) {
 
   for (subdir in subdirs) {
     class_name <- sub("_\\d{3}$", "", basename(subdir))
-    png_files <- list.files(subdir, pattern = "\\.png$", full.names = FALSE)
+    png_files <- list.files(subdir, pattern = img_pattern,
+                            ignore.case = TRUE, full.names = FALSE)
 
     for (fn in png_files) {
-      # Parse sample_name and roi_number from filename
-      # Expected format: SampleName_NNNNN.png (5-digit ROI number)
-      m <- regmatches(fn, regexec("^(.+)_(\\d{5})\\.png$", fn))[[1]]
-      if (length(m) < 3) {
-        warning("Skipping file with unexpected name format: ", fn)
-        next
+      if (instrument_type == "generic") {
+        # Each image is its own sample (one ROI). Sample name is the file name
+        # without its extension, which keeps every image uniquely addressable.
+        sample_name <- tools::file_path_sans_ext(fn)
+        roi_number <- 1L
+      } else {
+        # Parse sample_name and roi_number from filename
+        # Expected format: SampleName_NNNNN.png (5-digit ROI number)
+        m <- regmatches(fn, regexec("^(.+)_(\\d{5})\\.png$", fn))[[1]]
+        if (length(m) < 3) {
+          warning("Skipping file with unexpected name format: ", fn)
+          next
+        }
+        sample_name <- m[2]
+        roi_number <- as.integer(m[3])
       }
 
-      sample_name <- m[2]
-      roi_number <- as.integer(m[3])
       roi_key <- paste0(sample_name, "_", roi_number)
 
       if (!is.null(seen_rois[[roi_key]])) {
@@ -425,17 +462,7 @@ scan_png_class_folder <- function(png_folder) {
   }
 
   if (length(all_rows) == 0) {
-    return(list(
-      annotations = data.frame(
-        sample_name = character(),
-        roi_number = integer(),
-        file_name = character(),
-        class_name = character(),
-        stringsAsFactors = FALSE
-      ),
-      classes_found = character(),
-      sample_names = character()
-    ))
+    return(empty_result)
   }
 
   annotations <- do.call(rbind, all_rows)
@@ -451,10 +478,11 @@ scan_png_class_folder <- function(png_folder) {
 #' Filter classifications to only include extracted images
 #'
 #' Filters a classifications data frame to only include ROIs that have
-#' corresponding PNG files in the extracted folder.
+#' corresponding image files in the extracted folder. Matching is by file name,
+#' so it works for IFCB PNG exports as well as generic image files (jpg, etc.).
 #'
 #' @param classifications Data frame of classifications (must have file_name column)
-#' @param extracted_folder Path to folder with extracted PNG images
+#' @param extracted_folder Path to folder with extracted image files
 #' @return Filtered classifications data frame
 #' @export
 #' @examples
@@ -470,6 +498,6 @@ filter_to_extracted <- function(classifications, extracted_folder) {
     return(classifications)
   }
 
-  extracted_files <- list.files(extracted_folder, pattern = "\\.png$")
+  extracted_files <- list.files(extracted_folder)
   classifications[classifications$file_name %in% extracted_files, ]
 }

@@ -181,6 +181,63 @@ test_that("is_valid_sample_name validates correct formats", {
   expect_false(is_valid_sample_name(123))
 })
 
+test_that("is_valid_sample_name in generic mode accepts safe arbitrary names", {
+  # IFCB-invalid names are accepted in generic mode
+  expect_true(is_valid_sample_name("Station_A_slide3", "generic"))
+  expect_true(is_valid_sample_name("microscope-batch-001", "generic"))
+  expect_true(is_valid_sample_name("My Image Set", "generic"))
+  expect_true(is_valid_sample_name("D20230314T001205_IFCB134", "generic"))
+
+  # Unsafe names are still rejected in generic mode
+  expect_false(is_valid_sample_name("../etc/passwd", "generic"))
+  expect_false(is_valid_sample_name("a/b", "generic"))
+  expect_false(is_valid_sample_name("bad:name", "generic"))
+  expect_false(is_valid_sample_name("bad?name", "generic"))
+  expect_false(is_valid_sample_name("", "generic"))
+  expect_false(is_valid_sample_name(NULL, "generic"))
+
+  # IFCB mode (default) still strict
+  expect_false(is_valid_sample_name("Station_A_slide3"))
+  expect_false(is_valid_sample_name("Station_A_slide3", "IFCB"))
+})
+
+test_that("read_image_dimensions reads PNG and JPEG headers", {
+  skip_if_not_installed("grDevices")
+  tmp_png <- tempfile(fileext = ".png")
+  tmp_jpg <- tempfile(fileext = ".jpg")
+  on.exit(unlink(c(tmp_png, tmp_jpg)), add = TRUE)
+
+  grDevices::png(tmp_png, width = 37, height = 21)
+  graphics::par(mar = c(0, 0, 0, 0))
+  graphics::plot.new()
+  grDevices::dev.off()
+
+  grDevices::jpeg(tmp_jpg, width = 48, height = 29)
+  graphics::par(mar = c(0, 0, 0, 0))
+  graphics::plot.new()
+  grDevices::dev.off()
+
+  png_dims <- ClassiPyR:::read_image_dimensions(tmp_png)
+  expect_equal(png_dims$width, 37)
+  expect_equal(png_dims$height, 21)
+
+  jpg_dims <- ClassiPyR:::read_image_dimensions(tmp_jpg)
+  expect_equal(jpg_dims$width, 48)
+  expect_equal(jpg_dims$height, 29)
+})
+
+test_that("read_image_dimensions returns NA for missing or non-image files", {
+  missing <- ClassiPyR:::read_image_dimensions(tempfile(fileext = ".png"))
+  expect_true(is.na(missing$width))
+
+  tmp_txt <- tempfile(fileext = ".jpg")
+  writeLines("not an image", tmp_txt)
+  on.exit(unlink(tmp_txt), add = TRUE)
+  bad <- ClassiPyR:::read_image_dimensions(tmp_txt)
+  expect_true(is.na(bad$width))
+  expect_true(is.na(bad$height))
+})
+
 test_that("get_sample_paths rejects invalid sample names", {
   expect_error(
     get_sample_paths("../../../etc/passwd", "/data"),

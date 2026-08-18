@@ -49,6 +49,7 @@ init_db_schema <- function(con) {
       annotator   TEXT,
       timestamp   TEXT DEFAULT (datetime('now')),
       is_manual   INTEGER NOT NULL DEFAULT 1,
+      file_name   TEXT,
       PRIMARY KEY (sample_name, roi_number)
     )
   ")
@@ -84,6 +85,12 @@ init_db_schema <- function(con) {
   cols <- dbGetQuery(con, "PRAGMA table_info(annotations)")
   if (!"is_manual" %in% cols$name) {
     dbExecute(con, "ALTER TABLE annotations ADD COLUMN is_manual INTEGER NOT NULL DEFAULT 1")
+  }
+  # Migration: add file_name column. Stores the real image file name so that
+  # generic (non-IFCB) images with arbitrary names round-trip correctly. Legacy
+  # IFCB rows have NULL file_name and fall back to reconstruction on load.
+  if (!"file_name" %in% cols$name) {
+    dbExecute(con, "ALTER TABLE annotations ADD COLUMN file_name TEXT")
   }
 
   tax_cols <- dbGetQuery(con, "PRAGMA table_info(class_taxonomy)")
@@ -336,6 +343,11 @@ load_global_class_list_db <- function(db_path) {
 #' @param is_manual Integer vector of 0/1 flags indicating whether each ROI was
 #'   manually reviewed (1) or not yet reviewed (0, corresponding to NaN in .mat
 #'   files). If \code{NULL} (the default), all ROIs are treated as reviewed.
+#' @param instrument_type Instrument profile, \code{"IFCB"} (default) or
+#'   \code{"generic"}. Used to derive ROI numbers from the image file names when
+#'   \code{classifications} has no \code{roi_number} column (IFCB parses the
+#'   5-digit suffix; generic assigns a stable number by sorted file name). The
+#'   real file name is stored in either case.
 #' @return TRUE on success, FALSE on failure
 #' @export
 #' @examples
@@ -346,7 +358,7 @@ load_global_class_list_db <- function(db_path) {
 #' }
 save_annotations_db <- function(db_path, sample_name, classifications,
                                 class2use, annotator = "Unknown",
-                                is_manual = NULL) {
+                                is_manual = NULL, instrument_type = "IFCB") {
   if (is.null(classifications) || nrow(classifications) == 0) {
     return(FALSE)
   }
@@ -358,8 +370,16 @@ save_annotations_db <- function(db_path, sample_name, classifications,
 
   init_db_schema(con)
 
-  # Extract ROI numbers from file_name (e.g., "D20230101T120000_IFCB134_00001.png" -> 1)
-  roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", classifications$file_name))
+  # Determine ROI numbers. Prefer an explicit roi_number column when the caller
+  # supplies one (e.g. PNG class-folder import); otherwise derive from the file
+  # name. For IFCB this parses the 5-digit suffix; for generic images it is a
+  # stable surrogate assigned by sorted file name. The real file name is stored
+  # alongside so generic images with arbitrary names round-trip exactly.
+  if ("roi_number" %in% names(classifications)) {
+    roi_numbers <- as.integer(classifications$roi_number)
+  } else {
+    roi_numbers <- assign_roi_numbers(classifications$file_name, instrument_type)
+  }
 
   if (is.null(is_manual)) {
     is_manual <- rep(1L, nrow(classifications))
@@ -372,6 +392,7 @@ save_annotations_db <- function(db_path, sample_name, classifications,
     annotator = annotator,
     timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
     is_manual = as.integer(is_manual),
+    file_name = classifications$file_name,
     stringsAsFactors = FALSE
   )
 
@@ -473,7 +494,7 @@ load_annotations_db <- function(db_path, sample_name, roi_dimensions) {
   on.exit(dbDisconnect(con), add = TRUE)
 
   rows <- dbGetQuery(con,
-    "SELECT roi_number, class_name FROM annotations WHERE sample_name = ? ORDER BY roi_number",
+    "SELECT roi_number, class_name, file_name FROM annotations WHERE sample_name = ? ORDER BY roi_number",
     params = list(sample_name)
   )
 
@@ -481,20 +502,37 @@ load_annotations_db <- function(db_path, sample_name, roi_dimensions) {
     return(NULL)
   }
 
-  # Match ROI dimensions by roi_number (safe lookup with NA fallback)
-  roi_data <- lapply(rows$roi_number, function(rn) {
-    idx <- which(roi_dimensions$roi_number == rn)
+  # Resolve the file name. Stored file names (generic images, and IFCB samples
+  # saved by recent versions) are used as-is; legacy IFCB rows have NULL
+  # file_name and are reconstructed from the ROI number.
+  file_name <- ifelse(
+    !is.na(rows$file_name) & nzchar(rows$file_name),
+    rows$file_name,
+    sprintf("%s_%05d.png", sample_name, rows$roi_number)
+  )
+
+  # Match ROI dimensions. When the dimensions carry a file_name column (generic
+  # images, where the file name is the stable identity) match on it; otherwise
+  # match on roi_number (IFCB ADC dimensions). Safe lookup with NA fallback.
+  match_by_file <- !is.null(roi_dimensions) && "file_name" %in% names(roi_dimensions)
+  lookup_dims <- function(i) {
+    idx <- if (match_by_file) {
+      which(roi_dimensions$file_name == file_name[i])
+    } else {
+      which(roi_dimensions$roi_number == rows$roi_number[i])
+    }
     if (length(idx) > 0) {
-      list(width = roi_dimensions$width[idx],
-           height = roi_dimensions$height[idx],
-           area = roi_dimensions$area[idx])
+      list(width = roi_dimensions$width[idx[1]],
+           height = roi_dimensions$height[idx[1]],
+           area = roi_dimensions$area[idx[1]])
     } else {
       list(width = NA_real_, height = NA_real_, area = NA_real_)
     }
-  })
+  }
+  roi_data <- lapply(seq_len(nrow(rows)), lookup_dims)
 
   classifications <- data.frame(
-    file_name = sprintf("%s_%05d.png", sample_name, rows$roi_number),
+    file_name = file_name,
     class_name = rows$class_name,
     score = NA_real_,
     width = vapply(roi_data, `[[`, numeric(1), "width"),
@@ -912,6 +950,11 @@ export_db_to_png <- function(db_path, sample_name, roi_path, png_folder,
 #'   names to target class names. Names are the source classes, values are the
 #'   target classes. Classes not in the mapping are kept as-is.
 #' @param annotator Annotator name (defaults to \code{"imported"})
+#' @param instrument_type Instrument profile, \code{"IFCB"} (default) or
+#'   \code{"generic"}. Passed to \code{\link{scan_png_class_folder}} so that
+#'   generic, arbitrarily named images are accepted.
+#' @param image_extensions Image file extensions to scan in generic mode
+#'   (default png/jpg/jpeg). Ignored in IFCB mode.
 #' @return Named list with counts: \code{success}, \code{failed}
 #' @export
 #' @examples
@@ -927,8 +970,12 @@ export_db_to_png <- function(db_path, sample_name, roi_path, png_folder,
 #' }
 import_png_folder_to_db <- function(png_folder, db_path, class2use,
                                      class_mapping = NULL,
-                                     annotator = "imported") {
-  scan_result <- scan_png_class_folder(png_folder)
+                                     annotator = "imported",
+                                     instrument_type = "IFCB",
+                                     image_extensions = NULL) {
+  instrument_type <- normalize_instrument_type(instrument_type)
+  scan_result <- scan_png_class_folder(png_folder, instrument_type = instrument_type,
+                                       image_extensions = image_extensions)
 
   counts <- list(success = 0L, failed = 0L)
 
@@ -955,11 +1002,12 @@ import_png_folder_to_db <- function(png_folder, db_path, class2use,
     classifications <- data.frame(
       file_name = sample_rows$file_name,
       class_name = sample_rows$class_name,
+      roi_number = sample_rows$roi_number,
       stringsAsFactors = FALSE
     )
 
     ok <- save_annotations_db(db_path, sn, classifications, class2use,
-                              annotator)
+                              annotator, instrument_type = instrument_type)
     if (isTRUE(ok)) {
       counts$success <- counts$success + 1L
     } else {

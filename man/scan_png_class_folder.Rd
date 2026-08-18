@@ -4,10 +4,23 @@
 \alias{scan_png_class_folder}
 \title{Scan a PNG folder with class subfolders}
 \usage{
-scan_png_class_folder(png_folder)
+scan_png_class_folder(
+  png_folder,
+  instrument_type = "IFCB",
+  image_extensions = NULL
+)
 }
 \arguments{
 \item{png_folder}{Path to the top-level folder containing class subfolders}
+
+\item{instrument_type}{Instrument profile, \code{"IFCB"} (default) or
+\code{"generic"}. In IFCB mode file names must follow the
+\code{SampleName_NNNNN.png} convention. In generic mode any image file name
+is accepted: the file name (without extension) becomes the sample name and
+a single ROI (number 1) is assigned, so each image is its own sample.}
+
+\item{image_extensions}{Image file extensions to scan in generic mode
+(default png/jpg/jpeg). Ignored in IFCB mode.}
 }
 \value{
 A list with components:

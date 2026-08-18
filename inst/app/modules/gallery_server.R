@@ -158,8 +158,11 @@ setup_gallery_server <- function(input, output, session, rv) {
         } else {
           sample_for_img <- rv$current_sample
         }
-        safe_sample <- htmltools::htmlEscape(sample_for_img)
-        img_src <- sprintf("%s/%s/%s", resource_path, safe_sample, safe_img_file)
+        # URL-encode path segments so generic file names containing spaces or
+        # other special characters resolve (no-op for IFCB names).
+        img_src <- sprintf("%s/%s/%s", resource_path,
+                           utils::URLencode(sample_for_img, reserved = TRUE),
+                           utils::URLencode(img_file, reserved = TRUE))
 
         div(
           class = card_class,

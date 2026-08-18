@@ -9,14 +9,15 @@ filter_to_extracted(classifications, extracted_folder)
 \arguments{
 \item{classifications}{Data frame of classifications (must have file_name column)}
 
-\item{extracted_folder}{Path to folder with extracted PNG images}
+\item{extracted_folder}{Path to folder with extracted image files}
 }
 \value{
 Filtered classifications data frame
 }
 \description{
 Filters a classifications data frame to only include ROIs that have
-corresponding PNG files in the extracted folder.
+corresponding image files in the extracted folder. Matching is by file name,
+so it works for IFCB PNG exports as well as generic image files (jpg, etc.).
 }
 \examples{
 \dontrun{

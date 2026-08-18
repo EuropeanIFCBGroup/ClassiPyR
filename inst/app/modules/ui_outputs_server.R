@@ -201,19 +201,28 @@ setup_ui_outputs_server <- function(input, output, session, rv, config,
 
   infer_roi_dims_from_png_local <- function(sample_name, sample_png_dir) {
     if (is.null(sample_png_dir) || !dir.exists(sample_png_dir)) return(NULL)
-    pattern <- paste0("^", sample_name, "_\\d+\\.png$")
-    png_files <- list.files(sample_png_dir, pattern = pattern, full.names = FALSE)
+    instrument_type <- if (!is.null(config$instrument_type)) config$instrument_type else "IFCB"
+    if (identical(instrument_type, "generic")) {
+      png_files <- list.files(sample_png_dir,
+                              pattern = ClassiPyR::image_file_pattern(config$image_extensions),
+                              ignore.case = TRUE, full.names = FALSE)
+    } else {
+      pattern <- paste0("^", sample_name, "_\\d+\\.png$")
+      png_files <- list.files(sample_png_dir, pattern = pattern, full.names = FALSE)
+    }
     if (length(png_files) == 0) return(NULL)
 
-    rows <- lapply(png_files, function(fn) {
-      roi_number <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", fn))
-      dims <- ClassiPyR:::read_png_dimensions(file.path(sample_png_dir, fn))
-      data.frame(roi_number = roi_number, width = dims$width, height = dims$height, stringsAsFactors = FALSE)
+    roi_numbers <- ClassiPyR::assign_roi_numbers(png_files, instrument_type)
+    rows <- lapply(seq_along(png_files), function(i) {
+      dims <- ClassiPyR:::read_image_dimensions(file.path(sample_png_dir, png_files[i]))
+      data.frame(roi_number = roi_numbers[i], file_name = png_files[i],
+                 width = dims$width, height = dims$height,
+                 stringsAsFactors = FALSE)
     })
     dims_df <- do.call(rbind, rows)
     dims_df <- dims_df[!is.na(dims_df$roi_number), ]
     if (nrow(dims_df) == 0) return(NULL)
-    dims_df <- dims_df[!duplicated(dims_df$roi_number), ]
+    dims_df <- dims_df[!duplicated(dims_df$file_name), ]
     dims_df <- dims_df[order(dims_df$roi_number), ]
     dims_df$area <- dims_df$width * dims_df$height
     dims_df

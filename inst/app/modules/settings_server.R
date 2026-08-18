@@ -11,13 +11,35 @@ setup_settings_server <- function(input, output, session, rv, config,
       size = "l",
       easyClose = TRUE,
 
-      # -- Data Source
-      h5("Data Source"),
+      # -- Instrument
+      h5("Instrument"),
+      radioButtons("cfg_instrument_type", NULL,
+                   choices = c("IFCB (Imaging FlowCytobot)" = "IFCB",
+                               "Generic (any image source)" = "generic"),
+                   selected = config$instrument_type, inline = TRUE),
+      tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 15px;",
+                 "IFCB mode reads raw IFCB data and uses the IFCB naming convention.",
+                 "Generic mode annotates any folder of images (e.g. PNG/JPG) from any",
+                 "imaging instrument or image-labelling task. Switch triggers a re-scan."),
+      conditionalPanel(
+        condition = "input.cfg_instrument_type == 'generic'",
+        textInput("cfg_image_extensions", "Image file extensions",
+                  value = config$image_extensions, width = "100%",
+                  placeholder = "png, jpg, jpeg"),
+        tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
+                   "Comma-separated list of image extensions to scan for.")
+      ),
+      hr(),
 
-      radioButtons("cfg_data_source", NULL,
-                   choices = c("Local Folders" = "local",
-                               "IFCB Dashboard" = "dashboard"),
-                   selected = config$data_source, inline = TRUE),
+      # -- Data Source (IFCB only; generic always uses local folders)
+      conditionalPanel(
+        condition = "input.cfg_instrument_type == 'IFCB'",
+        h5("Data Source"),
+        radioButtons("cfg_data_source", NULL,
+                     choices = c("Local Folders" = "local",
+                                 "IFCB Dashboard" = "dashboard"),
+                     selected = config$data_source, inline = TRUE)
+      ),
 
       conditionalPanel(
         condition = "input.cfg_data_source == 'dashboard'",
@@ -61,46 +83,57 @@ setup_settings_server <- function(input, output, session, rv, config,
       # -- Input Folders
       h5("Input Folders"),
 
-      # ROI/PNG Data — primary input, listed first
+      # ROI/PNG/Image Data — primary input, listed first.
+      # Shown in generic mode and in IFCB local mode (hidden for IFCB dashboard).
       conditionalPanel(
-        condition = "input.cfg_data_source == 'local'",
+        condition = "input.cfg_instrument_type == 'generic' || input.cfg_data_source == 'local'",
         div(
           style = "display: flex; gap: 5px; align-items: flex-end;",
           div(style = "flex: 1;",
-              textInput("cfg_roi_folder", "ROI/PNG Data Folder",
+              textInput("cfg_roi_folder", "Image / ROI Data Folder",
                         value = config$roi_folder, width = "100%")),
-          shinyDirButton("browse_roi_folder", "Browse", "Select ROI/PNG Data Folder",
+          shinyDirButton("browse_roi_folder", "Browse", "Select Image / ROI Data Folder",
                          class = "btn-outline-secondary", style = "margin-bottom: 15px;")
         ),
-        tags$small(class = "text-muted", style = "display: block; margin-top: -10px; margin-bottom: 20px;",
-                   "Folder containing raw IFCB files (.roi/.adc/.hdr) or extracted PNG images.")
+        conditionalPanel(
+          condition = "input.cfg_instrument_type == 'IFCB'",
+          tags$small(class = "text-muted", style = "display: block; margin-top: -10px; margin-bottom: 20px;",
+                     "Folder containing raw IFCB files (.roi/.adc/.hdr) or extracted PNG images.")
+        ),
+        conditionalPanel(
+          condition = "input.cfg_instrument_type == 'generic'",
+          tags$small(class = "text-muted", style = "display: block; margin-top: -10px; margin-bottom: 20px;",
+                     "Folder of images to annotate. Each subfolder (or the folder itself) is",
+                     "treated as a sample; its name is the sample name.")
+        )
       ),
 
-      # Classification folder
-      div(
-        style = "display: flex; gap: 5px; align-items: flex-end;",
-        div(style = "flex: 1;",
-            textInput("cfg_csv_folder", "Classification Folder (CSV/H5/MAT)",
-                      value = config$csv_folder, width = "100%")),
-        shinyDirButton("browse_csv_folder", "Browse", "Select Classification Folder",
-                       class = "btn-outline-secondary", style = "margin-bottom: 15px;")
-      ),
-
+      # Classification folder (IFCB only — pre-computed CSV/H5/MAT predictions)
       conditionalPanel(
-        condition = "input.cfg_data_source == 'local'",
-        tags$small(class = "text-muted", style = "display: block; margin-top: -10px; margin-bottom: 20px;",
-                   "Folder with pre-computed classifications used to pre-populate class labels for validation.")
+        condition = "input.cfg_instrument_type == 'IFCB'",
+        div(
+          style = "display: flex; gap: 5px; align-items: flex-end;",
+          div(style = "flex: 1;",
+              textInput("cfg_csv_folder", "Classification Folder (CSV/H5/MAT)",
+                        value = config$csv_folder, width = "100%")),
+          shinyDirButton("browse_csv_folder", "Browse", "Select Classification Folder",
+                         class = "btn-outline-secondary", style = "margin-bottom: 15px;")
+        ),
+        conditionalPanel(
+          condition = "input.cfg_data_source == 'local'",
+          tags$small(class = "text-muted", style = "display: block; margin-top: -10px; margin-bottom: 20px;",
+                     "Folder with pre-computed classifications used to pre-populate class labels for validation.")
+        ),
+        conditionalPanel(
+          condition = "input.cfg_data_source == 'dashboard'",
+          tags$small(class = "text-muted", style = "display: block; margin-top: -10px; margin-bottom: 20px;",
+                     "Optional. Use local classification files instead of dashboard auto-classifications.")
+        ),
+        checkboxInput("cfg_use_threshold", "Apply classification threshold",
+                      value = config$use_threshold),
+        tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
+                   "When enabled, classifications below the confidence threshold are marked as 'unclassified'.")
       ),
-      conditionalPanel(
-        condition = "input.cfg_data_source == 'dashboard'",
-        tags$small(class = "text-muted", style = "display: block; margin-top: -10px; margin-bottom: 20px;",
-                   "Optional. Use local classification files instead of dashboard auto-classifications.")
-      ),
-
-      checkboxInput("cfg_use_threshold", "Apply classification threshold",
-                    value = config$use_threshold),
-      tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
-                 "When enabled, classifications below the confidence threshold are marked as 'unclassified'."),
 
       checkboxInput("cfg_auto_sync", "Sync folders automatically on startup",
                     value = config$auto_sync),
@@ -127,33 +160,42 @@ setup_settings_server <- function(input, output, session, rv, config,
                         "not safe on network filesystems"),
                  "due to unreliable file locking."),
 
-      # Annotation storage format
-      selectInput("cfg_save_format", "Annotation Storage Format",
-                  choices = c(
-                    "SQLite (recommended)" = "sqlite",
-                    "MAT file (MATLAB compatible)" = "mat",
-                    "Both SQLite and MAT" = "both"
-                  ),
-                  selected = config$save_format),
-      tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
-                 "SQLite works out of the box. MAT files require Python and are only needed for ifcb-analysis compatibility."),
+      # Annotation storage format (IFCB only; generic mode always uses SQLite)
+      conditionalPanel(
+        condition = "input.cfg_instrument_type == 'IFCB'",
+        selectInput("cfg_save_format", "Annotation Storage Format",
+                    choices = c(
+                      "SQLite (recommended)" = "sqlite",
+                      "MAT file (MATLAB compatible)" = "mat",
+                      "Both SQLite and MAT" = "both"
+                    ),
+                    selected = config$save_format),
+        tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
+                   "SQLite works out of the box. MAT files require Python and are only needed for ifcb-analysis compatibility."),
 
-      # Output folder — only relevant for MAT/statistics
-      div(
-        style = "display: flex; gap: 5px; align-items: flex-end;",
-        div(style = "flex: 1;",
-            textInput("cfg_output_folder", "MAT / Statistics Output Folder",
-                      value = config$output_folder, width = "100%")),
-        shinyDirButton("browse_output_folder", "Browse", "Select Output Folder",
-                       class = "btn-outline-secondary", style = "margin-bottom: 15px;")
+        # Output folder — only relevant for MAT/statistics
+        div(
+          style = "display: flex; gap: 5px; align-items: flex-end;",
+          div(style = "flex: 1;",
+              textInput("cfg_output_folder", "MAT / Statistics Output Folder",
+                        value = config$output_folder, width = "100%")),
+          shinyDirButton("browse_output_folder", "Browse", "Select Output Folder",
+                         class = "btn-outline-secondary", style = "margin-bottom: 15px;")
+        ),
+        tags$small(class = "text-muted", style = "display: block; margin-top: -10px; margin-bottom: 20px;",
+                   "Folder for MAT annotation files and validation statistics CSV files."),
+
+        checkboxInput("cfg_export_statistics", "Export validation statistics",
+                      value = config$export_statistics),
+        tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
+                   "Write per-sample CSV files with classification accuracy to the output folder above.")
       ),
-      tags$small(class = "text-muted", style = "display: block; margin-top: -10px; margin-bottom: 20px;",
-                 "Folder for MAT annotation files and validation statistics CSV files."),
-
-      checkboxInput("cfg_export_statistics", "Export validation statistics",
-                    value = config$export_statistics),
-      tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
-                 "Write per-sample CSV files with classification accuracy to the output folder above."),
+      conditionalPanel(
+        condition = "input.cfg_instrument_type == 'generic'",
+        tags$small(class = "text-muted", style = "display: block; margin-bottom: 20px;",
+                   tags$strong("Annotations are stored in SQLite."),
+                   "MAT export and validation statistics are IFCB-specific and disabled in generic mode.")
+      ),
 
       # PNG output folder
       div(
@@ -191,19 +233,26 @@ setup_settings_server <- function(input, output, session, rv, config,
       tags$label("Import to SQLite", style = "font-weight: 600; display: block; margin-bottom: 5px;"),
       div(
         style = "display: flex; gap: 10px; margin-bottom: 5px;",
-        actionButton("import_mat_to_db_btn", ".mat \u2192 SQLite",
-                     icon = icon("file-import"), class = "btn-outline-secondary btn-sm"),
-        actionButton("import_png_to_db_btn", "PNG \u2192 SQLite",
+        conditionalPanel(
+          condition = "input.cfg_instrument_type == 'IFCB'",
+          actionButton("import_mat_to_db_btn", ".mat \u2192 SQLite",
+                       icon = icon("file-import"), class = "btn-outline-secondary btn-sm")
+        ),
+        actionButton("import_png_to_db_btn", "Images \u2192 SQLite",
                      icon = icon("file-import"), class = "btn-outline-secondary btn-sm")
       ),
       tags$small(class = "text-muted", style = "display: block; margin-bottom: 10px;",
-                 "Bulk import annotated samples from .mat files or PNG class folders."),
+                 "Bulk import annotated samples from class-organized image folders",
+                 tags$span(class = "ifcb-only", "(or .mat files in IFCB mode)"), "."),
 
       tags$label("Export from SQLite", style = "font-weight: 600; display: block; margin-bottom: 5px;"),
       div(
         style = "display: flex; gap: 10px; margin-bottom: 5px;",
-        actionButton("export_db_to_mat_btn", "SQLite \u2192 .mat",
-                     icon = icon("file-export"), class = "btn-outline-secondary btn-sm"),
+        conditionalPanel(
+          condition = "input.cfg_instrument_type == 'IFCB'",
+          actionButton("export_db_to_mat_btn", "SQLite \u2192 .mat",
+                       icon = icon("file-export"), class = "btn-outline-secondary btn-sm")
+        ),
         actionButton("export_db_to_png_btn", "SQLite \u2192 PNG",
                      icon = icon("file-export"), class = "btn-outline-secondary btn-sm")
       ),
@@ -211,8 +260,11 @@ setup_settings_server <- function(input, output, session, rv, config,
         style = "display: flex; gap: 10px; margin-bottom: 5px;",
         actionButton("export_db_to_zip_btn", "SQLite \u2192 ZIP",
                      icon = icon("file-export"), class = "btn-outline-secondary btn-sm"),
-        actionButton("export_db_to_matlab_zip_btn", "SQLite \u2192 MATLAB ZIP",
-                     icon = icon("file-export"), class = "btn-outline-secondary btn-sm")
+        conditionalPanel(
+          condition = "input.cfg_instrument_type == 'IFCB'",
+          actionButton("export_db_to_matlab_zip_btn", "SQLite \u2192 MATLAB ZIP",
+                       icon = icon("file-export"), class = "btn-outline-secondary btn-sm")
+        )
       ),
       div(
         style = "margin-bottom: 5px;",
@@ -226,28 +278,30 @@ setup_settings_server <- function(input, output, session, rv, config,
                    "Leave empty to export all classes.")
       ),
 
+      # -- Live Prediction (IFCB only; uses the IFCB CNN Gradio API)
+      conditionalPanel(
+        condition = "input.cfg_instrument_type == 'IFCB'",
+        hr(),
+        h5("Live Prediction"),
+
+        textInput("cfg_gradio_url", "Gradio API URL",
+                  value = config$gradio_url, width = "100%",
+                  placeholder = "https://irfcb-classify.hf.space"),
+        tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
+                   "Enter Gradio API URL for CNN classification. Example: https://irfcb-classify.hf.space"),
+
+        selectInput("cfg_prediction_model", "Prediction Model",
+                    choices = if (nzchar(config$prediction_model)) config$prediction_model else NULL,
+                    selected = if (nzchar(config$prediction_model)) config$prediction_model else NULL,
+                    width = "100%"),
+        tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
+                   "Select a CNN model for classification. Models are fetched from the Gradio API.")
+      ),
+
       hr(),
 
-      # -- Live Prediction
-      h5("Live Prediction"),
-
-      textInput("cfg_gradio_url", "Gradio API URL",
-                value = config$gradio_url, width = "100%",
-                placeholder = "https://irfcb-classify.hf.space"),
-      tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
-                 "Enter Gradio API URL for CNN classification. Example: https://irfcb-classify.hf.space"),
-
-      selectInput("cfg_prediction_model", "Prediction Model",
-                  choices = if (nzchar(config$prediction_model)) config$prediction_model else NULL,
-                  selected = if (nzchar(config$prediction_model)) config$prediction_model else NULL,
-                  width = "100%"),
-      tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
-                 "Select a CNN model for classification. Models are fetched from the Gradio API."),
-
-      hr(),
-
-      # -- IFCB Options
-      h5("IFCB Options"),
+      # -- Measurement / IFCB Options
+      h5("Measurement"),
 
       div(
         style = "display: flex; gap: 10px; align-items: center; margin-top: 10px;",
@@ -378,26 +432,48 @@ setup_settings_server <- function(input, output, session, rv, config,
 
   # apply_settings closure
   apply_settings <- function(close_modal = FALSE, notification = "Settings saved.") {
+    # Helper: fall back to the existing config value when an input is not
+    # rendered (some controls are hidden in generic mode and read as NULL).
+    `%||%` <- function(a, b) if (is.null(a)) b else a
+
+    instrument_type <- input$cfg_instrument_type %||% config$instrument_type
+    is_generic <- identical(instrument_type, "generic")
+
+    # Inputs that may be hidden depending on instrument mode
+    in_csv_folder <- input$cfg_csv_folder %||% config$csv_folder
+    in_data_source <- if (is_generic) "local" else (input$cfg_data_source %||% config$data_source)
+    in_use_threshold <- input$cfg_use_threshold %||% config$use_threshold
+    in_output_folder <- input$cfg_output_folder %||% config$output_folder
+    in_export_statistics <- input$cfg_export_statistics %||% config$export_statistics
+    # Generic mode always stores to SQLite (MAT export is IFCB-specific)
+    in_save_format <- if (is_generic) "sqlite" else (input$cfg_save_format %||% config$save_format)
+    in_image_extensions <- input$cfg_image_extensions %||% config$image_extensions
+
     roi_changed <- !identical(config$roi_folder, input$cfg_roi_folder)
-    csv_changed <- !identical(config$csv_folder, input$cfg_csv_folder)
-    data_source_changed <- !identical(config$data_source, input$cfg_data_source)
+    csv_changed <- !identical(config$csv_folder, in_csv_folder)
+    data_source_changed <- !identical(config$data_source, in_data_source)
     dashboard_url_changed <- !identical(config$dashboard_url, input$cfg_dashboard_url)
-    paths_changed <- roi_changed || csv_changed || data_source_changed || dashboard_url_changed
+    instrument_changed <- !identical(config$instrument_type, instrument_type)
+    ext_changed <- !identical(config$image_extensions, in_image_extensions)
+    paths_changed <- roi_changed || csv_changed || data_source_changed ||
+      dashboard_url_changed || instrument_changed || ext_changed
 
     old_db_folder <- config$db_folder
 
-    config$csv_folder <- input$cfg_csv_folder
+    config$instrument_type <- instrument_type
+    config$image_extensions <- in_image_extensions
+    config$csv_folder <- in_csv_folder
     config$roi_folder <- input$cfg_roi_folder
-    config$output_folder <- input$cfg_output_folder
+    config$output_folder <- in_output_folder
     config$png_output_folder <- input$cfg_png_output_folder
     config$db_folder <- input$cfg_db_folder
-    config$use_threshold <- input$cfg_use_threshold
+    config$use_threshold <- in_use_threshold
     config$pixels_per_micron <- input$cfg_pixels_per_micron
     config$auto_sync <- input$cfg_auto_sync
-    config$save_format <- input$cfg_save_format
-    config$export_statistics <- input$cfg_export_statistics
+    config$save_format <- in_save_format
+    config$export_statistics <- in_export_statistics
     config$skip_class_png <- input$cfg_skip_class_png
-    config$data_source <- input$cfg_data_source
+    config$data_source <- in_data_source
     config$dashboard_url <- input$cfg_dashboard_url
     config$dashboard_autoclass <- input$cfg_dashboard_autoclass
     config$dashboard_parallel_downloads <- if (!is.null(input$cfg_dashboard_parallel_downloads)) input$cfg_dashboard_parallel_downloads else 5
@@ -412,20 +488,22 @@ setup_settings_server <- function(input, output, session, rv, config,
     }
 
     persist_settings(list(
-      csv_folder = input$cfg_csv_folder,
+      instrument_type = instrument_type,
+      image_extensions = in_image_extensions,
+      csv_folder = in_csv_folder,
       roi_folder = input$cfg_roi_folder,
-      output_folder = input$cfg_output_folder,
+      output_folder = in_output_folder,
       png_output_folder = input$cfg_png_output_folder,
       db_folder = input$cfg_db_folder,
-      use_threshold = input$cfg_use_threshold,
+      use_threshold = in_use_threshold,
       pixels_per_micron = input$cfg_pixels_per_micron,
       auto_sync = input$cfg_auto_sync,
-      save_format = input$cfg_save_format,
-      export_statistics = input$cfg_export_statistics,
+      save_format = in_save_format,
+      export_statistics = in_export_statistics,
       skip_class_png = input$cfg_skip_class_png,
       class2use_path = rv$class2use_path,
       python_venv_path = config$python_venv_path,
-      data_source = input$cfg_data_source,
+      data_source = in_data_source,
       dashboard_url = input$cfg_dashboard_url,
       dashboard_autoclass = input$cfg_dashboard_autoclass,
       dashboard_parallel_downloads = config$dashboard_parallel_downloads,

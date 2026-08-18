@@ -13,7 +13,9 @@ rescan_file_index(
   data_source = "local",
   dashboard_url = NULL,
   dashboard_autoclass = FALSE,
-  progress = NULL
+  progress = NULL,
+  instrument_type = "IFCB",
+  image_extensions = NULL
 )
 }
 \arguments{
@@ -44,6 +46,19 @@ auto-classifications are used instead). Defaults to \code{FALSE}.}
 The callback receives named arguments \code{value} (numeric in [0, 1])
 and \code{detail} (character message). Mainly intended for Shiny
 progress bars.}
+
+\item{instrument_type}{Instrument profile, \code{"IFCB"} (default) or
+\code{"generic"}. In generic mode any image-containing folder (named with a
+safe folder name) is discovered as a sample and no IFCB
+\code{.roi}/\code{.adc}/classifier scanning is performed. It is read from
+saved settings only for a fully settings-driven rescan (i.e. when
+\code{roi_folder} is also not supplied); when folders are passed explicitly
+the supplied value (default \code{"IFCB"}) is used as-is.}
+
+\item{image_extensions}{Image file extensions to scan for in generic mode
+(character vector or comma-separated string; default png/jpg/jpeg). Ignored
+in IFCB mode. Like \code{instrument_type}, it is read from saved settings
+only when \code{roi_folder} is not supplied.}
 }
 \value{
 Invisibly returns the file index list, or NULL if roi_folder is invalid.

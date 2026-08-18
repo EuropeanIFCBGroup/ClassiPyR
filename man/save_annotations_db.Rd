@@ -10,7 +10,8 @@ save_annotations_db(
   classifications,
   class2use,
   annotator = "Unknown",
-  is_manual = NULL
+  is_manual = NULL,
+  instrument_type = "IFCB"
 )
 }
 \arguments{
@@ -29,6 +30,12 @@ save_annotations_db(
 \item{is_manual}{Integer vector of 0/1 flags indicating whether each ROI was
 manually reviewed (1) or not yet reviewed (0, corresponding to NaN in .mat
 files). If \code{NULL} (the default), all ROIs are treated as reviewed.}
+
+\item{instrument_type}{Instrument profile, \code{"IFCB"} (default) or
+\code{"generic"}. Used to derive ROI numbers from the image file names when
+\code{classifications} has no \code{roi_number} column (IFCB parses the
+5-digit suffix; generic assigns a stable number by sorted file name). The
+real file name is stored in either case.}
 }
 \value{
 TRUE on success, FALSE on failure
