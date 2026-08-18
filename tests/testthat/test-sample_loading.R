@@ -405,3 +405,19 @@ test_that("read_roi_dimensions reads real ADC file correctly", {
   # Most ROIs should have positive dimensions
   expect_true(sum(dims$area > 0) > 0)
 })
+
+test_that("load_from_csv backfills a missing score column", {
+  temp_csv <- tempfile(fileext = ".csv")
+  on.exit(unlink(temp_csv), add = TRUE)
+  mock_data <- data.frame(
+    file_name = c("D20230101_00001.png", "D20230101_00002.png"),
+    class_name = c("Diatom", "Ciliate"),
+    stringsAsFactors = FALSE
+  )
+  write.csv(mock_data, temp_csv, row.names = FALSE)
+
+  classifications <- load_from_csv(temp_csv)
+
+  expect_true("score" %in% names(classifications))
+  expect_true(all(is.na(classifications$score)))
+})

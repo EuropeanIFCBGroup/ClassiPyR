@@ -210,3 +210,51 @@ test_that("Save button saves PNG-only samples to SQLite (no ROI file needed)", {
   saved <- load_annotations_db(db_path, sample_name, dims)
   expect_true(!is.null(saved) && nrow(saved) == 2)
 })
+
+test_that("gallery handles an empty image list without a phantom row", {
+  app_dir <- system.file("app", package = "ClassiPyR")
+  skip_if(app_dir == "", "Package not installed")
+
+  # The gallery module uses bare dplyr verbs (attached by global.R in the app)
+  suppressPackageStartupMessages(library(dplyr))
+
+  module_env <- new.env(parent = globalenv())
+  source(file.path(app_dir, "modules", "gallery_server.R"), local = module_env)
+
+  png_dir <- tempfile("classipyr_gallery_")
+  dir.create(png_dir)
+  on.exit(unlink(png_dir, recursive = TRUE), add = TRUE)
+
+  empty_cls <- data.frame(
+    file_name = character(),
+    class_name = character(),
+    score = numeric(),
+    width = numeric(), height = numeric(), roi_area = numeric(),
+    stringsAsFactors = FALSE
+  )
+
+  server_fn <- function(input, output, session) {
+    rv <- reactiveValues(
+      classifications = empty_cls,
+      original_classifications = empty_cls,
+      current_sample = "D20230101T120000_IFCB134",
+      temp_png_folder = png_dir,
+      is_annotation_mode = FALSE,
+      class_review_mode = FALSE,
+      selected_images = character(),
+      current_page = 1,
+      select_all_state = "first"
+    )
+    module_env$setup_gallery_server(input, output, session, rv)
+  }
+
+  shiny::testServer(server_fn, {
+    session$setInputs(class_filter = "all", images_per_page = "100")
+    # Before the fix, images[1:0, ] produced a 1-row all-NA frame, the
+    # "No images to display" branch was unreachable, and page_info printed
+    # "Page 1/1 (1-0 of 0)"
+    expect_match(output$page_info, "0-0 of 0", fixed = TRUE)
+    expect_match(as.character(output$image_gallery$html), "No images to display",
+                 fixed = TRUE)
+  })
+})

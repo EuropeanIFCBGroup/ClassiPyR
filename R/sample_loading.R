@@ -63,6 +63,9 @@ load_from_csv <- function(csv_path, use_threshold = TRUE) {
   if (!"roi_area" %in% names(classifications)) {
     classifications$roi_area <- NA_real_
   }
+  if (!"score" %in% names(classifications)) {
+    classifications$score <- NA_real_
+  }
 
   classifications
 }

@@ -56,6 +56,19 @@ setup_gallery_server <- function(input, output, session, rv) {
     per_page <- as.numeric(input$images_per_page)
     if (is.null(per_page)) per_page <- 100
 
+    # Guard before slicing: images[1:0, ] on a 0-row frame would return a
+    # phantom 1-row all-NA frame (1:0 is c(1, 0)), breaking the empty check
+    if (nrow(images) == 0) {
+      return(list(
+        images = images,
+        current_page = 1,
+        total_pages = 0,
+        total_images = 0,
+        start_idx = 0,
+        end_idx = 0
+      ))
+    }
+
     total_pages <- ceiling(nrow(images) / per_page)
     current_page <- min(rv$current_page, max(1, total_pages))
 
@@ -80,17 +93,23 @@ setup_gallery_server <- function(input, output, session, rv) {
             p$start_idx, p$end_idx, p$total_images)
   })
 
+  # Navigate from the clamped page actually displayed, not rv$current_page,
+  # which can be stale/out-of-range after the image list shrinks (e.g. after
+  # relabeling away the last page of a filtered class)
   observeEvent(input$prev_page, {
-    if (rv$current_page > 1) {
-      rv$current_page <- rv$current_page - 1
+    req(paginated_images())
+    p <- paginated_images()
+    if (p$current_page > 1) {
+      rv$current_page <- p$current_page - 1
       rv$select_all_state <- "first"  # Reset select_all state when navigating
     }
   })
 
   observeEvent(input$next_page, {
     req(paginated_images())
-    if (rv$current_page < paginated_images()$total_pages) {
-      rv$current_page <- rv$current_page + 1
+    p <- paginated_images()
+    if (p$current_page < p$total_pages) {
+      rv$current_page <- p$current_page + 1
       rv$select_all_state <- "first"  # Reset select_all state when navigating
     }
   })
@@ -189,7 +208,7 @@ setup_gallery_server <- function(input, output, session, rv) {
               tags$span(style = "color: #856404;",
                         paste0(" (was: ", gsub("_\\d+$", "", original_class), ")"))
             },
-            if (!is.na(img_row$score)) {
+            if (!is.null(img_row$score) && !is.na(img_row$score)) {
               tagList(br(), tags$span(style = "color: #666;", sprintf("%.1f%%", img_row$score * 100)))
             }
           )
