@@ -39,7 +39,9 @@ gallery_js <- function() {
     if (card.hasClass('selected')) {
       card.css({'border': '3px solid #007bff', 'background-color': '#e7f1ff'});
     } else {
-      var wasRelabeled = card.data('relabeled') === 'true';
+      // Read the attribute directly: jQuery .data() auto-converts 'true' to
+      // a boolean, so comparing it against the string 'true' always fails
+      var wasRelabeled = card.attr('data-relabeled') === 'true';
       if (wasRelabeled) {
         card.css({'border': '3px solid #ffc107', 'background-color': 'white'});
       } else {
@@ -60,8 +62,10 @@ gallery_js <- function() {
 
     isDragging = true;
     window.wasDragging = false;
-    startX = e.pageX;
-    startY = e.pageY;
+    // The selection box is position:fixed (viewport coordinates), so use
+    // clientX/Y; pageX/Y would offset the box by the scroll distance
+    startX = e.clientX;
+    startY = e.clientY;
 
     selectionBox = $('#selection-box');
     selectionBox.css({
@@ -78,8 +82,8 @@ gallery_js <- function() {
   $(document).on('mousemove', function(e) {
     if (!isDragging) return;
 
-    var currentX = e.pageX;
-    var currentY = e.pageY;
+    var currentX = e.clientX;
+    var currentY = e.clientY;
 
     var width = Math.abs(currentX - startX);
     var height = Math.abs(currentY - startY);
