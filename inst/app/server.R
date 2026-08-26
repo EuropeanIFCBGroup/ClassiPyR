@@ -86,7 +86,8 @@ server <- function(input, output, session) {
     classifier_mat_files, classifier_h5_files,
     annotated_samples, classified_samples,
     discovery$get_filtered_samples,
-    update_current_sample_status_fn
+    update_current_sample_status_fn,
+    discovery$update_sample_list
   )
 
   # 4. Gallery: image rendering, pagination
@@ -167,7 +168,8 @@ server <- function(input, output, session) {
     input, output, session, rv, config,
     roi_path_map, annotated_samples,
     loading$disable_nav_buttons, loading$enable_nav_buttons,
-    update_current_sample_status_fn
+    update_current_sample_status_fn,
+    loading$find_sample_png_dir
   )
 
   # 15. Session cleanup

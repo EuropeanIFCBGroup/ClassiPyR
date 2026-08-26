@@ -359,7 +359,9 @@ setup_class_list_server <- function(input, output, session, rv, config,
       return()
     }
 
-    matches[unmatched_idx, c("class_name", "query_name", "matched_name", "accepted_name", "aphia_id", "status", "note")] <- updated_rows
+    # Assign by the result's own column names so the target list always
+    # matches what build_worms_match_rows() returns (9 columns)
+    matches[unmatched_idx, names(updated_rows)] <- updated_rows
     rv$worms_matches <- matches
 
     matched_n <- sum(!is.na(rv$worms_matches$aphia_id) & nzchar(rv$worms_matches$aphia_id))
@@ -406,6 +408,7 @@ setup_class_list_server <- function(input, output, session, rv, config,
     }
 
     updated_map <- rv$class_aphia_map
+    effective_names <- matched$class_name
     for (i in seq_len(nrow(matched))) {
       key <- matched$class_name[i]
       if (rename_requested && !is.na(matched$accepted_name[i]) && nzchar(matched$accepted_name[i])) {
@@ -413,10 +416,16 @@ setup_class_list_server <- function(input, output, session, rv, config,
           key <- matched$accepted_name[i]
         }
       }
+      effective_names[i] <- key
       updated_map[[key]] <- matched$aphia_id[i]
     }
     rv$class_aphia_map <- updated_map
-    save_worms_map(updated_map, db_folder = config$db_folder, matches_df = matched)
+    # Key the taxonomy lookups by the same (possibly renamed) class names as
+    # the AphiaID map; keyed by the old names, renamed classes would lose
+    # their scientific/accepted name fields in the class_taxonomy table
+    matched_for_save <- matched
+    matched_for_save$class_name <- effective_names
+    save_worms_map(updated_map, db_folder = config$db_folder, matches_df = matched_for_save)
 
     if (rename_requested) {
       updateTextAreaInput(session, "class_list_edit", value = paste(rv$class2use, collapse = "\n"))

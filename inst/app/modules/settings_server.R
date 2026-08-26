@@ -351,6 +351,18 @@ setup_settings_server <- function(input, output, session, rv, config,
       updateSelectInput(session, "cfg_prediction_model", choices = character(0))
       return()
     }
+    # On fetch failure, keep the previously configured model as the only
+    # choice: clearing the widget would make Apply persist an empty model,
+    # silently disabling prediction just because the endpoint was unreachable
+    keep_configured_model <- function() {
+      fallback <- config$prediction_model
+      if (!is.null(fallback) && nzchar(fallback)) {
+        updateSelectInput(session, "cfg_prediction_model",
+                          choices = fallback, selected = fallback)
+      } else {
+        updateSelectInput(session, "cfg_prediction_model", choices = character(0))
+      }
+    }
     tryCatch({
       models <- iRfcb::ifcb_classify_models(url)
       if (length(models) > 0) {
@@ -359,11 +371,11 @@ setup_settings_server <- function(input, output, session, rv, config,
         updateSelectInput(session, "cfg_prediction_model",
                           choices = models, selected = selected)
       } else {
-        updateSelectInput(session, "cfg_prediction_model", choices = character(0))
+        keep_configured_model()
         showNotification("No models found at the provided URL.", type = "warning")
       }
     }, error = function(e) {
-      updateSelectInput(session, "cfg_prediction_model", choices = character(0))
+      keep_configured_model()
       showNotification(paste("Could not fetch models:", e$message), type = "error")
     })
   })
@@ -405,7 +417,9 @@ setup_settings_server <- function(input, output, session, rv, config,
     config$dashboard_multi_timeout <- if (!is.null(input$cfg_dashboard_multi_timeout)) input$cfg_dashboard_multi_timeout else 120
     config$dashboard_max_retries <- if (!is.null(input$cfg_dashboard_max_retries)) input$cfg_dashboard_max_retries else 3
     config$gradio_url <- input$cfg_gradio_url
-    config$prediction_model <- input$cfg_prediction_model
+    # An empty model select sends NULL; keep the stored model in that case
+    # (the URL-cleared path stores "" via the widget's empty string value)
+    config$prediction_model <- input$cfg_prediction_model %||% config$prediction_model
 
     if (!identical(old_db_folder, config$db_folder)) {
       rv$class_aphia_map <- load_worms_map(config$db_folder)

@@ -42,6 +42,7 @@ reference:
   - init_python_env
   - get_config_dir
   - get_settings_path
+  - update_settings_file
 - title: Sample Loading
   desc: Functions for loading classifications and samples from ROI/PNG sources
   contents:

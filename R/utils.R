@@ -76,6 +76,32 @@ get_settings_path <- function() {
   file.path(config_dir, "settings.json")
 }
 
+#' Update settings file by merging new values
+#'
+#' Reads the existing settings JSON file (if any), merges the given settings
+#' into it, and writes the result back. Callers that only know a subset of
+#' settings keys can therefore update those keys without erasing the rest of
+#' the file. A key with a \code{NULL} value is removed from the file.
+#'
+#' @param settings Named list of settings to update.
+#' @param settings_file Path to the settings JSON file. Defaults to
+#'   \code{\link{get_settings_path}}.
+#' @return Invisibly, the full merged settings list.
+#' @export
+update_settings_file <- function(settings, settings_file = get_settings_path()) {
+  existing <- list()
+  if (file.exists(settings_file)) {
+    existing <- tryCatch(
+      jsonlite::fromJSON(settings_file),
+      error = function(e) list()
+    )
+    if (!is.list(existing)) existing <- list()
+  }
+  merged <- utils::modifyList(existing, settings)
+  jsonlite::write_json(merged, settings_file, auto_unbox = TRUE, pretty = TRUE)
+  invisible(merged)
+}
+
 #' Get path to file index cache
 #'
 #' Returns the path to the file index JSON cache file. The file index

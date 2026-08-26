@@ -224,6 +224,18 @@ setup_import_export_server <- function(input, output, session, rv, config,
     is_dashboard <- identical(config$data_source, "dashboard")
     export_counts <- list(success = 0L, failed = 0L, skipped = 0L)
 
+    # An empty selection with a rendered filter widget means the user removed
+    # every instrument; exporting the full database would be the opposite of
+    # the widget's "remove to exclude" semantics. (With <= 1 instrument the
+    # widget is never shown and the input is NULL, which means "no filter".)
+    available_instruments <- tryCatch({
+      list_annotation_metadata_db(db_path)$instruments
+    }, error = function(e) character())
+    if (length(available_instruments) > 1 && length(instrument_filter) == 0) {
+      showNotification("No instruments selected - nothing to export.", type = "warning")
+      return()
+    }
+
     # Get samples and apply instrument filter
     all_samples <- list_annotated_samples_db(db_path)
     if (length(instrument_filter) > 0) {
@@ -267,7 +279,10 @@ setup_import_export_server <- function(input, output, session, rv, config,
 
           if (!is.null(skip)) {
             rows <- rows[!rows$class_name %in% skip, ]
-            if (nrow(rows) == 0) next
+            if (nrow(rows) == 0) {
+              export_counts$skipped <- export_counts$skipped + 1L
+              next
+            }
           }
 
           src_dir <- file.path(cache_dir, sn, sn)
@@ -466,6 +481,18 @@ setup_import_export_server <- function(input, output, session, rv, config,
     db_path <- get_db_path(config$db_folder)
     if (!file.exists(db_path)) {
       showNotification("Database not found. Save annotations first.", type = "error")
+      return()
+    }
+
+    # An empty selection with a rendered filter widget means the user removed
+    # every instrument; exporting the full database would be the opposite of
+    # the widget's "remove to exclude" semantics. (With <= 1 instrument the
+    # widget is never shown and the input is NULL, which means "no filter".)
+    available_instruments <- tryCatch({
+      list_annotation_metadata_db(db_path)$instruments
+    }, error = function(e) character())
+    if (length(available_instruments) > 1 && length(instrument_filter) == 0) {
+      showNotification("No instruments selected - nothing to export.", type = "warning")
       return()
     }
 
@@ -675,7 +702,10 @@ setup_import_export_server <- function(input, output, session, rv, config,
 
           if (!is.null(skip)) {
             rows <- rows[!rows$class_name %in% skip, ]
-            if (nrow(rows) == 0) next
+            if (nrow(rows) == 0) {
+              counts$skipped <- counts$skipped + 1L
+              next
+            }
           }
 
           src_dir <- file.path(cache_dir, sn, sn)
@@ -877,6 +907,11 @@ setup_import_export_server <- function(input, output, session, rv, config,
 
     if (length(new_classes) > 0) {
       rv$class2use <- c(rv$class2use, new_classes)
+      # Refresh the relabel dropdown so the new classes are usable right away,
+      # like every other site that mutates rv$class2use
+      updateSelectizeInput(session, "new_class_quick",
+                           choices = sort(rv$class2use),
+                           selected = character(0))
       showNotification(
         sprintf("Added %d new class(es): %s", length(new_classes),
                 paste(new_classes, collapse = ", ")),

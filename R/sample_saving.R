@@ -34,7 +34,10 @@ NULL
 #'   statistics CSV files are written to a \code{validation_statistics/}
 #'   subfolder inside \code{output_folder}. Set to \code{FALSE} to skip this
 #'   export, e.g. when annotating from scratch.
-#' @return TRUE on success, FALSE on failure
+#' @return TRUE on success, FALSE when there is nothing to save (empty changes
+#'   log) or required inputs are missing. Errors raised while writing any
+#'   backend propagate to the caller, so callers can distinguish a failed save
+#'   from an empty one.
 #' @export
 #' @examples
 #' \dontrun{
@@ -82,79 +85,71 @@ save_sample_annotations <- function(sample_name,
     return(FALSE)
   }
 
-  tryCatch({
-    # Create output folders if needed
-    if (!dir.exists(output_folder)) {
-      dir.create(output_folder, recursive = TRUE)
+  # Create output folders if needed
+  if (!dir.exists(output_folder)) {
+    dir.create(output_folder, recursive = TRUE)
+  }
+  if (!dir.exists(png_output_folder)) {
+    dir.create(png_output_folder, recursive = TRUE)
+  }
+
+  # Copy images to class subfolders
+  temp_annotate_folder <- tempfile(pattern = "ifcb_annotate_")
+  dir.create(temp_annotate_folder, recursive = TRUE)
+  on.exit(unlink(temp_annotate_folder, recursive = TRUE), add = TRUE)
+
+  copy_images_to_class_folders(
+    classifications = classifications,
+    src_folder = file.path(temp_png_folder, sample_name),
+    temp_folder = temp_annotate_folder,
+    output_folder = png_output_folder
+  )
+
+  # Save to SQLite (fast, no Python needed)
+  if (save_format %in% c("sqlite", "both")) {
+    # Load class list if not provided
+    c2u <- class2use
+    if (is.null(c2u)) {
+      c2u <- load_class_list(class2use_path)
     }
-    if (!dir.exists(png_output_folder)) {
-      dir.create(png_output_folder, recursive = TRUE)
+    db_path <- get_db_path(db_folder)
+    save_annotations_db(db_path, sample_name, classifications, c2u, annotator)
+  }
+
+  # Save to .mat (requires Python + scipy)
+  if (save_format %in% c("mat", "both")) {
+    # Find ADC folder: use provided path, or fall back to get_sample_paths()
+    if (is.null(adc_folder)) {
+      paths <- get_sample_paths(sample_name, roi_folder)
+      adc_folder <- paths$adc_folder
     }
 
-    # Copy images to class subfolders
-    temp_annotate_folder <- tempfile(pattern = "ifcb_annotate_")
-    dir.create(temp_annotate_folder, recursive = TRUE)
-
-    copy_images_to_class_folders(
-      classifications = classifications,
-      src_folder = file.path(temp_png_folder, sample_name),
-      temp_folder = temp_annotate_folder,
-      output_folder = png_output_folder
+    ifcb_annotate_samples(
+      png_folder = temp_annotate_folder,
+      adc_folder = adc_folder,
+      class2use_file = class2use_path,
+      output_folder = output_folder,
+      sample_names = sample_name,
+      remove_trailing_numbers = FALSE
     )
+  }
 
-    # Save to SQLite (fast, no Python needed)
-    if (save_format %in% c("sqlite", "both")) {
-      # Load class list if not provided
-      c2u <- class2use
-      if (is.null(c2u)) {
-        c2u <- load_class_list(class2use_path)
-      }
-      db_path <- get_db_path(db_folder)
-      save_annotations_db(db_path, sample_name, classifications, c2u, annotator)
+  # Save statistics (optional)
+  if (isTRUE(export_statistics)) {
+    stats_folder <- file.path(output_folder, "validation_statistics")
+    if (!dir.exists(stats_folder)) {
+      dir.create(stats_folder, recursive = TRUE)
     }
+    save_validation_statistics(
+      sample_name = sample_name,
+      classifications = classifications,
+      original_classifications = original_classifications,
+      stats_folder = stats_folder,
+      annotator = annotator
+    )
+  }
 
-    # Save to .mat (requires Python + scipy)
-    if (save_format %in% c("mat", "both")) {
-      # Find ADC folder: use provided path, or fall back to get_sample_paths()
-      if (is.null(adc_folder)) {
-        paths <- get_sample_paths(sample_name, roi_folder)
-        adc_folder <- paths$adc_folder
-      }
-
-      ifcb_annotate_samples(
-        png_folder = temp_annotate_folder,
-        adc_folder = adc_folder,
-        class2use_file = class2use_path,
-        output_folder = output_folder,
-        sample_names = sample_name,
-        remove_trailing_numbers = FALSE
-      )
-    }
-
-    # Save statistics (optional)
-    if (isTRUE(export_statistics)) {
-      stats_folder <- file.path(output_folder, "validation_statistics")
-      if (!dir.exists(stats_folder)) {
-        dir.create(stats_folder, recursive = TRUE)
-      }
-      save_validation_statistics(
-        sample_name = sample_name,
-        classifications = classifications,
-        original_classifications = original_classifications,
-        stats_folder = stats_folder,
-        annotator = annotator
-      )
-    }
-
-    # Clean up temp folder
-    unlink(temp_annotate_folder, recursive = TRUE)
-
-    return(TRUE)
-
-  }, error = function(e) {
-    warning("Save failed for ", sample_name, ": ", e$message)
-    return(FALSE)
-  })
+  TRUE
 }
 
 #' Copy images to class-organized folders

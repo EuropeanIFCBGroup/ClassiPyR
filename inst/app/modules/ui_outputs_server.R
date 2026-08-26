@@ -129,7 +129,8 @@ setup_ui_outputs_server <- function(input, output, session, rv, config,
     } else if (rv$is_annotation_mode) {
       total <- nrow(rv$classifications)
       classified <- sum(rv$classifications$class_name != "unclassified")
-      pct <- round((classified / total) * 100)
+      # 0/0 is NaN, and sprintf("%d", NaN) errors and kills the title bar
+      pct <- if (total > 0) round((classified / total) * 100) else 0
 
       switch_btn <- if (rv$has_classification) {
         actionLink(

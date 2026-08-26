@@ -23,18 +23,33 @@ setup_sample_discovery_server <- function(input, output, session, rv, config,
     classifier_mat_files(safe_list(index_data$classifier_mat_files))
     classifier_h5_files(safe_list(index_data$classifier_h5_files))
 
+    # Preserve the user's current filter selections when still valid, so a
+    # settings change or re-sync doesn't silently jump back to the defaults
     years <- unique(substr(sample_names, 2, 5))
     years <- sort(years)
     first_year <- if (length(years) > 0) years[1] else "all"
+    current_year <- isolate(input$year_select)
+    selected_year <- if (!is.null(current_year) && current_year %in% c("all", years)) {
+      current_year
+    } else {
+      first_year
+    }
     updateSelectInput(session, "year_select",
                       choices = c("All" = "all", setNames(years, years)),
-                      selected = first_year)
+                      selected = selected_year)
 
     instruments <- unique(sub(".*_", "", sample_names))
     instruments <- sort(instruments)
+    current_instrument <- isolate(input$instrument_select)
+    selected_instrument <- if (!is.null(current_instrument) &&
+                               current_instrument %in% c("all", instruments)) {
+      current_instrument
+    } else {
+      "all"
+    }
     updateSelectInput(session, "instrument_select",
                       choices = c("All" = "all", setNames(instruments, instruments)),
-                      selected = "all")
+                      selected = selected_instrument)
 
     last_sync_time(index_data$timestamp)
     TRUE
@@ -132,9 +147,14 @@ setup_sample_discovery_server <- function(input, output, session, rv, config,
     }
   })
 
-  # Update cache when annotations are saved
+  # Update cache when annotations are saved. Only once samples have actually
+  # been discovered this session: before that, annotated_samples() still holds
+  # its empty initial value, and persisting it would strip the on-disk index
+  # of the annotated list whenever the startup scan bails early (e.g. missing
+  # folder, empty dashboard URL).
   observe({
     annotated <- annotated_samples()
+    if (length(all_samples()) == 0) return()
     cached <- load_file_index()
     if (!is.null(cached) && !identical(as.character(cached$annotated_samples), annotated)) {
       cached$annotated_samples <- annotated
@@ -335,7 +355,10 @@ setup_sample_discovery_server <- function(input, output, session, rv, config,
     if (length(samples) > 0) {
       random_sample <- sample(samples, 1)
       rv$pending_sample_select <- random_sample
-      updateSelectizeInput(session, "sample_select", selected = random_sample)
+      # sample_select is a server-side selectize: a bare selected= update can
+      # only select values already on the client (capped at ~1000), so go
+      # through the full server-side update instead
+      update_sample_list()
     } else {
       showNotification("No samples match current filters", type = "warning")
     }

@@ -6,7 +6,8 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
                                         classifier_h5_files, annotated_samples,
                                         classified_samples,
                                         get_filtered_samples,
-                                        update_current_sample_status_fn) {
+                                        update_current_sample_status_fn,
+                                        update_sample_list) {
   # Helper functions for classification file discovery
   find_csv_file <- function(sample_name) {
     csv_map <- csv_path_map()
@@ -85,6 +86,12 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
 
   # Save current sample to cache with LRU eviction
   save_to_cache <- function() {
+    # Never cache/auto-save class review data: it is not a real sample
+    # (external review uses the synthetic name "__external_review__")
+    if (isTRUE(rv$class_review_mode) ||
+        identical(rv$current_sample, "__external_review__")) {
+      return(invisible(NULL))
+    }
     if (!is.null(rv$current_sample) && !is.null(rv$classifications)) {
       if (length(rv$session_cache) >= MAX_CACHED_SAMPLES &&
           !(rv$current_sample %in% names(rv$session_cache))) {
@@ -97,7 +104,10 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
         original_classifications = rv$original_classifications,
         changes_log = rv$changes_log,
         is_annotation_mode = rv$is_annotation_mode,
-        has_classification = rv$has_classification
+        has_classification = rv$has_classification,
+        # Stored so the session-end autosave can find this sample's images
+        # even after navigation switched the active PNG folder
+        temp_png_folder = rv$temp_png_folder
       )
 
       tryCatch({
@@ -129,7 +139,11 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
           roi_folder = config$roi_folder,
           class2use_path = rv$class2use_path,
           class2use = rv$class2use,
-          annotator = input$annotator_name,
+          annotator = if (is.null(input$annotator_name) || !nzchar(input$annotator_name)) {
+            "Unknown"
+          } else {
+            input$annotator_name
+          },
           adc_folder = adc_folder_for_save,
           save_format = save_fmt_for_autosave,
           db_folder = config$db_folder,
@@ -457,7 +471,10 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
         mode_message <- "New annotation"
       }
 
-      finalize_sample_load(classifications, sample_name, mode_message)
+      # Suppress finalize's notification here: both branches below notify with
+      # the post-filter image count, and two toasts with differing counts is
+      # confusing (dashboard loads notify once, via finalize)
+      finalize_sample_load(classifications, sample_name, mode_message = NULL)
 
       if (!is.null(roi_path)) {
         extract_sample_images(sample_name, roi_path, classifications, mode_message = mode_message)
@@ -490,12 +507,31 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
 
   # Load from session cache
   load_from_cache <- function(sample_name, roi_path) {
+    is_dashboard <- identical(config$data_source, "dashboard")
+
+    # Validate the image source before mutating any state, so a failed cache
+    # load leaves the currently displayed sample intact
+    sample_png_dir <- NULL
+    if (!is_dashboard) {
+      sample_png_dir <- find_sample_png_dir(sample_name)
+      if (!(is.null(roi_path) && !is.null(sample_png_dir)) &&
+          (is.null(roi_path) || !file.exists(roi_path))) {
+        showNotification(paste("ROI file not found for:", sample_name), type = "error")
+        return(FALSE)
+      }
+    }
+
     cached <- rv$session_cache[[sample_name]]
     rv$classifications <- cached$classifications
     rv$original_classifications <- cached$original_classifications
     rv$changes_log <- cached$changes_log
+    # Clear the stale validation snapshot from the previously loaded sample,
+    # like finalize_sample_load() does; otherwise switching to validation
+    # mode can restore another sample's classifications into this one
+    rv$cached_validation_classifications <- NULL
     rv$current_sample <- sample_name
     rv$selected_images <- character()
+    rv$current_page <- 1
     rv$is_annotation_mode <- cached$is_annotation_mode
     rv$has_classification <- cached$has_classification %||% FALSE
 
@@ -506,8 +542,6 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
     })
     updateSelectInput(session, "class_filter",
                       choices = c("All" = "all", setNames(available_classes, display_names)))
-
-    is_dashboard <- identical(config$data_source, "dashboard")
 
     if (is_dashboard) {
       cache_dir <- get_dashboard_cache_dir()
@@ -521,14 +555,9 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
       rv$temp_png_folder <- png_folder
       rv$temp_png_is_managed <- TRUE
     } else {
-      sample_png_dir <- find_sample_png_dir(sample_name)
       if (is.null(roi_path) && !is.null(sample_png_dir)) {
         set_active_png_folder(dirname(sample_png_dir), managed = FALSE)
       } else {
-        if (is.null(roi_path) || !file.exists(roi_path)) {
-          showNotification(paste("ROI file not found for:", sample_name), type = "error")
-          return(FALSE)
-        }
         cleanup_temp_png_folder()
 
         rv$temp_png_folder <- tempfile(pattern = "ifcb_validator_")
@@ -673,13 +702,13 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
       if (length(samples) > 0) {
         prev_sample <- samples[length(samples)]
         rv$pending_sample_select <- prev_sample
-        updateSelectizeInput(session, "sample_select", selected = prev_sample)
+        update_sample_list()
         load_sample_data(prev_sample)
       }
     } else if (current_idx > 1) {
       prev_sample <- samples[current_idx - 1]
       rv$pending_sample_select <- prev_sample
-      updateSelectizeInput(session, "sample_select", selected = prev_sample)
+      update_sample_list()
       load_sample_data(prev_sample)
     } else {
       showNotification("Already at first sample", type = "warning")
@@ -702,13 +731,13 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
       if (length(samples) > 0) {
         next_sample <- samples[1]
         rv$pending_sample_select <- next_sample
-        updateSelectizeInput(session, "sample_select", selected = next_sample)
+        update_sample_list()
         load_sample_data(next_sample)
       }
     } else if (current_idx < length(samples)) {
       next_sample <- samples[current_idx + 1]
       rv$pending_sample_select <- next_sample
-      updateSelectizeInput(session, "sample_select", selected = next_sample)
+      update_sample_list()
       load_sample_data(next_sample)
     } else {
       showNotification("No more samples in list", type = "warning")
@@ -719,6 +748,7 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
     save_to_cache = save_to_cache,
     load_from_cache = load_from_cache,
     disable_nav_buttons = disable_nav_buttons,
-    enable_nav_buttons = enable_nav_buttons
+    enable_nav_buttons = enable_nav_buttons,
+    find_sample_png_dir = find_sample_png_dir
   )
 }

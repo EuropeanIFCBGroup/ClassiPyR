@@ -33,6 +33,78 @@ test_that("get_settings_path creates directory if needed", {
 })
 
 # =============================================================================
+# Settings file update (read-merge-write)
+# =============================================================================
+
+test_that("update_settings_file creates a new file when none exists", {
+  settings_file <- tempfile(fileext = ".json")
+  on.exit(unlink(settings_file), add = TRUE)
+
+  update_settings_file(list(save_format = "mat", auto_sync = TRUE), settings_file)
+
+  saved <- jsonlite::fromJSON(settings_file)
+  expect_equal(saved$save_format, "mat")
+  expect_true(saved$auto_sync)
+})
+
+test_that("update_settings_file preserves keys absent from the update", {
+  settings_file <- tempfile(fileext = ".json")
+  on.exit(unlink(settings_file), add = TRUE)
+
+  # Full write, e.g. from the settings modal
+  update_settings_file(
+    list(save_format = "mat",
+         dashboard_url = "https://example.org/dashboard",
+         pixels_per_micron = 2.7),
+    settings_file
+  )
+  # Partial write, e.g. after uploading a class list, must not erase the rest
+  update_settings_file(list(class2use_path = "/tmp/class2use.mat"), settings_file)
+
+  saved <- jsonlite::fromJSON(settings_file)
+  expect_equal(saved$class2use_path, "/tmp/class2use.mat")
+  expect_equal(saved$save_format, "mat")
+  expect_equal(saved$dashboard_url, "https://example.org/dashboard")
+  expect_equal(saved$pixels_per_micron, 2.7)
+})
+
+test_that("update_settings_file overwrites keys present in the update", {
+  settings_file <- tempfile(fileext = ".json")
+  on.exit(unlink(settings_file), add = TRUE)
+
+  update_settings_file(list(save_format = "mat", auto_sync = TRUE), settings_file)
+  update_settings_file(list(save_format = "both"), settings_file)
+
+  saved <- jsonlite::fromJSON(settings_file)
+  expect_equal(saved$save_format, "both")
+  expect_true(saved$auto_sync)
+})
+
+test_that("update_settings_file removes keys set to NULL", {
+  settings_file <- tempfile(fileext = ".json")
+  on.exit(unlink(settings_file), add = TRUE)
+
+  update_settings_file(list(save_format = "mat", class2use_path = "/old/path"),
+                       settings_file)
+  update_settings_file(list(class2use_path = NULL), settings_file)
+
+  saved <- jsonlite::fromJSON(settings_file)
+  expect_false("class2use_path" %in% names(saved))
+  expect_equal(saved$save_format, "mat")
+})
+
+test_that("update_settings_file recovers from a corrupt settings file", {
+  settings_file <- tempfile(fileext = ".json")
+  on.exit(unlink(settings_file), add = TRUE)
+
+  writeLines("not json {", settings_file)
+  update_settings_file(list(save_format = "sqlite"), settings_file)
+
+  saved <- jsonlite::fromJSON(settings_file)
+  expect_equal(saved$save_format, "sqlite")
+})
+
+# =============================================================================
 # Python environment
 # =============================================================================
 

@@ -7,14 +7,19 @@ setup_session_cleanup_server <- function(input, session, rv, config) {
       current_sample <- isolate(rv$current_sample)
       current_classifications <- isolate(rv$classifications)
       resource_path_name <- isolate(rv$resource_path_name)
+      in_class_review <- isTRUE(isolate(rv$class_review_mode))
 
-      if (!is.null(current_sample) && !is.null(current_classifications)) {
+      if (!in_class_review &&
+          !is.null(current_sample) && !is.null(current_classifications) &&
+          !identical(current_sample, "__external_review__")) {
         isolate({
           rv$session_cache[[current_sample]] <- list(
             classifications = rv$classifications,
             original_classifications = rv$original_classifications,
             changes_log = rv$changes_log,
-            is_annotation_mode = rv$is_annotation_mode
+            is_annotation_mode = rv$is_annotation_mode,
+            has_classification = rv$has_classification,
+            temp_png_folder = rv$temp_png_folder
           )
         })
       }
@@ -27,10 +32,12 @@ setup_session_cleanup_server <- function(input, session, rv, config) {
       output_folder <- isolate(config$output_folder)
       png_output_folder <- isolate(config$png_output_folder)
       roi_folder <- isolate(config$roi_folder)
-      annotator <- isolate(input$annotator_name) %||% "Unknown"
+      annotator <- isolate(input$annotator_name)
+      if (is.null(annotator) || !nzchar(annotator)) annotator <- "Unknown"
 
       # Save any unsaved samples with changes
       for (sample_name in names(session_cache)) {
+        if (identical(sample_name, "__external_review__")) next
         cached <- session_cache[[sample_name]]
         if (!is.null(cached$changes_log) && nrow(cached$changes_log) > 0) {
           tryCatch({
@@ -39,7 +46,9 @@ setup_session_cleanup_server <- function(input, session, rv, config) {
               classifications = cached$classifications,
               original_classifications = cached$original_classifications,
               changes_log = cached$changes_log,
-              temp_png_folder = temp_png_folder,
+              # Each cached sample's own PNG folder; the session-level folder
+              # only matches the sample that was loaded last
+              temp_png_folder = cached$temp_png_folder %||% temp_png_folder,
               output_folder = output_folder,
               png_output_folder = png_output_folder,
               roi_folder = roi_folder,
@@ -65,9 +74,12 @@ setup_session_cleanup_server <- function(input, session, rv, config) {
         })
       }
 
-      # Clean up temporary files
+      # Clean up temporary files, but never the persistent dashboard PNG
+      # cache (in dashboard mode temp_png_folder points inside it, and every
+      # other cleanup site excludes it the same way)
       if (!is.null(temp_png_folder) && dir.exists(temp_png_folder) &&
-          isTRUE(temp_png_is_managed)) {
+          isTRUE(temp_png_is_managed) &&
+          !startsWith(temp_png_folder, get_dashboard_cache_dir())) {
         unlink(temp_png_folder, recursive = TRUE)
       }
     }, error = function(e) {
