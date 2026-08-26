@@ -2,6 +2,9 @@
 
 ## ClassiPyR (development version)
 
+- ClassiPyR now requires R \>= 4.4.0 (for base R’s `%||%` operator,
+  which the app already relied on).
+
 ### New features
 
 - New exported function
@@ -22,9 +25,114 @@
   backfills the remaining ROIs as `unclassified` for **only the samples
   that were just imported**, so each imported sample is fully
   represented without touching samples from earlier import sessions.
+- New exported function
+  [`update_settings_file()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/update_settings_file.md)
+  performs read-merge-write updates to the settings JSON file, so
+  callers that only know a subset of settings keys can update them
+  without erasing the rest
+  ([\#36](https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/36)).
 
 ### Bug fixes
 
+Interface bug review
+([\#36](https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/36)) —
+data integrity:
+
+- **Settings are no longer partially erased**: Uploading a class list
+  file or running a “SQLite → MATLAB ZIP” export previously rewrote
+  `settings.json` with only the keys those dialogs knew about, silently
+  resetting storage format, data source, dashboard configuration, Python
+  venv path, prediction model and other saved settings on the next
+  start. All settings writes now merge into the existing file.
+- **“Both SQLite and MAT” storage now persists the class list**: With
+  save format “Both” selected, class list changes were never auto-saved
+  to the database and never restored at startup (the check only matched
+  the literal value `"sqlite"`), so class list edits silently
+  disappeared between sessions.
+- **Predict no longer overwrites manual corrections on repeated runs**:
+  The second Predict click re-classified images that had been manually
+  relabeled before the first prediction, silently discarding the user’s
+  corrections. All manual relabels recorded in the session’s changes log
+  are now excluded from re-prediction.
+- **External class review no longer leaks into the database**:
+  Relabeling in an external PNG folder review and then switching back to
+  Sample Mode (or closing the app) wrote a bogus `__external_review__`
+  sample into the annotations database, polluted the Class Review filter
+  dropdowns, and copied the external PNGs into the PNG output folder.
+  Leaving class review now clears the review data, and the auto-save
+  paths refuse class review state entirely.
+- **Cached samples no longer mix up classifications**: Reopening a
+  previously loaded sample from the session cache and switching it to
+  validation mode could restore the *previous* sample’s classifications
+  into it (every tile showed “Not found”, and a save would have written
+  them under the wrong sample name). A failed cache load (e.g. moved or
+  unmounted data folder) also no longer leaves the gallery pointing at
+  the previous sample’s images.
+- **Save failures are reported as errors**: A failed save (e.g. MAT
+  format with Python unavailable) was previously indistinguishable from
+  “nothing to save” and surfaced as a benign “Save returned no changes”
+  warning. Errors from any storage backend are now shown as errors with
+  the underlying message.
+- **Session-end auto-save uses each sample’s own image folder**: Unsaved
+  cached samples were saved with the folder of the *last-viewed* sample,
+  so their PNG/MAT export silently produced nothing. An empty Annotator
+  field is now saved as “Unknown” instead of an empty string, and
+  closing the app no longer deletes the persistent dashboard PNG cache.
+
+Interface bug review
+([\#36](https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/36)) —
+user interface:
+
+- **Save button works for PNG-only samples**: Samples that exist only as
+  extracted PNG folders (no `.roi` file) failed to save with “Cannot
+  find ROI data folder”, even for SQLite saves that never need it. The
+  button now uses the same PNG-folder fallback as the navigation
+  auto-save, and an ADC folder is only required when a MAT export
+  actually needs it.
+- **WoRMS “Rematch Unmatched” works**: The button always failed with an
+  internal error due to a column mismatch in the results assignment, and
+  never updated the match table.
+- **WoRMS “Rename classes” keeps taxonomy fields**: Applying matches
+  with renaming enabled stored only the AphiaID for renamed classes;
+  their `scientific_name`, `accepted_name` and `accepted_aphia_id`
+  fields were left empty, which in turn blanked the EcoTaxa hierarchy
+  export for those classes.
+- **Drag-select works on scrolled pages**: The selection rectangle was
+  offset from the cursor by the scroll distance once the gallery was
+  scrolled, selecting the wrong images.
+- **Relabeled images keep their yellow border** after being selected and
+  deselected.
+- **Gallery empty states render correctly**: Filtering to a class with
+  no images now shows “No images to display” instead of a blank area
+  with a nonsensical “Page 1/1 (1-0 of 0)” pager, and pagination no
+  longer desyncs (dead prev/next buttons) after relabeling shrinks a
+  filtered class. Loading a classification CSV without a `score` column
+  no longer breaks the gallery render, and the annotation-mode title bar
+  no longer fails to render with zero images.
+- **Sample dropdown with large sample lists**: The random/previous/next
+  buttons updated the server-side sample dropdown in a way that only
+  worked for the first ~1000 options; with larger filtered lists the
+  dropdown went blank and (for the random button) the following Load
+  click did nothing.
+- **Filters survive rescans**: Saving an unrelated setting or re-syncing
+  folders no longer resets the Year/IFCB filters back to their defaults;
+  current selections are kept when still valid.
+- **Annotation markers survive startup failures**: When the startup
+  folder scan bailed out early (missing folder, empty dashboard URL),
+  the cached file index was stripped of its annotated-samples list,
+  hiding all ✎ markers until a full re-sync.
+- **Prediction model survives an unreachable Gradio endpoint**: Opening
+  Settings while the Gradio API was down cleared the configured
+  prediction model, and saving any setting then persisted the empty
+  value, permanently disabling the Predict button.
+- **Export dialog fixes**: Removing every instrument from the “Filter by
+  IFCB” export filter now aborts with a warning instead of exporting the
+  entire database; classes added during a PNG import appear in the
+  “Relabel to:” dropdown immediately; dashboard export completion counts
+  now add up (skip-filtered samples are counted as skipped).
+- **Summary Table** shows NA instead of `NaN%`/`Inf%` for classes whose
+  images have no prediction scores, and local sample loads show a single
+  “N images” notification instead of two with differing counts.
 - **Dashboard bin listing**:
   [`list_dashboard_bins()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/list_dashboard_bins.md)
   now uses
