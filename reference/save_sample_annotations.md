@@ -102,7 +102,10 @@ save_sample_annotations(
 
 ## Value
 
-TRUE on success, FALSE on failure
+TRUE on success, FALSE when there is nothing to save (empty changes log)
+or required inputs are missing. Errors raised while writing any backend
+propagate to the caller, so callers can distinguish a failed save from
+an empty one.
 
 ## Examples
 

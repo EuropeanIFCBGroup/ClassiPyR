@@ -12,6 +12,8 @@ Functions for launching ClassiPyR
   : Get ClassiPyR configuration directory
 - [`get_settings_path()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_settings_path.md)
   : Get path to settings file
+- [`update_settings_file()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/update_settings_file.md)
+  : Update settings file by merging new values
 
 ## Sample Loading
 

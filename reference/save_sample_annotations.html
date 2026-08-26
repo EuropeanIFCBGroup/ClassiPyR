@@ -155,7 +155,10 @@ export, e.g. when annotating from scratch.</p></dd>
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>TRUE on success, FALSE on failure</p>
+    <p>TRUE on success, FALSE when there is nothing to save (empty changes
+  log) or required inputs are missing. Errors raised while writing any
+  backend propagate to the caller, so callers can distinguish a failed save
+  from an empty one.</p>
     </div>
 
     <div class="section level2">
