@@ -137,6 +137,18 @@ setup_gallery_server <- function(input, output, session, rv) {
       return(div(class = "alert alert-info", "No images to display"))
     }
 
+    # isolate(): click/drag selection is styled client-side and server-initiated
+    # selection changes are synced via the setSelectedCards message, so a
+    # selection change must not re-render the whole gallery
+    selected_set <- isolate(rv$selected_images)
+
+    orig <- rv$original_classifications
+    orig_class_lookup <- if (!is.null(orig)) {
+      setNames(orig$class_name, orig$file_name)
+    } else {
+      character()
+    }
+
     classes <- sort(unique(images$class_name))
 
     class_panels <- lapply(classes, function(cls) {
@@ -146,15 +158,12 @@ setup_gallery_server <- function(input, output, session, rv) {
         img_row <- class_images[i, ]
         img_file <- img_row$file_name
 
-        is_selected <- img_file %in% rv$selected_images
+        is_selected <- img_file %in% selected_set
 
-        was_relabeled <- FALSE
-        original_class <- ""
-        orig_idx <- which(rv$original_classifications$file_name == img_file)
-        if (length(orig_idx) > 0) {
-          original_class <- rv$original_classifications$class_name[orig_idx]
-          was_relabeled <- (original_class != img_row$class_name)
-        }
+        original_class <- unname(orig_class_lookup[img_file])
+        was_relabeled <- !is.na(original_class) &&
+          original_class != img_row$class_name
+        if (is.na(original_class)) original_class <- ""
 
         border_style <- if (is_selected) {
           "border: 3px solid #007bff;"

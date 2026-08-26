@@ -50,6 +50,19 @@ gallery_js <- function() {
     }
   }
 
+  // Server-initiated selection changes (Select Page/All, Deselect All).
+  // Click/drag selections are styled directly by the handlers above; the
+  // server render isolates the selection, so bulk changes arrive via this
+  // message instead of a full gallery re-render.
+  Shiny.addCustomMessageHandler('setSelectedCards', function(msg) {
+    var selected = new Set(msg.images);
+    $('.image-card').each(function() {
+      var card = $(this);
+      card.toggleClass('selected', selected.has(card.attr('data-img')));
+      updateCardStyle(card);
+    });
+  });
+
   // Drag-select functionality
   var isDragging = false;
   var startX, startY;
