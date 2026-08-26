@@ -41,12 +41,6 @@ setup_import_export_server <- function(input, output, session, rv, config,
                        type = "error")
       return()
     }
-    if (!python_available) {
-      showNotification("Python is not available. Export to .mat requires Python with scipy.",
-                       type = "error")
-      return()
-    }
-
     showModal(modalDialog(
       title = "Confirm .mat export",
       p("This will export all annotated samples from the SQLite database as",
@@ -193,7 +187,7 @@ setup_import_export_server <- function(input, output, session, rv, config,
       pixels_per_micron = config$pixels_per_micron, auto_sync = config$auto_sync,
       save_format = config$save_format, export_statistics = config$export_statistics,
       skip_class_png = config$skip_class_png, class2use_path = rv$class2use_path,
-      python_venv_path = config$python_venv_path, data_source = config$data_source,
+      data_source = config$data_source,
       dashboard_url = config$dashboard_url, dashboard_autoclass = config$dashboard_autoclass,
       dashboard_parallel_downloads = config$dashboard_parallel_downloads,
       dashboard_sleep_time = config$dashboard_sleep_time,
@@ -512,11 +506,6 @@ setup_import_export_server <- function(input, output, session, rv, config,
     if (config$save_format %in% c("mat", "both")) {
       manual_folder <- config$output_folder
     } else {
-      if (!python_available) {
-        showNotification("Python with scipy is required to convert SQLite annotations to .mat files.",
-                         type = "error")
-        return()
-      }
       temp_mat_dir <- tempfile("matlab_zip_manual_")
       dir.create(temp_mat_dir, recursive = TRUE, showWarnings = FALSE)
       use_temp_mat <- TRUE
@@ -598,7 +587,7 @@ setup_import_export_server <- function(input, output, session, rv, config,
       pixels_per_micron = config$pixels_per_micron, auto_sync = config$auto_sync,
       save_format = config$save_format, export_statistics = config$export_statistics,
       skip_class_png = config$skip_class_png, class2use_path = rv$class2use_path,
-      python_venv_path = config$python_venv_path, data_source = config$data_source,
+      data_source = config$data_source,
       dashboard_url = config$dashboard_url, dashboard_autoclass = config$dashboard_autoclass,
       dashboard_parallel_downloads = config$dashboard_parallel_downloads,
       dashboard_sleep_time = config$dashboard_sleep_time,

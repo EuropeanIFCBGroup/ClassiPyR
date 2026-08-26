@@ -568,8 +568,6 @@ ui <- page_sidebar(
           uiOutput("clear_btn_ui"))
     ),
 
-    uiOutput("python_warning"),
-
     # Help link at bottom of sidebar
     div(
       style = "margin-top: 20px; text-align: center;",

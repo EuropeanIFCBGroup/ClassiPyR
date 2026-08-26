@@ -8,7 +8,7 @@ NULL
 #' Saves the current annotations for a sample. By default annotations are
 #' stored in a local SQLite database (\code{annotations.sqlite} in the database
 #' folder). Optionally, a MATLAB-compatible \code{.mat} file can also be
-#' written (requires Python + scipy).
+#' written.
 #'
 #' @param sample_name Sample name (e.g., "D20230101T120000_IFCB134")
 #' @param classifications Current classifications data frame
@@ -105,7 +105,7 @@ save_sample_annotations <- function(sample_name,
     output_folder = png_output_folder
   )
 
-  # Save to SQLite (fast, no Python needed)
+  # Save to SQLite
   if (save_format %in% c("sqlite", "both")) {
     # Load class list if not provided
     c2u <- class2use
@@ -116,7 +116,7 @@ save_sample_annotations <- function(sample_name,
     save_annotations_db(db_path, sample_name, classifications, c2u, annotator)
   }
 
-  # Save to .mat (requires Python + scipy)
+  # Save to .mat
   if (save_format %in% c("mat", "both")) {
     # Find ADC folder: use provided path, or fall back to get_sample_paths()
     if (is.null(adc_folder)) {

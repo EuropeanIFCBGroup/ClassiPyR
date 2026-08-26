@@ -459,8 +459,6 @@ test_that("update_annotator validates inputs", {
 
 test_that("import_mat_to_db migrates data correctly", {
   skip_if_not_installed("iRfcb")
-  skip_if_not(reticulate::py_available(), "Python not available")
-  skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
 
   sample_name <- "D20230101T120000_IFCB134"
   class2use <- c("unclassified", "Diatom", "Ciliate", "Dinoflagellate")
@@ -513,8 +511,6 @@ test_that("import_mat_to_db returns FALSE for missing file", {
 
 test_that("export_db_to_mat creates valid .mat file", {
   skip_if_not_installed("iRfcb")
-  skip_if_not(reticulate::py_available(), "Python not available")
-  skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
 
   db_dir <- tempfile("db_")
   dir.create(db_dir)
@@ -680,8 +676,6 @@ test_that("export_db_to_png returns FALSE for missing database", {
 
 test_that("import_all_mat_to_db imports multiple files and returns correct counts", {
   skip_if_not_installed("iRfcb")
-  skip_if_not(reticulate::py_available(), "Python not available")
-  skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
 
   mat_dir <- tempfile("mat_")
   dir.create(mat_dir)
@@ -730,8 +724,6 @@ test_that("import_all_mat_to_db imports multiple files and returns correct count
 
 test_that("export_all_db_to_mat exports multiple samples", {
   skip_if_not_installed("iRfcb")
-  skip_if_not(reticulate::py_available(), "Python not available")
-  skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
 
   db_dir <- tempfile("db_")
   dir.create(db_dir)
@@ -764,8 +756,6 @@ test_that("export_all_db_to_mat exports multiple samples", {
 
 test_that("round-trip: DB -> .mat -> DB produces matching data", {
   skip_if_not_installed("iRfcb")
-  skip_if_not(reticulate::py_available(), "Python not available")
-  skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
 
   db_dir <- tempfile("db_")
   dir.create(db_dir)
@@ -1230,8 +1220,6 @@ test_that("schema migration adds is_manual to existing DB", {
 
 test_that("import_mat_to_db reads class2use_manual from .mat", {
   skip_if_not_installed("iRfcb")
-  skip_if_not(reticulate::py_available(), "Python not available")
-  skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
 
   # Create a .mat file with a known class list
   mat_dir <- tempfile("mat_")
@@ -1269,8 +1257,6 @@ test_that("import_mat_to_db reads class2use_manual from .mat", {
 
 test_that("import_mat_to_db preserves NaN as is_manual=0", {
   skip_if_not_installed("iRfcb")
-  skip_if_not(reticulate::py_available(), "Python not available")
-  skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
 
   mat_dir <- tempfile("mat_")
   dir.create(mat_dir)
@@ -1304,8 +1290,6 @@ test_that("import_mat_to_db preserves NaN as is_manual=0", {
 
 test_that("export_db_to_mat restores NaN for is_manual=0 rows", {
   skip_if_not_installed("iRfcb")
-  skip_if_not(reticulate::py_available(), "Python not available")
-  skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
 
   db_dir <- tempfile("db_")
   dir.create(db_dir)
@@ -1342,8 +1326,6 @@ test_that("export_db_to_mat restores NaN for is_manual=0 rows", {
 
 test_that("full roundtrip: .mat -> SQLite -> .mat preserves NaN and class list", {
   skip_if_not_installed("iRfcb")
-  skip_if_not(reticulate::py_available(), "Python not available")
-  skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
 
   # Create original .mat with NaN entries
   mat_dir <- tempfile("mat_orig_")
@@ -1964,8 +1946,6 @@ test_that("init_db_schema creates global_class_list table", {
 
 test_that("export_all_db_to_mat filters by samples parameter", {
   skip_if_not_installed("iRfcb")
-  skip_if_not(reticulate::py_available(), "Python not available")
-  skip_if_not(reticulate::py_module_available("scipy"), "scipy not available")
 
   db_dir <- tempfile("db_")
   dir.create(db_dir)

@@ -43,7 +43,7 @@ test_that("required packages are listed in DESCRIPTION", {
   expect_true(grepl("dplyr", imports))
   expect_true(grepl("DT", imports))
   expect_true(grepl("jsonlite", imports))
-  expect_true(grepl("reticulate", imports))
+  expect_false(grepl("reticulate", imports))
 })
 
 test_that("app UI can be created without errors", {

@@ -346,7 +346,6 @@ When you save, the app creates files based on your chosen storage format (config
 
 A single SQLite database file containing annotations for all samples. This is the default storage backend:
 
-- No Python dependency required
 - Fast read/write performance
 - Single file for all samples — easy to back up and manage
 - Contains `annotations` table (one row per ROI) and `class_lists` table (preserves class indices for `.mat` export)
@@ -364,7 +363,7 @@ MATLAB-compatible format with:
 - `classlist`: ROI numbers and class indices
 - Compatible with [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox
 
-> **Note**: Saving MAT files requires Python with scipy. Enable in Settings > Annotation Storage by selecting "MAT file" or "Both".
+> **Note**: Enable in Settings > Annotation Storage by selecting "MAT file" or "Both".
 
 ### Statistics Files
 
@@ -446,18 +445,18 @@ Folder paths are configured using a web-based folder browser that works on all p
 
 | Format | Description |
 |--------|-------------|
-| SQLite (recommended) | Default. Stores annotations in `annotations.sqlite` in the Database Folder. No Python needed. |
-| MAT file | MATLAB-compatible `.mat` files for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis). Requires Python with scipy. |
+| SQLite (recommended) | Default. Stores annotations in `annotations.sqlite` in the Database Folder. |
+| MAT file | MATLAB-compatible `.mat` files for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis). |
 | Both | Writes to both SQLite and `.mat` for maximum compatibility. |
 
 Below the format selector, two buttons allow bulk conversion between formats:
 
 - **Import .mat → SQLite**: Imports all `.mat` annotation files from the output folder into the SQLite database. Already-imported samples are skipped.
 - **Import PNG → SQLite**: Imports annotations from a folder of PNG images organized in class-name subfolders. Class names are extracted from folder names (trailing `_NNN` suffixes are stripped). Useful for re-importing corrected exports or importing external classification datasets.
-- **Export SQLite → .mat**: Exports all annotated samples from the database to `.mat` files in the specified Output Folder. Requires Python with scipy.
+- **Export SQLite → .mat**: Exports all annotated samples from the database to `.mat` files in the specified Output Folder.
 - **Export SQLite → PNG**: Extracts annotated images from ROI files into class-name subfolders in the PNG Output Folder. Useful for building training datasets for CNN classifiers.
 - **Export SQLite → ZIP**: Builds an EcoTaxa-ready ZIP archive from SQLite annotations that is also suitable for sharing datasets in general repositories (for example Zenodo or Figshare). The export writes class-organized PNGs, per-class inventories (`ecotaxa_<CLASSNAME>.tsv`), and a README file.
-- **Export SQLite → MATLAB ZIP**: Builds a MATLAB-format ZIP archive via `iRfcb::ifcb_zip_matlab()`, bundling `.mat` annotation files, feature CSVs, a `class2use.mat` config file, optional raw data (.roi, .adc, .hdr), and README files. When using SQLite-only storage the annotations are automatically converted to temporary `.mat` files (requires Python with scipy). See the [iRfcb image export tutorial](https://europeanifcbgroup.github.io/iRfcb/articles/image-export-tutorial.html) for more details on the MATLAB ZIP format.
+- **Export SQLite → MATLAB ZIP**: Builds a MATLAB-format ZIP archive via `iRfcb::ifcb_zip_matlab()`, bundling `.mat` annotation files, feature CSVs, a `class2use.mat` config file, optional raw data (.roi, .adc, .hdr), and README files. When using SQLite-only storage the annotations are automatically converted to temporary `.mat` files. See the [iRfcb image export tutorial](https://europeanifcbgroup.github.io/iRfcb/articles/image-export-tutorial.html) for more details on the MATLAB ZIP format.
 
 The **Export SQLite → ZIP** and **Export SQLite → MATLAB ZIP** dialogs include optional README metadata fields:
 
@@ -504,16 +503,6 @@ When applied, AphiaID values are saved in SQLite (`class_taxonomy` table) and sh
 |---------|-------------|
 | Auto-sync folders on startup | When enabled (default), the app checks and refreshes the file index on launch. Disable for instant startup using the existing cache. |
 
-### Python Configuration
-
-The Python virtual environment path is configured when launching the app:
-
-```{r, eval = FALSE}
-run_app(venv_path = "/path/to/your/venv")
-```
-
-The path is remembered for future sessions. **Priority order**: `run_app(venv_path=)` argument > saved settings > default (`./venv`).
-
 ### Live Prediction
 
 | Setting | Description |
@@ -542,7 +531,7 @@ When both fields are configured, a **Predict** button appears in the sidebar for
 ### MATLAB ZIP Export Notes
 
 - MATLAB ZIP export bundles `.mat` annotations, feature CSVs, `class2use.mat`, and optionally raw data into a single archive suitable for sharing (e.g. for the [SMHI IFCB Plankton Image Reference Library](https://doi.org/10.17044/scilifelab.25883455)).
-- If your storage format is SQLite-only, annotations are converted to `.mat` files on the fly (requires Python with scipy). When using MAT or Both storage, existing `.mat` files from the Output Folder are used directly.
+- If your storage format is SQLite-only, annotations are converted to `.mat` files on the fly. When using MAT or Both storage, existing `.mat` files from the Output Folder are used directly.
 - The `class2use.mat` config file is generated automatically from the current class list.
 - For details on the archive structure and the underlying `iRfcb::ifcb_zip_matlab()` function, see the [iRfcb image export tutorial](https://europeanifcbgroup.github.io/iRfcb/articles/image-export-tutorial.html).
 
@@ -602,7 +591,7 @@ The app maintains two types of caches:
 - **macOS**: `~/Library/Preferences/org.R-project.R/R/ClassiPyR/settings.json`
 - **Windows**: `%APPDATA%/R/config/R/ClassiPyR/settings.json`
 
-Settings are loaded automatically when you start the app, so your folder paths, class list location, and Python venv path are remembered between sessions. Settings can be reset by specifying `run_app(reset_settings = TRUE)`.
+Settings are loaded automatically when you start the app, so your folder paths and class list location are remembered between sessions. Settings can be reset by specifying `run_app(reset_settings = TRUE)`.
 
 ---
 
@@ -617,4 +606,4 @@ Optional dependencies:
 
 - **[`hdf5r`](https://CRAN.R-project.org/package=hdf5r)** for reading HDF5 (`.h5`) classifier output files. Install with `install.packages("hdf5r")`.
 
-All R dependencies are installed automatically when you install `ClassiPyR`. Python is only needed for `.mat` file export.
+All R dependencies are installed automatically when you install `ClassiPyR`.

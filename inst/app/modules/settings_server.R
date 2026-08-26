@@ -136,7 +136,7 @@ setup_settings_server <- function(input, output, session, rv, config,
                   ),
                   selected = config$save_format),
       tags$small(class = "text-muted", style = "display: block; margin-top: -5px; margin-bottom: 20px;",
-                 "SQLite works out of the box. MAT files require Python and are only needed for ifcb-analysis compatibility."),
+                 "SQLite works out of the box. MAT files are only needed for ifcb-analysis compatibility."),
 
       # Output folder — only relevant for MAT/statistics
       div(
@@ -438,7 +438,6 @@ setup_settings_server <- function(input, output, session, rv, config,
       export_statistics = input$cfg_export_statistics,
       skip_class_png = input$cfg_skip_class_png,
       class2use_path = rv$class2use_path,
-      python_venv_path = config$python_venv_path,
       data_source = input$cfg_data_source,
       dashboard_url = input$cfg_dashboard_url,
       dashboard_autoclass = input$cfg_dashboard_autoclass,

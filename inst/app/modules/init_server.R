@@ -109,7 +109,6 @@ setup_init_server <- function(input, output, session) {
       pixels_per_micron = 3.4,
       auto_sync = TRUE,
       class2use_path = NULL,
-      python_venv_path = NULL,
       save_format = "sqlite",
       export_statistics = TRUE,
       skip_class_png = "",
@@ -168,12 +167,6 @@ setup_init_server <- function(input, output, session) {
   # Initialize config from saved settings
   saved_settings <- load_settings()
 
-  # run_app(venv_path=) takes precedence over saved settings
-  run_app_venv <- getOption("ClassiPyR.venv_path", default = NULL)
-  if (!is.null(run_app_venv) && nzchar(run_app_venv)) {
-    saved_settings$python_venv_path <- run_app_venv
-  }
-
   config <- reactiveValues(
     csv_folder = saved_settings$csv_folder,
     roi_folder = saved_settings$roi_folder,
@@ -183,7 +176,6 @@ setup_init_server <- function(input, output, session) {
     use_threshold = saved_settings$use_threshold,
     pixels_per_micron = saved_settings$pixels_per_micron,
     auto_sync = saved_settings$auto_sync,
-    python_venv_path = saved_settings$python_venv_path,
     save_format = saved_settings$save_format,
     export_statistics = saved_settings$export_statistics,
     skip_class_png = saved_settings$skip_class_png,

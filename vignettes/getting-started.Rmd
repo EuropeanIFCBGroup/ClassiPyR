@@ -26,11 +26,7 @@ Make sure you have:
 4. Optionally: existing classifications (CSV, H5, or classifier MAT files, see below) to start from classified results — or use [Live Prediction](user-guide.html#live-prediction) to classify on the fly
 5. Optionally: existing annotations can be imported into SQLite via Settings > Import .mat → SQLite or Import PNG → SQLite
 
-### Python Requirements
-
-Python is **not required** for the default workflow. ClassiPyR stores annotations in a local SQLite database that works out of the box with no external dependencies.
-
-Python is only needed if you want to export annotations as MATLAB `.mat` files for use with [ifcb-analysis](https://github.com/hsosik/ifcb-analysis). Reading existing `.mat` files (annotations, classifier output, class lists) also does not require Python.
+ClassiPyR works out of the box with no external dependencies: annotations are stored in a local SQLite database by default, and MATLAB `.mat` files for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) are read and written natively in R. Python is not required.
 
 ### CSV Classification Format
 
@@ -44,15 +40,6 @@ D20230101T120000_IFCB134_00002.png,Ciliate
 
 An optional `score` column (confidence values between 0 and 1) can also be included. HDF5 (`.h5`) and MATLAB (`.mat`) classifier output files from [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb) are also supported. See the [User Guide](user-guide.html) for more details.
 
-### Python Setup (optional)
-
-Only needed if you plan to export `.mat` files. Skip this step if using the default SQLite storage.
-
-```{r, eval = FALSE}
-library(iRfcb)
-ifcb_py_install()  # Creates venv at ~/.virtualenvs/iRfcb by default
-```
-
 ---
 
 ## Step 1: Configure Settings
@@ -62,9 +49,6 @@ Launch the app:
 ```{r, eval = FALSE}
 library(ClassiPyR)
 run_app()
-
-# Or specify a custom Python virtual environment path (takes priority over saved settings)
-run_app(venv_path = "./venv")
 ```
 
 Click the **gear icon** next to your username in the sidebar.
@@ -87,8 +71,6 @@ Configure your folders using the built-in folder browser:
 > **Network drives**: The Output Folder can safely reside on a network share (e.g., for MAT files and statistics). However, the Database Folder must be on a **local** drive because [SQLite is not safe on network filesystems](https://www.sqlite.org/useovernet.html). The default database location is a local user-level directory that works out of the box.
 
 Click **Save Settings**. The app will scan your folders and build a file index cache for fast loading.
-
-> **Note**: The Python virtual environment path is configured via `run_app(venv_path = ...)` and remembered for future sessions. See the [FAQ](faq.html) for details on how the path is resolved.
 
 ---
 
@@ -211,14 +193,14 @@ The images will move to their new class group.
 
 Click **Save Annotations** to save:
 
-- **SQLite database** (default) - annotations are written to `annotations.sqlite` in your Database Folder. This single file stores annotations for all samples. No Python needed.
+- **SQLite database** (default) - annotations are written to `annotations.sqlite` in your Database Folder. This single file stores annotations for all samples.
 - Statistics CSV with accuracy metrics
 - PNGs organized by class
 
 You can change the storage format in **Settings > Annotation Storage**:
 
 - **SQLite** (recommended) - works out of the box
-- **MAT file** - for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) compatibility (requires Python)
+- **MAT file** - for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) compatibility
 - **Both** - writes to both SQLite and `.mat`
 
 ### Auto-save

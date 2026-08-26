@@ -28,22 +28,6 @@ setup_ui_outputs_server <- function(input, output, session, rv, config,
     }
   })
 
-  output$python_warning <- renderUI({
-    needs_python <- config$save_format %in% c("mat", "both")
-    if (!python_available && needs_python) {
-      div(
-        class = "alert alert-warning",
-        style = "margin-top: 10px; padding: 8px; font-size: 12px;",
-        "Python not available. Saving .mat files will not work. ",
-        "Switch to SQLite storage format in Settings, or install Python: ",
-        "run ifcb_py_install() in R console. ",
-        "MAT files are only needed for ",
-        tags$a(href = "https://github.com/hsosik/ifcb-analysis", target = "_blank", "ifcb-analysis"),
-        " compatibility."
-      )
-    }
-  })
-
   observe({
     session$sendCustomMessage("updatePixelsPerMicron", config$pixels_per_micron)
   })

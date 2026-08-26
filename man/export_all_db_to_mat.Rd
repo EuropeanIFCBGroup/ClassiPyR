@@ -20,7 +20,6 @@ Named list with counts: \code{success}, \code{failed}
 }
 \description{
 Exports every sample in the database to a MATLAB-compatible annotation file.
-Requires Python with scipy.
 }
 \examples{
 \dontrun{

@@ -14,7 +14,6 @@ suppressPackageStartupMessages({
   library(dplyr)
   library(DT)
   library(jsonlite)
-  library(reticulate)
   library(DBI)
   library(RSQLite)
 })
@@ -26,30 +25,6 @@ app_version <- as.character(utils::packageVersion("ClassiPyR"))
 # Each cached sample stores classification metadata (~1.5 MB with 5000 ROIs)
 # 20 samples ≈ 30 MB memory usage
 MAX_CACHED_SAMPLES <- 20
-
-# Get Python venv path from: 1) run_app() argument, 2) saved settings, 3) NULL (use default)
-.get_venv_path <- function() {
-  # First check if run_app() was called with venv_path argument
-  option_path <- getOption("ClassiPyR.venv_path", default = NULL)
-  if (!is.null(option_path) && nzchar(option_path)) {
-    return(option_path)
-  }
-
-  # Otherwise check saved settings
-  settings_file <- get_settings_path()
-  if (file.exists(settings_file)) {
-    tryCatch({
-      saved <- jsonlite::fromJSON(settings_file)
-      if (!is.null(saved$python_venv_path) && nzchar(saved$python_venv_path)) {
-        return(saved$python_venv_path)
-      }
-    }, error = function(e) NULL)
-  }
-  NULL
-}
-
-# Initialize Python on app startup with configured venv path
-python_available <- init_python_env(venv_path = .get_venv_path())
 
 # S3 method for dynamic_roots: allows shinyFiles to subscript a function-based
 # roots object. shinyFiles 0.9.3 internally does roots[selectedRoot] without
