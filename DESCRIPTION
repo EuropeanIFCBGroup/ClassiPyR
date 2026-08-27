@@ -24,11 +24,11 @@ Imports:
     shinyFiles,
     bslib,
     curl,
-    iRfcb (>= 0.8.1),
+    iRfcb (>= 0.10.0),
+    lifecycle,
     dplyr,
     DT,
     jsonlite,
-    reticulate,
     DBI,
     RSQLite
 Suggests:

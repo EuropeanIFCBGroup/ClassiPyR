@@ -9,7 +9,7 @@
 #' @importFrom bslib bs_theme
 #' @importFrom DT renderDT
 #' @importFrom jsonlite fromJSON
-#' @importFrom reticulate py_available
+#' @importFrom lifecycle deprecated
 #' @importFrom dplyr filter
 #' @importFrom DBI dbConnect dbDisconnect dbGetQuery dbWriteTable dbExecute
 #' @importFrom RSQLite SQLite
@@ -796,99 +796,28 @@ create_empty_changes_log <- function() {
 
 #' Initialize Python environment for iRfcb
 #'
-#' Checks if Python is already available via reticulate, otherwise tries to
-#' use or create a virtual environment. Required for reading and writing
-#' MATLAB .mat files.
+#' @description
+#' `r lifecycle::badge("deprecated")`
 #'
-#' The resolution order is:
-#' 1. If Python is already configured via reticulate, use it directly
-#'    (installs scipy if missing).
-#' 2. If \code{venv_path} is provided and the virtual environment exists,
-#'    activate it.
-#' 3. If \code{venv_path} is provided but does not exist, create it via
-#'    \code{\link[iRfcb]{ifcb_py_install}}.
-#' 4. If \code{venv_path} is NULL, default to \code{./venv} in the current
-#'    working directory for steps 2--3.
+#' `init_python_env()` was deprecated in ClassiPyR 0.3.0 and is now a no-op.
+#' As of iRfcb 0.10.0, MATLAB .mat files are read and written with a native R
+#' implementation, so ClassiPyR no longer requires Python.
 #'
-#' @param venv_path Optional path to virtual environment. If NULL (default),
-#'   uses a \code{venv} folder in the current working directory.
-#' @return TRUE if Python is available, FALSE otherwise
+#' If you need a Python environment for other iRfcb features (e.g. feature
+#' extraction), set one up with [iRfcb::ifcb_py_install()].
+#'
+#' @param venv_path Ignored.
+#' @return FALSE, invisibly
 #' @export
-#' @examples
-#' \dontrun{
-#' # Initialize with default venv path (./venv)
-#' success <- init_python_env()
-#'
-#' # Initialize with custom venv path
-#' success <- init_python_env("/path/to/my/venv")
-#'
-#' if (success) {
-#'   message("Python ready for MAT file operations")
-#' }
-#' }
+#' @keywords internal
+#' @md
 init_python_env <- function(venv_path = NULL) {
-
-  tryCatch({
-    # Determine venv path: use provided path, or working directory default
-    if (is.null(venv_path) || venv_path == "") {
-      venv_path <- file.path(getwd(), "venv")
-    }
-
-    # Set RETICULATE_PYTHON *before* initialization so that py_discover_config()
-    # resolves to the correct environment. iRfcb's check_python_and_module()
-    # uses py_discover_config() + py_list_packages() which relies on this.
-    # Without this, py_discover_config() may return system Python even when
-    # reticulate is using a virtualenv, causing scipy checks to fail.
-    .set_reticulate_python <- function(venv) {
-      if (.Platform$OS.type == "windows") {
-        py <- file.path(venv, "Scripts", "python.exe")
-      } else {
-        py <- file.path(venv, "bin", "python")
-      }
-      if (file.exists(py)) {
-        Sys.setenv(RETICULATE_PYTHON = py)
-        return(TRUE)
-      }
-      FALSE
-    }
-
-    # Try the provided/configured venv first, then common reticulate defaults
-    venv_candidates <- unique(c(
-      venv_path,
-      path.expand("~/.virtualenvs/r-reticulate"),
-      path.expand("~/.virtualenvs/iRfcb")
-    ))
-    for (candidate in venv_candidates) {
-      if (reticulate::virtualenv_exists(candidate) && .set_reticulate_python(candidate)) {
-        break
-      }
-    }
-
-    if (reticulate::py_available(initialize = TRUE)) {
-      # Check if scipy is installed (required for MAT file writing)
-      if (!reticulate::py_module_available("scipy")) {
-        message("Installing scipy...")
-        reticulate::py_install("scipy")
-      }
-      message("Python environment ready")
-      return(TRUE)
-    }
-
-    # Try to use existing venv
-    if (reticulate::virtualenv_exists(venv_path)) {
-      reticulate::use_virtualenv(venv_path, required = TRUE)
-      message("Using Python environment: ", venv_path)
-      return(TRUE)
-    }
-
-    # Create venv via iRfcb
-    message("Creating Python environment at: ", venv_path)
-    iRfcb::ifcb_py_install(venv_path)
-    reticulate::use_virtualenv(venv_path, required = TRUE)
-    return(TRUE)
-
-  }, error = function(e) {
-    warning("Failed to initialize Python environment: ", e$message)
-    return(FALSE)
-  })
+  lifecycle::deprecate_warn(
+    "0.3.0", "init_python_env()",
+    details = c(
+      "ClassiPyR no longer requires Python: iRfcb >= 0.10.0 reads and writes .mat files natively in R.",
+      "For other iRfcb features that use Python, see `iRfcb::ifcb_py_install()`."
+    )
+  )
+  invisible(FALSE)
 }

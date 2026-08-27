@@ -72,7 +72,7 @@ TRUE on success, FALSE when there is nothing to save (empty changes
 Saves the current annotations for a sample. By default annotations are
 stored in a local SQLite database (\code{annotations.sqlite} in the database
 folder). Optionally, a MATLAB-compatible \code{.mat} file can also be
-written (requires Python + scipy).
+written.
 }
 \examples{
 \dontrun{

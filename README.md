@@ -11,7 +11,7 @@ A Shiny application for manual (human) image classification and validation of Im
 
 ## Background
 
-`ClassiPyR` was created to provide a lightweight, standalone annotation and validation tool that is fully compatible with the [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox and custom classifiers (e.g. a CNN). The primary design goals were user-friendliness and portability—enabling researchers to work with IFCB data without complex setup requirements or dependencies on specific computing environments (other than Python and R). To achieve these goals efficiently, [Claude Code](https://code.claude.com/) was used for development.
+`ClassiPyR` was created to provide a lightweight, standalone annotation and validation tool that is fully compatible with the [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox and custom classifiers (e.g. a CNN). The primary design goals were user-friendliness and portability—enabling researchers to work with IFCB data without complex setup requirements or dependencies on specific computing environments (other than R). To achieve these goals efficiently, [Claude Code](https://code.claude.com/) was used for development.
 
 ## Features
 
@@ -21,7 +21,7 @@ A Shiny application for manual (human) image classification and validation of Im
 - **Live Prediction**: One-click CNN classification via a remote Gradio API using [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb)
 - **Multiple Formats**: Load from CSV, HDF5 or MATLAB classifier output
 - **Flexible Image Source**: Load samples from ROI files or pre-extracted PNG sample folders
-- **SQLite Storage**: Annotations stored in a local SQLite database by default - no Python needed
+- **SQLite Storage**: Annotations stored in a local SQLite database by default
 - **Efficient Workflow**: Drag-select, batch relabeling, class filtering
 - **MATLAB Compatible**: Optional `.mat` export for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox
 - **CNN Training Ready**: Organized PNG output by class
@@ -50,24 +50,7 @@ run_app()
 
 See the [Getting Started](https://europeanifcbgroup.github.io/ClassiPyR/articles/getting-started.html) guide for detailed setup instructions.
 
-### Python Setup (optional)
-
-Python is **not required** for the default workflow. Annotations are stored in a local SQLite database that works out of the box.
-
-Python is only needed if you want to export annotations as MATLAB `.mat` files for use with [ifcb-analysis](https://github.com/hsosik/ifcb-analysis). To set up using `iRfcb`:
-
-```r
-library(iRfcb)
-
-# Define a path were the venv will be installed
-venv_path <- "/path/to/your/venv"
-
-# Install the venv
-ifcb_py_install(venv_path)
-
-# Launch with Python support
-run_app(venv_path = venv_path)
-```
+No Python setup is needed: all file formats, including MATLAB `.mat` files for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis), are read and written natively in R (via `iRfcb` >= 0.10.0).
 
 ## Documentation
 

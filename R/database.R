@@ -2,7 +2,7 @@
 #
 # Provides functions to store and retrieve annotations in a local SQLite
 # database as an alternative to .mat files. SQLite is the default storage
-# backend - it works out of the box with no Python dependency.
+# backend.
 
 #' @importFrom DBI dbConnect dbDisconnect dbWriteTable dbGetQuery dbExecute
 #' @importFrom RSQLite SQLite
@@ -656,7 +656,6 @@ import_mat_to_db <- function(mat_path, db_path, sample_name,
 #'
 #' Reads annotations for a single sample from the database and writes a
 #' MATLAB-compatible annotation file using \code{iRfcb::ifcb_create_manual_file}.
-#' Requires Python with scipy.
 #'
 #' @param db_path Path to the SQLite database file
 #' @param sample_name Sample name
@@ -781,7 +780,6 @@ import_all_mat_to_db <- function(mat_folder, db_path,
 #' Bulk export all annotated samples from SQLite to .mat files
 #'
 #' Exports every sample in the database to a MATLAB-compatible annotation file.
-#' Requires Python with scipy.
 #'
 #' @param db_path Path to the SQLite database file
 #' @param output_folder Folder where .mat files will be written

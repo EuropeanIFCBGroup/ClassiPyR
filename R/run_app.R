@@ -3,14 +3,12 @@
 #' Run the ClassiPyR Shiny Application
 #'
 #' Launches the ClassiPyR Shiny app for manual image classification and validation of IFCB data.
-#' This app relies on the iRfcb package for reading IFCB data files and requires
-#' Python (via reticulate) for saving MATLAB .mat files.
+#' This app relies on the iRfcb package for reading and writing IFCB data files,
+#' including MATLAB .mat files, entirely in R.
 #'
-#' @param venv_path Optional path to a Python virtual environment. When specified,
-#'   this path takes priority over any saved venv path in settings, both for Python
-#'   initialization at startup and in the Settings UI. If NULL (default), the app
-#'   uses any saved venv path from settings, or falls back to a 'venv' folder in
-#'   the current working directory.
+#' @param venv_path `r lifecycle::badge("deprecated")` Ignored. ClassiPyR no
+#'   longer requires Python; .mat files are read and written natively in R
+#'   (iRfcb >= 0.10.0).
 #' @param reset_settings If TRUE, deletes saved settings before starting the app.
 #'   Useful for troubleshooting or starting fresh. Default is FALSE.
 #' @param launch.browser If TRUE (default), opens the app in the system's default
@@ -24,9 +22,6 @@
 #' # Run with default settings (opens in browser)
 #' run_app()
 #'
-#' # Run with a specific Python virtual environment
-#' run_app(venv_path = "/path/to/my/venv")
-#'
 #' # Run on a specific port
 #' run_app(port = 3838)
 #'
@@ -36,7 +31,8 @@
 #' # Reset all settings and start fresh
 #' run_app(reset_settings = TRUE)
 #' }
-run_app <- function(venv_path = NULL, reset_settings = FALSE, launch.browser = TRUE, ...) {
+#' @md
+run_app <- function(venv_path = deprecated(), reset_settings = FALSE, launch.browser = TRUE, ...) {
   app_dir <- system.file("app", package = "ClassiPyR")
   if (app_dir == "") {
     stop("Could not find app directory. Try re-installing `ClassiPyR`.",
@@ -56,9 +52,14 @@ run_app <- function(venv_path = NULL, reset_settings = FALSE, launch.browser = T
   # Capture user's working directory before Shiny changes it
   options(ClassiPyR.startup_wd = getwd())
 
-  # Set venv path as option for the app to use
-  if (!is.null(venv_path)) {
-    options(ClassiPyR.venv_path = venv_path)
+  if (lifecycle::is_present(venv_path)) {
+    lifecycle::deprecate_warn(
+      "0.3.0", "run_app(venv_path)",
+      details = paste(
+        "The argument is ignored: ClassiPyR no longer requires Python",
+        "(iRfcb >= 0.10.0 reads and writes .mat files natively in R)."
+      )
+    )
   }
 
   shiny::runApp(app_dir, launch.browser = launch.browser, ...)

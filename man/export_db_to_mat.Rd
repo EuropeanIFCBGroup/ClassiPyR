@@ -19,7 +19,6 @@ TRUE on success, FALSE on failure
 \description{
 Reads annotations for a single sample from the database and writes a
 MATLAB-compatible annotation file using \code{iRfcb::ifcb_create_manual_file}.
-Requires Python with scipy.
 }
 \examples{
 \dontrun{

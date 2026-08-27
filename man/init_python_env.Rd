@@ -7,38 +7,19 @@
 init_python_env(venv_path = NULL)
 }
 \arguments{
-\item{venv_path}{Optional path to virtual environment. If NULL (default),
-uses a \code{venv} folder in the current working directory.}
+\item{venv_path}{Ignored.}
 }
 \value{
-TRUE if Python is available, FALSE otherwise
+FALSE, invisibly
 }
 \description{
-Checks if Python is already available via reticulate, otherwise tries to
-use or create a virtual environment. Required for reading and writing
-MATLAB .mat files.
-}
-\details{
-The resolution order is:
-1. If Python is already configured via reticulate, use it directly
-   (installs scipy if missing).
-2. If \code{venv_path} is provided and the virtual environment exists,
-   activate it.
-3. If \code{venv_path} is provided but does not exist, create it via
-   \code{\link[iRfcb]{ifcb_py_install}}.
-4. If \code{venv_path} is NULL, default to \code{./venv} in the current
-   working directory for steps 2--3.
-}
-\examples{
-\dontrun{
-# Initialize with default venv path (./venv)
-success <- init_python_env()
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#deprecated}{\figure{lifecycle-deprecated.svg}{options: alt='[Deprecated]'}}}{\strong{[Deprecated]}}
 
-# Initialize with custom venv path
-success <- init_python_env("/path/to/my/venv")
+\code{init_python_env()} was deprecated in ClassiPyR 0.3.0 and is now a no-op.
+As of iRfcb 0.10.0, MATLAB .mat files are read and written with a native R
+implementation, so ClassiPyR no longer requires Python.
 
-if (success) {
-  message("Python ready for MAT file operations")
+If you need a Python environment for other iRfcb features (e.g. feature
+extraction), set one up with \code{\link[iRfcb:ifcb_py_install]{iRfcb::ifcb_py_install()}}.
 }
-}
-}
+\keyword{internal}

@@ -105,28 +105,17 @@ test_that("update_settings_file recovers from a corrupt settings file", {
 })
 
 # =============================================================================
-# Python environment
+# Python environment (deprecated)
 # =============================================================================
 
-test_that("init_python_env returns boolean", {
-  # This test just checks the return type, not actual Python availability
-  result <- init_python_env()
-
-  expect_type(result, "logical")
-  expect_length(result, 1)
-})
-
-test_that("init_python_env accepts venv_path parameter", {
-  # Test that the function accepts the parameter without error
-  temp_venv <- file.path(tempdir(), "test-venv-param")
-
-  # Should not error even if venv doesn't exist (will try to create or return FALSE)
-  result <- tryCatch(
-    init_python_env(venv_path = temp_venv),
-    error = function(e) FALSE
+test_that("init_python_env is deprecated and returns FALSE invisibly", {
+  expect_warning(
+    result <- init_python_env(),
+    class = "lifecycle_warning_deprecated"
   )
 
   expect_type(result, "logical")
+  expect_false(result)
 })
 
 # =============================================================================
