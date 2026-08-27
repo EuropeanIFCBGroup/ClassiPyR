@@ -165,15 +165,13 @@ setup_gallery_server <- function(input, output, session, rv) {
           original_class != img_row$class_name
         if (is.na(original_class)) original_class <- ""
 
-        border_style <- if (is_selected) {
-          "border: 3px solid #007bff;"
-        } else if (was_relabeled) {
-          "border: 3px solid #ffc107;"
-        } else {
-          "border: 1px solid #ddd;"
-        }
-
-        card_class <- if (is_selected) "image-card selected" else "image-card"
+        # Visual state lives in the .image-card CSS rules (ui.R), which keep
+        # border + padding at a constant total so state changes never resize
+        # the card and shift the gallery layout
+        card_class <- paste(c("image-card",
+                              if (is_selected) "selected",
+                              if (was_relabeled) "relabeled"),
+                            collapse = " ")
 
         # Sanitize file names to prevent XSS
         safe_img_file <- htmltools::htmlEscape(img_file)
@@ -192,10 +190,6 @@ setup_gallery_server <- function(input, output, session, rv) {
         div(
           class = card_class,
           `data-img` = safe_img_file,
-          `data-relabeled` = tolower(as.character(was_relabeled)),
-          style = paste0("display: inline-block; margin: 5px; padding: 5px; ",
-                         border_style, " border-radius: 5px; cursor: pointer; ",
-                         "background-color: ", if(is_selected) "#e7f1ff" else "white", ";"),
 
           tags$img(
             src = img_src,

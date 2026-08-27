@@ -31,35 +31,19 @@ gallery_js <- function() {
     if (measureMode) return;
     var img = $(this).data('img');
     $(this).toggleClass('selected');
-    updateCardStyle($(this));
     Shiny.setInputValue('toggle_image', {img: img, time: new Date()});
   });
 
-  function updateCardStyle(card) {
-    if (card.hasClass('selected')) {
-      card.css({'border': '3px solid #007bff', 'background-color': '#e7f1ff'});
-    } else {
-      // Read the attribute directly: jQuery .data() auto-converts 'true' to
-      // a boolean, so comparing it against the string 'true' always fails
-      var wasRelabeled = card.attr('data-relabeled') === 'true';
-      if (wasRelabeled) {
-        card.css({'border': '3px solid #ffc107', 'background-color': 'white'});
-      } else {
-        card.css({'border': '1px solid #ddd', 'background-color': 'white'});
-      }
-    }
-  }
-
   // Server-initiated selection changes (Select Page/All, Deselect All).
-  // Click/drag selections are styled directly by the handlers above; the
-  // server render isolates the selection, so bulk changes arrive via this
-  // message instead of a full gallery re-render.
+  // Click/drag selections toggle the class directly in the handlers above;
+  // the server render isolates the selection, so bulk changes arrive via
+  // this message instead of a full gallery re-render. All visual state
+  // (selected blue, relabeled yellow) lives in the .image-card CSS rules.
   Shiny.addCustomMessageHandler('setSelectedCards', function(msg) {
     var selected = new Set(msg.images);
     $('.image-card').each(function() {
       var card = $(this);
       card.toggleClass('selected', selected.has(card.attr('data-img')));
-      updateCardStyle(card);
     });
   });
 
@@ -140,7 +124,6 @@ gallery_js <- function() {
         selectedImages.push(img);
 
         $(this).addClass('selected');
-        updateCardStyle($(this));
       }
     });
 
@@ -330,6 +313,30 @@ ui <- page_sidebar(
       /* Taller dropdown for class review select */
       #class_review_select + .selectize-control .selectize-dropdown-content {
         max-height: 350px !important;
+      }
+
+      /* Image card selection/relabel states. Border + padding always sum
+         to 8px so toggling a state never changes the card's outer size
+         (a wider border used to push the last card of a row onto the
+         next line, shifting images around on selection). The .selected
+         rule comes after .relabeled so it wins when both apply. */
+      .image-card {
+        display: inline-block;
+        margin: 5px;
+        padding: 7px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        cursor: pointer;
+        background-color: white;
+      }
+      .image-card.relabeled {
+        padding: 5px;
+        border: 3px solid #ffc107;
+      }
+      .image-card.selected {
+        padding: 5px;
+        border: 3px solid #007bff;
+        background-color: #e7f1ff;
       }
 
       /* Loading overlay styles */
