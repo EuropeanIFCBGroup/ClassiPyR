@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">ClassiPyR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.1.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -46,7 +46,7 @@
     </div>
 
     <div class="section level2">
-<h2 class="pkg-version" data-toc-text="development version" id="classipyr-development-version">ClassiPyR (development version)<a class="anchor" aria-label="anchor" href="#classipyr-development-version"></a></h2>
+<h2 class="pkg-version" data-toc-text="0.3.0" id="classipyr-030">ClassiPyR 0.3.0<a class="anchor" aria-label="anchor" href="#classipyr-030"></a></h2>
 <ul><li>ClassiPyR now requires R &gt;= 4.4.0 (for base R’s <code>%||%</code> operator, which the app already relied on).</li>
 <li>
 <strong>Python is no longer required.</strong> iRfcb 0.10.0 reads and writes MATLAB <code>.mat</code> files with a native R implementation, so ClassiPyR now requires <code>iRfcb &gt;= 0.10.0</code> and all Python-related code has been removed: <code>reticulate</code> is no longer an Import, the app no longer initializes a Python environment at startup, and the “Python not available” warnings and export blocks are gone — <code>.mat</code> saving, SQLite → <code>.mat</code> export and MATLAB ZIP export work out of the box for everyone.
@@ -55,20 +55,20 @@
 <li>If you need a Python environment for other iRfcb features (e.g. feature extraction), use <code><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">iRfcb::ifcb_py_install()</a></code> directly.</li>
 </ul></li>
 </ul><div class="section level3">
-<h3 id="new-features-development-version">New features<a class="anchor" aria-label="anchor" href="#new-features-development-version"></a></h3>
+<h3 id="new-features-0-3-0">New features<a class="anchor" aria-label="anchor" href="#new-features-0-3-0"></a></h3>
 <ul><li>New exported function <code><a href="../reference/fill_unclassified_db.html">fill_unclassified_db()</a></code> backfills a partially imported sample. After importing only selected taxa with <code><a href="../reference/import_png_folder_to_db.html">import_png_folder_to_db()</a></code>, it reads each sample’s complete ROI list from its <code>.adc</code> file and inserts the remaining ROIs as <code>unclassified</code> (marked as not yet reviewed), leaving existing annotations untouched.</li>
 <li>New exported function <code><a href="../reference/import_png_folder_with_unclassified.html">import_png_folder_with_unclassified()</a></code> wraps <code><a href="../reference/import_png_folder_to_db.html">import_png_folder_to_db()</a></code> and <code><a href="../reference/fill_unclassified_db.html">fill_unclassified_db()</a></code> into a single call. It imports the selected-taxa PNGs and then backfills the remaining ROIs as <code>unclassified</code> for <strong>only the samples that were just imported</strong>, so each imported sample is fully represented without touching samples from earlier import sessions.</li>
 <li>New exported function <code><a href="../reference/update_settings_file.html">update_settings_file()</a></code> performs read-merge-write updates to the settings JSON file, so callers that only know a subset of settings keys can update them without erasing the rest (<a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/36" class="external-link">#36</a>).</li>
 </ul></div>
 <div class="section level3">
-<h3 id="performance-development-version">Performance<a class="anchor" aria-label="anchor" href="#performance-development-version"></a></h3>
+<h3 id="performance-0-3-0">Performance<a class="anchor" aria-label="anchor" href="#performance-0-3-0"></a></h3>
 <ul><li>
 <strong>Selecting images is now instant</strong>: Clicking or drag-selecting images in the gallery previously re-rendered the entire page of image cards on the server for every selection change (the gallery greyed out while Shiny recomputed and the browser rebuilt the DOM), purely to apply a border color the browser had already drawn. The gallery render now isolates the selection state and leaves selection styling to the client; the Select Page / Select All / Deselect All buttons sync card styling through a lightweight custom message instead of a full re-render. The renders that do still happen (page or filter changes, relabels) are also faster: two per-card linear scans over the classification tables were replaced with vectorized lookups.</li>
 <li>
 <strong>Selecting images no longer shifts the gallery layout</strong>: The thicker blue (selected) and yellow (relabeled) borders made cards a few pixels wider than unselected ones, which could push the last image of a row onto the next line — moving images around mid-selection. Card styling now lives in CSS rules where border and padding always sum to the same width, so state changes never resize a card.</li>
 </ul></div>
 <div class="section level3">
-<h3 id="bug-fixes-development-version">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-development-version"></a></h3>
+<h3 id="bug-fixes-0-3-0">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-0-3-0"></a></h3>
 <p>Interface bug review (<a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/36" class="external-link">#36</a>) — data integrity:</p>
 <ul><li>
 <strong>Settings are no longer partially erased</strong>: Uploading a class list file or running a “SQLite → MATLAB ZIP” export previously rewrote <code>settings.json</code> with only the keys those dialogs knew about, silently resetting storage format, data source, dashboard configuration, Python venv path, prediction model and other saved settings on the next start. All settings writes now merge into the existing file.</li>

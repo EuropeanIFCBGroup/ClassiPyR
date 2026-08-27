@@ -1,6 +1,6 @@
 # Changelog
 
-## ClassiPyR (development version)
+## ClassiPyR 0.3.0
 
 - ClassiPyR now requires R \>= 4.4.0 (for base R’s `%||%` operator,
   which the app already relied on).
