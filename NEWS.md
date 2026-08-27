@@ -1,4 +1,4 @@
-# ClassiPyR (development version)
+# ClassiPyR 0.3.0
 
 - ClassiPyR now requires R >= 4.4.0 (for base R's `%||%` operator, which the app already relied on).
 - **Python is no longer required.** iRfcb 0.10.0 reads and writes MATLAB `.mat` files with a native R implementation, so ClassiPyR now requires `iRfcb >= 0.10.0` and all Python-related code has been removed: `reticulate` is no longer an Import, the app no longer initializes a Python environment at startup, and the "Python not available" warnings and export blocks are gone — `.mat` saving, SQLite → `.mat` export and MATLAB ZIP export work out of the box for everyone.
