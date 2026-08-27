@@ -8,6 +8,11 @@
 - New exported function `import_png_folder_with_unclassified()` wraps `import_png_folder_to_db()` and `fill_unclassified_db()` into a single call. It imports the selected-taxa PNGs and then backfills the remaining ROIs as `unclassified` for **only the samples that were just imported**, so each imported sample is fully represented without touching samples from earlier import sessions.
 - New exported function `update_settings_file()` performs read-merge-write updates to the settings JSON file, so callers that only know a subset of settings keys can update them without erasing the rest (#36).
 
+## Performance
+
+- **Selecting images is now instant**: Clicking or drag-selecting images in the gallery previously re-rendered the entire page of image cards on the server for every selection change (the gallery greyed out while Shiny recomputed and the browser rebuilt the DOM), purely to apply a border color the browser had already drawn. The gallery render now isolates the selection state and leaves selection styling to the client; the Select Page / Select All / Deselect All buttons sync card styling through a lightweight custom message instead of a full re-render. The renders that do still happen (page or filter changes, relabels) are also faster: two per-card linear scans over the classification tables were replaced with vectorized lookups.
+- **Selecting images no longer shifts the gallery layout**: The thicker blue (selected) and yellow (relabeled) borders made cards a few pixels wider than unselected ones, which could push the last image of a row onto the next line — moving images around mid-selection. Card styling now lives in CSS rules where border and padding always sum to the same width, so state changes never resize a card.
+
 ## Bug fixes
 
 Interface bug review (#36) — data integrity:

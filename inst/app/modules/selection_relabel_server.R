@@ -2,6 +2,14 @@
 
 setup_selection_relabel_server <- function(input, output, session, rv,
                                            filtered_images, paginated_images) {
+  # The gallery renderUI isolates rv$selected_images (a selection change must
+  # not re-render every card), so server-initiated selection changes have to
+  # push their styling to the client explicitly
+  sync_selection_to_client <- function() {
+    session$sendCustomMessage("setSelectedCards",
+                              list(images = as.list(rv$selected_images)))
+  }
+
   observeEvent(input$toggle_image, {
     img <- input$toggle_image$img
     if (img %in% rv$selected_images) {
@@ -31,11 +39,13 @@ setup_selection_relabel_server <- function(input, output, session, rv,
       # Toggle back to "first" so next click selects page only
       rv$select_all_state <- "first"
     }
+    sync_selection_to_client()
   })
 
   observeEvent(input$deselect_all, {
     rv$selected_images <- character()
     rv$select_all_state <- "first"  # Reset select_all state
+    sync_selection_to_client()
   })
 
   # Reset select_all_state when classifications change (new sample loaded)
@@ -117,6 +127,8 @@ setup_selection_relabel_server <- function(input, output, session, rv,
                       selected = input$class_filter)
 
     showNotification(paste("Relabeled", relabeled_count, "images to", new_class), type = "message")
+    # No setSelectedCards sync needed: the rv$classifications assignment above
+    # re-renders the gallery, which picks up the cleared selection
     rv$selected_images <- character()
   }
 
