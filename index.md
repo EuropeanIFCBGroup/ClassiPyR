@@ -22,7 +22,7 @@ and validation tool that is fully compatible with the
 custom classifiers (e.g. a CNN). The primary design goals were
 user-friendliness and portability—enabling researchers to work with IFCB
 data without complex setup requirements or dependencies on specific
-computing environments (other than Python and R). To achieve these goals
+computing environments (other than R). To achieve these goals
 efficiently, [Claude Code](https://code.claude.com/) was used for
 development.
 
@@ -40,7 +40,7 @@ development.
 - **Flexible Image Source**: Load samples from ROI files or
   pre-extracted PNG sample folders
 - **SQLite Storage**: Annotations stored in a local SQLite database by
-  default - no Python needed
+  default
 - **Efficient Workflow**: Drag-select, batch relabeling, class filtering
 - **MATLAB Compatible**: Optional `.mat` export for
   [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox
@@ -76,29 +76,9 @@ See the [Getting
 Started](https://europeanifcbgroup.github.io/ClassiPyR/articles/getting-started.html)
 guide for detailed setup instructions.
 
-### Python Setup (optional)
-
-Python is **not required** for the default workflow. Annotations are
-stored in a local SQLite database that works out of the box.
-
-Python is only needed if you want to export annotations as MATLAB `.mat`
-files for use with
-[ifcb-analysis](https://github.com/hsosik/ifcb-analysis). To set up
-using `iRfcb`:
-
-``` r
-
-library(iRfcb)
-
-# Define a path were the venv will be installed
-venv_path <- "/path/to/your/venv"
-
-# Install the venv
-ifcb_py_install(venv_path)
-
-# Launch with Python support
-run_app(venv_path = venv_path)
-```
+No Python setup is needed: all file formats, including MATLAB `.mat`
+files for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis), are
+read and written natively in R (via `iRfcb` \>= 0.10.0).
 
 ## Documentation
 

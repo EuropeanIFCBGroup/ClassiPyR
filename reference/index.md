@@ -7,7 +7,7 @@ Functions for launching ClassiPyR
 - [`run_app()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/run_app.md)
   : Run the ClassiPyR Shiny Application
 - [`init_python_env()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/init_python_env.md)
-  : Initialize Python environment for iRfcb
+  **\[deprecated\]** : Initialize Python environment for iRfcb
 - [`get_config_dir()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_config_dir.md)
   : Get ClassiPyR configuration directory
 - [`get_settings_path()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/get_settings_path.md)

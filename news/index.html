@@ -48,6 +48,12 @@
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="classipyr-development-version">ClassiPyR (development version)<a class="anchor" aria-label="anchor" href="#classipyr-development-version"></a></h2>
 <ul><li>ClassiPyR now requires R &gt;= 4.4.0 (for base R’s <code>%||%</code> operator, which the app already relied on).</li>
+<li>
+<strong>Python is no longer required.</strong> iRfcb 0.10.0 reads and writes MATLAB <code>.mat</code> files with a native R implementation, so ClassiPyR now requires <code>iRfcb &gt;= 0.10.0</code> and all Python-related code has been removed: <code>reticulate</code> is no longer an Import, the app no longer initializes a Python environment at startup, and the “Python not available” warnings and export blocks are gone — <code>.mat</code> saving, SQLite → <code>.mat</code> export and MATLAB ZIP export work out of the box for everyone.
+<ul><li>
+<code><a href="../reference/init_python_env.html">init_python_env()</a></code> is deprecated and now a no-op; the <code>venv_path</code> argument of <code><a href="../reference/run_app.html">run_app()</a></code> is deprecated and ignored (a warning is issued when supplied). The <code>python_venv_path</code> entry in saved settings is ignored.</li>
+<li>If you need a Python environment for other iRfcb features (e.g. feature extraction), use <code><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">iRfcb::ifcb_py_install()</a></code> directly.</li>
+</ul></li>
 </ul><div class="section level3">
 <h3 id="new-features-development-version">New features<a class="anchor" aria-label="anchor" href="#new-features-development-version"></a></h3>
 <ul><li>New exported function <code><a href="../reference/fill_unclassified_db.html">fill_unclassified_db()</a></code> backfills a partially imported sample. After importing only selected taxa with <code><a href="../reference/import_png_folder_to_db.html">import_png_folder_to_db()</a></code>, it reads each sample’s complete ROI list from its <code>.adc</code> file and inserts the remaining ROIs as <code>unclassified</code> (marked as not yet reviewed), leaving existing annotations untouched.</li>

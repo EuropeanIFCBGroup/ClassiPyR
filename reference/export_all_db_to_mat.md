@@ -1,7 +1,7 @@
 # Bulk export all annotated samples from SQLite to .mat files
 
 Exports every sample in the database to a MATLAB-compatible annotation
-file. Requires Python with scipy.
+file.
 
 ## Usage
 

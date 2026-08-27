@@ -3,7 +3,6 @@
 Reads annotations for a single sample from the database and writes a
 MATLAB-compatible annotation file using
 [`iRfcb::ifcb_create_manual_file`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_create_manual_file.html).
-Requires Python with scipy.
 
 ## Usage
 

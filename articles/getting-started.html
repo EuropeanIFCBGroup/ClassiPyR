@@ -99,17 +99,10 @@ on the fly</li>
 <li>Optionally: existing annotations can be imported into SQLite via
 Settings &gt; Import .mat → SQLite or Import PNG → SQLite</li>
 </ol>
-<div class="section level3">
-<h3 id="python-requirements">Python Requirements<a class="anchor" aria-label="anchor" href="#python-requirements"></a>
-</h3>
-<p>Python is <strong>not required</strong> for the default workflow.
-ClassiPyR stores annotations in a local SQLite database that works out
-of the box with no external dependencies.</p>
-<p>Python is only needed if you want to export annotations as MATLAB
-<code>.mat</code> files for use with <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a>.
-Reading existing <code>.mat</code> files (annotations, classifier
-output, class lists) also does not require Python.</p>
-</div>
+<p>ClassiPyR works out of the box with no external dependencies:
+annotations are stored in a local SQLite database by default, and MATLAB
+<code>.mat</code> files for <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a> are
+read and written natively in R. Python is not required.</p>
 <div class="section level3">
 <h3 id="csv-classification-format">CSV Classification Format<a class="anchor" aria-label="anchor" href="#csv-classification-format"></a>
 </h3>
@@ -124,15 +117,6 @@ and 1) can also be included. HDF5 (<code>.h5</code>) and MATLAB
 (<code>.mat</code>) classifier output files from <a href="https://github.com/EuropeanIFCBGroup/iRfcb" class="external-link">iRfcb</a> are also
 supported. See the <a href="user-guide.html">User Guide</a> for more
 details.</p>
-</div>
-<div class="section level3">
-<h3 id="python-setup-optional">Python Setup (optional)<a class="anchor" aria-label="anchor" href="#python-setup-optional"></a>
-</h3>
-<p>Only needed if you plan to export <code>.mat</code> files. Skip this
-step if using the default SQLite storage.</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://europeanifcbgroup.github.io/iRfcb/" class="external-link">iRfcb</a></span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">ifcb_py_install</a></span><span class="op">(</span><span class="op">)</span>  <span class="co"># Creates venv at ~/.virtualenvs/iRfcb by default</span></span></code></pre></div>
 <hr>
 </div>
 </div>
@@ -140,12 +124,9 @@ step if using the default SQLite storage.</p>
 <h2 id="step-1-configure-settings">Step 1: Configure Settings<a class="anchor" aria-label="anchor" href="#step-1-configure-settings"></a>
 </h2>
 <p>Launch the app:</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://EuropeanIFCBGroup.github.io/ClassiPyR/" class="external-link">ClassiPyR</a></span><span class="op">)</span></span>
-<span><span class="fu"><a href="../reference/run_app.html">run_app</a></span><span class="op">(</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Or specify a custom Python virtual environment path (takes priority over saved settings)</span></span>
-<span><span class="fu"><a href="../reference/run_app.html">run_app</a></span><span class="op">(</span>venv_path <span class="op">=</span> <span class="st">"./venv"</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="../reference/run_app.html">run_app</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p>Click the <strong>gear icon</strong> next to your username in the
 sidebar.</p>
 <a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/settings-dialog.png">
@@ -204,12 +185,6 @@ user-level directory that works out of the box.</p>
 </blockquote>
 <p>Click <strong>Save Settings</strong>. The app will scan your folders
 and build a file index cache for fast loading.</p>
-<blockquote>
-<p><strong>Note</strong>: The Python virtual environment path is
-configured via <code>run_app(venv_path = ...)</code> and remembered for
-future sessions. See the <a href="faq.html">FAQ</a> for details on how
-the path is resolved.</p>
-</blockquote>
 <hr>
 </div>
 <div class="section level2">
@@ -379,7 +354,7 @@ assigned a new class. Click to enlarge.</em>
 <li>
 <strong>SQLite database</strong> (default) - annotations are written
 to <code>annotations.sqlite</code> in your Database Folder. This single
-file stores annotations for all samples. No Python needed.</li>
+file stores annotations for all samples.</li>
 <li>Statistics CSV with accuracy metrics</li>
 <li>PNGs organized by class</li>
 </ul>
@@ -390,7 +365,7 @@ Storage</strong>:</p>
 <strong>SQLite</strong> (recommended) - works out of the box</li>
 <li>
 <strong>MAT file</strong> - for <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a>
-compatibility (requires Python)</li>
+compatibility</li>
 <li>
 <strong>Both</strong> - writes to both SQLite and
 <code>.mat</code>

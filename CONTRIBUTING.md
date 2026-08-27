@@ -9,7 +9,6 @@ document provides guidelines for contributing to the project.
 
 - R (\>= 4.0.0)
 - devtools package for development
-- Python with `scipy` (required for saving .mat annotation files)
 
 ### Setting Up the Development Environment
 
@@ -28,15 +27,6 @@ document provides guidelines for contributing to the project.
 
     devtools::install_deps(dependencies = TRUE)
     devtools::load_all()
-    ```
-
-4.  Set up Python environment (required for saving .mat annotation
-    files):
-
-    ``` r
-
-    library(iRfcb)
-    ifcb_py_install(envname = "./venv")
     ```
 
 ### Running the App During Development

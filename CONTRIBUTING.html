@@ -54,7 +54,6 @@
 <h3 id="prerequisites">Prerequisites<a class="anchor" aria-label="anchor" href="#prerequisites"></a></h3>
 <ul><li>R (&gt;= 4.0.0)</li>
 <li>devtools package for development</li>
-<li>Python with <code>scipy</code> (required for saving .mat annotation files)</li>
 </ul></div>
 <div class="section level3">
 <h3 id="setting-up-the-development-environment">Setting Up the Development Environment<a class="anchor" aria-label="anchor" href="#setting-up-the-development-environment"></a></h3>
@@ -70,16 +69,10 @@
 <code class="sourceCode R"><span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">install_deps</span><span class="op">(</span>dependencies <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">load_all</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 </li>
-<li>
-<p>Set up Python environment (required for saving .mat annotation files):</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://europeanifcbgroup.github.io/iRfcb/" class="external-link">iRfcb</a></span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html" class="external-link">ifcb_py_install</a></span><span class="op">(</span>envname <span class="op">=</span> <span class="st">"./venv"</span><span class="op">)</span></span></code></pre></div>
-</li>
 </ol></div>
 <div class="section level3">
 <h3 id="running-the-app-during-development">Running the App During Development<a class="anchor" aria-label="anchor" href="#running-the-app-during-development"></a></h3>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># From the repository root</span></span>
 <span><span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/runApp.html" class="external-link">runApp</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
@@ -122,22 +115,22 @@
 <h3 id="submitting-changes">Submitting Changes<a class="anchor" aria-label="anchor" href="#submitting-changes"></a></h3>
 <ol style="list-style-type: decimal"><li>
 <p>Create a new branch for your feature or fix:</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">git</span> checkout <span class="at">-b</span> feature/your-feature-name</span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="fu">git</span> checkout <span class="at">-b</span> feature/your-feature-name</span></code></pre></div>
 </li>
 <li><p>Make your changes following the code style guidelines below</p></li>
 <li>
 <p>Run tests and checks:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">test</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">check</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 </li>
 <li>
 <p>Commit your changes with a descriptive message:</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">git</span> commit <span class="at">-m</span> <span class="st">"feat: add support for new classification format"</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">git</span> commit <span class="at">-m</span> <span class="st">"feat: add support for new classification format"</span></span></code></pre></div>
 </li>
 <li>
 <p>Push to your fork:</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="fu">git</span> push origin feature/your-feature-name</span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">git</span> push origin feature/your-feature-name</span></code></pre></div>
 </li>
 <li><p>Open a Pull Request against the <code>main</code> branch</p></li>
 </ol></div>
@@ -160,10 +153,10 @@
 <div class="section level2">
 <h2 id="testing">Testing<a class="anchor" aria-label="anchor" href="#testing"></a></h2>
 <p>Run the test suite before submitting:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">test</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p>Check for R CMD check issues:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">check</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p>Tests are located in <code>tests/testthat/</code>. When adding new functionality, please include appropriate tests.</p>
 </div>
@@ -173,7 +166,7 @@
 <li>User guides are in <code>vignettes/</code> as R Markdown</li>
 <li>The pkgdown site is built automatically via GitHub Actions</li>
 </ul><p>To preview documentation locally:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">devtools</span><span class="fu">::</span><span class="fu">document</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu">pkgdown</span><span class="fu">::</span><span class="fu"><a href="https://pkgdown.r-lib.org/reference/build_site.html" class="external-link">build_site</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 </div>

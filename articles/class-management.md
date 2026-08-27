@@ -203,8 +203,6 @@ Creates MATLAB-compatible `class2use.mat` for use with
 1.  Click **Save as .mat**
 2.  Choose location in browser download
 
-> **Note**: Saving .mat files requires Python with scipy.
-
 ### Save as TXT
 
 Creates simple text file:

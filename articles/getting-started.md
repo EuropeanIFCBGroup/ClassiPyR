@@ -20,17 +20,11 @@ Make sure you have:
 5.  Optionally: existing annotations can be imported into SQLite via
     Settings \> Import .mat → SQLite or Import PNG → SQLite
 
-### Python Requirements
-
-Python is **not required** for the default workflow. ClassiPyR stores
-annotations in a local SQLite database that works out of the box with no
-external dependencies.
-
-Python is only needed if you want to export annotations as MATLAB `.mat`
-files for use with
-[ifcb-analysis](https://github.com/hsosik/ifcb-analysis). Reading
-existing `.mat` files (annotations, classifier output, class lists) also
-does not require Python.
+ClassiPyR works out of the box with no external dependencies:
+annotations are stored in a local SQLite database by default, and MATLAB
+`.mat` files for
+[ifcb-analysis](https://github.com/hsosik/ifcb-analysis) are read and
+written natively in R. Python is not required.
 
 ### CSV Classification Format
 
@@ -49,17 +43,6 @@ supported. See the [User
 Guide](https://europeanifcbgroup.github.io/ClassiPyR/articles/user-guide.md)
 for more details.
 
-### Python Setup (optional)
-
-Only needed if you plan to export `.mat` files. Skip this step if using
-the default SQLite storage.
-
-``` r
-
-library(iRfcb)
-ifcb_py_install()  # Creates venv at ~/.virtualenvs/iRfcb by default
-```
-
 ------------------------------------------------------------------------
 
 ## Step 1: Configure Settings
@@ -70,9 +53,6 @@ Launch the app:
 
 library(ClassiPyR)
 run_app()
-
-# Or specify a custom Python virtual environment path (takes priority over saved settings)
-run_app(venv_path = "./venv")
 ```
 
 Click the **gear icon** next to your username in the sidebar.
@@ -103,11 +83,6 @@ Configure your folders using the built-in folder browser:
 
 Click **Save Settings**. The app will scan your folders and build a file
 index cache for fast loading.
-
-> **Note**: The Python virtual environment path is configured via
-> `run_app(venv_path = ...)` and remembered for future sessions. See the
-> [FAQ](https://europeanifcbgroup.github.io/ClassiPyR/articles/faq.md)
-> for details on how the path is resolved.
 
 ------------------------------------------------------------------------
 
@@ -244,7 +219,7 @@ Click **Save Annotations** to save:
 
 - **SQLite database** (default) - annotations are written to
   `annotations.sqlite` in your Database Folder. This single file stores
-  annotations for all samples. No Python needed.
+  annotations for all samples.
 - Statistics CSV with accuracy metrics
 - PNGs organized by class
 
@@ -253,7 +228,6 @@ You can change the storage format in **Settings \> Annotation Storage**:
 - **SQLite** (recommended) - works out of the box
 - **MAT file** - for
   [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) compatibility
-  (requires Python)
 - **Both** - writes to both SQLite and `.mat`
 
 ### Auto-save

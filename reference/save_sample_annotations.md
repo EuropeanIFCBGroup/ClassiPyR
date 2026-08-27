@@ -2,8 +2,8 @@
 
 Saves the current annotations for a sample. By default annotations are
 stored in a local SQLite database (`annotations.sqlite` in the database
-folder). Optionally, a MATLAB-compatible `.mat` file can also be written
-(requires Python + scipy).
+folder). Optionally, a MATLAB-compatible `.mat` file can also be
+written.
 
 ## Usage
 

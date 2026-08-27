@@ -609,7 +609,6 @@ format (configurable in Settings).</p>
 <p>A single SQLite database file containing annotations for all samples.
 This is the default storage backend:</p>
 <ul>
-<li>No Python dependency required</li>
 <li>Fast read/write performance</li>
 <li>Single file for all samples — easy to back up and manage</li>
 <li>Contains <code>annotations</code> table (one row per ROI) and
@@ -641,9 +640,8 @@ their own local Database Folder.</p>
 toolbox</li>
 </ul>
 <blockquote>
-<p><strong>Note</strong>: Saving MAT files requires Python with scipy.
-Enable in Settings &gt; Annotation Storage by selecting “MAT file” or
-“Both”.</p>
+<p><strong>Note</strong>: Enable in Settings &gt; Annotation Storage by
+selecting “MAT file” or “Both”.</p>
 </blockquote>
 </div>
 <div class="section level3">
@@ -833,12 +831,11 @@ fresh scan.</p>
 <tr class="odd">
 <td>SQLite (recommended)</td>
 <td>Default. Stores annotations in <code>annotations.sqlite</code> in
-the Database Folder. No Python needed.</td>
+the Database Folder.</td>
 </tr>
 <tr class="even">
 <td>MAT file</td>
-<td>MATLAB-compatible <code>.mat</code> files for <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a>.
-Requires Python with scipy.</td>
+<td>MATLAB-compatible <code>.mat</code> files for <a href="https://github.com/hsosik/ifcb-analysis" class="external-link">ifcb-analysis</a>.</td>
 </tr>
 <tr class="odd">
 <td>Both</td>
@@ -863,7 +860,7 @@ external classification datasets.</li>
 <li>
 <strong>Export SQLite → .mat</strong>: Exports all annotated samples
 from the database to <code>.mat</code> files in the specified Output
-Folder. Requires Python with scipy.</li>
+Folder.</li>
 <li>
 <strong>Export SQLite → PNG</strong>: Extracts annotated images from
 ROI files into class-name subfolders in the PNG Output Folder. Useful
@@ -880,8 +877,8 @@ ZIP archive via <code><a href="https://europeanifcbgroup.github.io/iRfcb/referen
 <code>.mat</code> annotation files, feature CSVs, a
 <code>class2use.mat</code> config file, optional raw data (.roi, .adc,
 .hdr), and README files. When using SQLite-only storage the annotations
-are automatically converted to temporary <code>.mat</code> files
-(requires Python with scipy). See the <a href="https://europeanifcbgroup.github.io/iRfcb/articles/image-export-tutorial.html" class="external-link">iRfcb
+are automatically converted to temporary <code>.mat</code> files. See
+the <a href="https://europeanifcbgroup.github.io/iRfcb/articles/image-export-tutorial.html" class="external-link">iRfcb
 image export tutorial</a> for more details on the MATLAB ZIP
 format.</li>
 </ul>
@@ -971,17 +968,6 @@ on launch. Disable for instant startup using the existing cache.</td>
 </table>
 </div>
 <div class="section level3">
-<h3 id="python-configuration">Python Configuration<a class="anchor" aria-label="anchor" href="#python-configuration"></a>
-</h3>
-<p>The Python virtual environment path is configured when launching the
-app:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/run_app.html">run_app</a></span><span class="op">(</span>venv_path <span class="op">=</span> <span class="st">"/path/to/your/venv"</span><span class="op">)</span></span></code></pre></div>
-<p>The path is remembered for future sessions. <strong>Priority
-order</strong>: <code>run_app(venv_path=)</code> argument &gt; saved
-settings &gt; default (<code>./venv</code>).</p>
-</div>
-<div class="section level3">
 <h3 id="live-prediction-1">Live Prediction<a class="anchor" aria-label="anchor" href="#live-prediction-1"></a>
 </h3>
 <table class="table">
@@ -1049,9 +1035,9 @@ CSVs, <code>class2use.mat</code>, and optionally raw data into a single
 archive suitable for sharing (e.g. for the <a href="https://doi.org/10.17044/scilifelab.25883455" class="external-link">SMHI IFCB Plankton
 Image Reference Library</a>).</li>
 <li>If your storage format is SQLite-only, annotations are converted to
-<code>.mat</code> files on the fly (requires Python with scipy). When
-using MAT or Both storage, existing <code>.mat</code> files from the
-Output Folder are used directly.</li>
+<code>.mat</code> files on the fly. When using MAT or Both storage,
+existing <code>.mat</code> files from the Output Folder are used
+directly.</li>
 <li>The <code>class2use.mat</code> config file is generated
 automatically from the current class list.</li>
 <li>For details on the archive structure and the underlying
@@ -1134,8 +1120,8 @@ that follows R standards:</p>
 </li>
 </ul>
 <p>Settings are loaded automatically when you start the app, so your
-folder paths, class list location, and Python venv path are remembered
-between sessions. Settings can be reset by specifying
+folder paths and class list location are remembered between sessions.
+Settings can be reset by specifying
 <code>run_app(reset_settings = TRUE)</code>.</p>
 <hr>
 </div>
@@ -1161,8 +1147,7 @@ for reading HDF5 (<code>.h5</code>) classifier output files. Install
 with <code>install.packages("hdf5r")</code>.</li>
 </ul>
 <p>All R dependencies are installed automatically when you install
-<code>ClassiPyR</code>. Python is only needed for <code>.mat</code> file
-export.</p>
+<code>ClassiPyR</code>.</p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

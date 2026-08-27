@@ -61,62 +61,12 @@ for details.
 
 ## Installation Issues
 
-**Q: I see “Python not available” warning**
-
-A: This warning only appears when your storage format includes `.mat`
-files. Python is **not needed** for the default SQLite storage.
-
-If you see this warning and don’t need `.mat` files, switch to SQLite in
-Settings \> Annotation Storage. Otherwise, to enable `.mat` support:
-
-``` r
-
-library(iRfcb)
-ifcb_py_install()  # Creates venv in current working directory
-```
-
-Then restart the app.
-
 **Q: Do I need Python to use ClassiPyR?**
 
-A: No. The default storage format is SQLite, which works out of the box
-with no Python dependency. Python is only needed if you want to export
-`.mat` files for
-[ifcb-analysis](https://github.com/hsosik/ifcb-analysis) compatibility.
-
-**Q: Where is the Python virtual environment created?**
-
-A: By default,
-[`ifcb_py_install()`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html)
-creates a virtual environment at `~/.virtualenvs/iRfcb`. You can specify
-a different location:
-
-``` r
-
-ifcb_py_install("/path/to/your/venv")
-```
-
-You can also specify the venv path when launching the app:
-
-``` r
-
-run_app(venv_path = "/path/to/your/venv")
-```
-
-**Q: How is the Python virtual environment path resolved?**
-
-A: The app uses the following priority order:
-
-1.  **`venv_path` argument** passed to
-    [`run_app()`](https://europeanifcbgroup.github.io/ClassiPyR/reference/run_app.md)
-    (highest priority)
-2.  **Saved settings** from a previous session (stored in
-    `settings.json`)
-3.  **Default** `./venv` in the working directory
-
-When you specify `run_app(venv_path = "/path/to/venv")`, that path is
-used for Python initialization and pre-filled in the Settings dialog,
-overriding any previously saved path.
+A: No. All storage formats work out of the box: SQLite is the default,
+and `.mat` files for
+[ifcb-analysis](https://github.com/hsosik/ifcb-analysis) compatibility
+are read and written natively in R (via `iRfcb` \>= 0.10.0).
 
 **Q: Package installation fails**
 
@@ -261,9 +211,7 @@ automatically on load.
 A: Check that:
 
 1.  Output folder is writable
-2.  If using MAT format: Python is available (not needed for default
-    SQLite storage)
-3.  Click “Save Annotations” before closing
+2.  Click “Save Annotations” before closing
 
 ------------------------------------------------------------------------
 
@@ -408,7 +356,7 @@ A: Since the SQLite database is stored locally, you cannot simply share
 it over a network drive. Instead, use `.mat` files as the interchange
 format:
 
-1.  **Export** from the source computer (requires Python with scipy):
+1.  **Export** from the source computer:
 
 ``` r
 
@@ -451,9 +399,6 @@ load('sample_name.mat');
 % classlist contains [roi_number, class_index]
 ```
 
-Note: Python with `scipy` must be installed to save .mat files. Change
-the storage format in Settings \> Annotation Storage.
-
 **Q: Can I migrate existing .mat annotations to the SQLite database?**
 
 A: Yes. The easiest way is the **Import .mat → SQLite** button in
@@ -483,8 +428,7 @@ cat(result$success, "imported,", result$failed, "failed,", result$skipped, "skip
 **Q: Can I export SQLite annotations back to .mat files?**
 
 A: Yes. Use the **Export SQLite → .mat** button in Settings \>
-Annotation Storage to export all annotated samples at once. This
-requires Python with scipy.
+Annotation Storage to export all annotated samples at once.
 
 You can also export programmatically:
 
@@ -509,8 +453,7 @@ You need to provide a features folder; a data folder with raw IFCB files
 is optional.
 
 If your storage format is SQLite-only, annotations are automatically
-converted to temporary `.mat` files (requires Python with scipy). See
-the [iRfcb image export
+converted to temporary `.mat` files. See the [iRfcb image export
 tutorial](https://europeanifcbgroup.github.io/iRfcb/articles/image-export-tutorial.html)
 for more details on the archive format.
 
@@ -605,8 +548,8 @@ A: Yes! Settings are stored in a configuration file:
   `~/Library/Preferences/org.R-project.R/R/ClassiPyR/settings.json`
 - **Windows**: `%APPDATA%/R/config/R/ClassiPyR/settings.json`
 
-Folder paths, class list location, and Python venv path are
-automatically restored when you restart the app.
+Folder paths and class list location are automatically restored when you
+restart the app.
 
 **Q: How do I reset all settings to defaults?**
 
@@ -618,23 +561,14 @@ run_app(reset_settings = TRUE)
 ```
 
 This deletes the saved `settings.json` file and starts the app with
-default values. All folder paths, the class list reference, and the
-Python venv path are cleared, so you will need to reconfigure them. The
-class list file itself (`class2use_saved.*`) is not deleted from the
-config directory but will not be loaded until you re-upload it. This is
-useful if:
+default values. All folder paths and the class list reference are
+cleared, so you will need to reconfigure them. The class list file
+itself (`class2use_saved.*`) is not deleted from the config directory
+but will not be loaded until you re-upload it. This is useful if:
 
 - The app fails to start due to invalid saved paths
 - Folder paths point to locations that no longer exist
 - You want a clean slate after changing your data layout
-
-You can also combine it with other arguments:
-
-``` r
-
-# Reset settings and specify a new Python environment
-run_app(reset_settings = TRUE, venv_path = "/path/to/your/venv")
-```
 
 **Q: What’s the yellow warning on some classes?**
 
@@ -728,7 +662,6 @@ A: In the same config directory as your settings:
 |----|----|
 | “ROI file not found” | Check ROI/PNG Data Folder path. If no ROI exists, provide extracted PNG sample folders named by sample and click Sync |
 | “ADC file not found” | ADC file must be alongside ROI file |
-| “Python not available” | Only affects `.mat` export. Switch to SQLite in Settings, or run [`iRfcb::ifcb_py_install()`](https://europeanifcbgroup.github.io/iRfcb/reference/ifcb_py_install.html) |
 | “Error loading class list” | Check file format (.mat or .txt) |
 | “No samples found” | Check ROI/PNG Data Folder configuration and naming |
 | App fails to start | Try `run_app(reset_settings = TRUE)` to clear saved settings |
