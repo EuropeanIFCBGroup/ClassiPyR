@@ -32,6 +32,26 @@
   without erasing the rest
   ([\#36](https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/36)).
 
+### Performance
+
+- **Selecting images is now instant**: Clicking or drag-selecting images
+  in the gallery previously re-rendered the entire page of image cards
+  on the server for every selection change (the gallery greyed out while
+  Shiny recomputed and the browser rebuilt the DOM), purely to apply a
+  border color the browser had already drawn. The gallery render now
+  isolates the selection state and leaves selection styling to the
+  client; the Select Page / Select All / Deselect All buttons sync card
+  styling through a lightweight custom message instead of a full
+  re-render. The renders that do still happen (page or filter changes,
+  relabels) are also faster: two per-card linear scans over the
+  classification tables were replaced with vectorized lookups.
+- **Selecting images no longer shifts the gallery layout**: The thicker
+  blue (selected) and yellow (relabeled) borders made cards a few pixels
+  wider than unselected ones, which could push the last image of a row
+  onto the next line — moving images around mid-selection. Card styling
+  now lives in CSS rules where border and padding always sum to the same
+  width, so state changes never resize a card.
+
 ### Bug fixes
 
 Interface bug review

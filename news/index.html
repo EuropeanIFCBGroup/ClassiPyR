@@ -55,6 +55,13 @@
 <li>New exported function <code><a href="../reference/update_settings_file.html">update_settings_file()</a></code> performs read-merge-write updates to the settings JSON file, so callers that only know a subset of settings keys can update them without erasing the rest (<a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/36" class="external-link">#36</a>).</li>
 </ul></div>
 <div class="section level3">
+<h3 id="performance-development-version">Performance<a class="anchor" aria-label="anchor" href="#performance-development-version"></a></h3>
+<ul><li>
+<strong>Selecting images is now instant</strong>: Clicking or drag-selecting images in the gallery previously re-rendered the entire page of image cards on the server for every selection change (the gallery greyed out while Shiny recomputed and the browser rebuilt the DOM), purely to apply a border color the browser had already drawn. The gallery render now isolates the selection state and leaves selection styling to the client; the Select Page / Select All / Deselect All buttons sync card styling through a lightweight custom message instead of a full re-render. The renders that do still happen (page or filter changes, relabels) are also faster: two per-card linear scans over the classification tables were replaced with vectorized lookups.</li>
+<li>
+<strong>Selecting images no longer shifts the gallery layout</strong>: The thicker blue (selected) and yellow (relabeled) borders made cards a few pixels wider than unselected ones, which could push the last image of a row onto the next line — moving images around mid-selection. Card styling now lives in CSS rules where border and padding always sum to the same width, so state changes never resize a card.</li>
+</ul></div>
+<div class="section level3">
 <h3 id="bug-fixes-development-version">Bug fixes<a class="anchor" aria-label="anchor" href="#bug-fixes-development-version"></a></h3>
 <p>Interface bug review (<a href="https://github.com/EuropeanIFCBGroup/ClassiPyR/issues/36" class="external-link">#36</a>) — data integrity:</p>
 <ul><li>
