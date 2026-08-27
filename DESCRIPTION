@@ -25,6 +25,7 @@ Imports:
     bslib,
     curl,
     iRfcb (>= 0.10.0),
+    lifecycle,
     dplyr,
     DT,
     jsonlite,

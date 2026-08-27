@@ -6,8 +6,9 @@
 #' This app relies on the iRfcb package for reading and writing IFCB data files,
 #' including MATLAB .mat files, entirely in R.
 #'
-#' @param venv_path Deprecated and ignored. ClassiPyR no longer requires
-#'   Python; .mat files are read and written natively in R (iRfcb >= 0.10.0).
+#' @param venv_path `r lifecycle::badge("deprecated")` Ignored. ClassiPyR no
+#'   longer requires Python; .mat files are read and written natively in R
+#'   (iRfcb >= 0.10.0).
 #' @param reset_settings If TRUE, deletes saved settings before starting the app.
 #'   Useful for troubleshooting or starting fresh. Default is FALSE.
 #' @param launch.browser If TRUE (default), opens the app in the system's default
@@ -30,7 +31,8 @@
 #' # Reset all settings and start fresh
 #' run_app(reset_settings = TRUE)
 #' }
-run_app <- function(venv_path = NULL, reset_settings = FALSE, launch.browser = TRUE, ...) {
+#' @md
+run_app <- function(venv_path = deprecated(), reset_settings = FALSE, launch.browser = TRUE, ...) {
   app_dir <- system.file("app", package = "ClassiPyR")
   if (app_dir == "") {
     stop("Could not find app directory. Try re-installing `ClassiPyR`.",
@@ -50,10 +52,14 @@ run_app <- function(venv_path = NULL, reset_settings = FALSE, launch.browser = T
   # Capture user's working directory before Shiny changes it
   options(ClassiPyR.startup_wd = getwd())
 
-  if (!is.null(venv_path)) {
-    warning("The venv_path argument is deprecated and ignored: ",
-            "ClassiPyR no longer requires Python (iRfcb >= 0.10.0 writes ",
-            ".mat files natively in R).", call. = FALSE)
+  if (lifecycle::is_present(venv_path)) {
+    lifecycle::deprecate_warn(
+      "0.3.0", "run_app(venv_path)",
+      details = paste(
+        "The argument is ignored: ClassiPyR no longer requires Python",
+        "(iRfcb >= 0.10.0 reads and writes .mat files natively in R)."
+      )
+    )
   }
 
   shiny::runApp(app_dir, launch.browser = launch.browser, ...)

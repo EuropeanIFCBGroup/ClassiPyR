@@ -2,7 +2,7 @@
 % Please edit documentation in R/utils.R
 \name{init_python_env}
 \alias{init_python_env}
-\title{Initialize Python environment for iRfcb (deprecated)}
+\title{Initialize Python environment for iRfcb}
 \usage{
 init_python_env(venv_path = NULL)
 }
@@ -13,12 +13,13 @@ init_python_env(venv_path = NULL)
 FALSE, invisibly
 }
 \description{
-Deprecated. As of iRfcb 0.10.0, MATLAB .mat files are read and written
-with a native R implementation, so ClassiPyR no longer requires Python.
-This function is now a no-op and will be removed in a future release.
-}
-\details{
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#deprecated}{\figure{lifecycle-deprecated.svg}{options: alt='[Deprecated]'}}}{\strong{[Deprecated]}}
+
+\code{init_python_env()} was deprecated in ClassiPyR 0.3.0 and is now a no-op.
+As of iRfcb 0.10.0, MATLAB .mat files are read and written with a native R
+implementation, so ClassiPyR no longer requires Python.
+
 If you need a Python environment for other iRfcb features (e.g. feature
-extraction), set one up with \code{\link[iRfcb]{ifcb_py_install}}.
+extraction), set one up with \code{\link[iRfcb:ifcb_py_install]{iRfcb::ifcb_py_install()}}.
 }
 \keyword{internal}

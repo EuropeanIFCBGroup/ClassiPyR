@@ -4,11 +4,17 @@
 \alias{run_app}
 \title{Run the ClassiPyR Shiny Application}
 \usage{
-run_app(venv_path = NULL, reset_settings = FALSE, launch.browser = TRUE, ...)
+run_app(
+  venv_path = deprecated(),
+  reset_settings = FALSE,
+  launch.browser = TRUE,
+  ...
+)
 }
 \arguments{
-\item{venv_path}{Deprecated and ignored. ClassiPyR no longer requires
-Python; .mat files are read and written natively in R (iRfcb >= 0.10.0).}
+\item{venv_path}{\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#deprecated}{\figure{lifecycle-deprecated.svg}{options: alt='[Deprecated]'}}}{\strong{[Deprecated]}} Ignored. ClassiPyR no
+longer requires Python; .mat files are read and written natively in R
+(iRfcb >= 0.10.0).}
 
 \item{reset_settings}{If TRUE, deletes saved settings before starting the app.
 Useful for troubleshooting or starting fresh. Default is FALSE.}

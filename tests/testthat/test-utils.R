@@ -109,7 +109,10 @@ test_that("update_settings_file recovers from a corrupt settings file", {
 # =============================================================================
 
 test_that("init_python_env is deprecated and returns FALSE invisibly", {
-  expect_warning(result <- init_python_env(), "deprecated")
+  expect_warning(
+    result <- init_python_env(),
+    class = "lifecycle_warning_deprecated"
+  )
 
   expect_type(result, "logical")
   expect_false(result)

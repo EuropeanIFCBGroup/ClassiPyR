@@ -9,6 +9,7 @@
 #' @importFrom bslib bs_theme
 #' @importFrom DT renderDT
 #' @importFrom jsonlite fromJSON
+#' @importFrom lifecycle deprecated
 #' @importFrom dplyr filter
 #' @importFrom DBI dbConnect dbDisconnect dbGetQuery dbWriteTable dbExecute
 #' @importFrom RSQLite SQLite
@@ -793,26 +794,29 @@ create_empty_changes_log <- function() {
   )
 }
 
-#' Initialize Python environment for iRfcb (deprecated)
+#' Initialize Python environment for iRfcb
 #'
-#' Deprecated. As of iRfcb 0.10.0, MATLAB .mat files are read and written
-#' with a native R implementation, so ClassiPyR no longer requires Python.
-#' This function is now a no-op and will be removed in a future release.
+#' @description
+#' `r lifecycle::badge("deprecated")`
+#'
+#' `init_python_env()` was deprecated in ClassiPyR 0.3.0 and is now a no-op.
+#' As of iRfcb 0.10.0, MATLAB .mat files are read and written with a native R
+#' implementation, so ClassiPyR no longer requires Python.
 #'
 #' If you need a Python environment for other iRfcb features (e.g. feature
-#' extraction), set one up with \code{\link[iRfcb]{ifcb_py_install}}.
+#' extraction), set one up with [iRfcb::ifcb_py_install()].
 #'
 #' @param venv_path Ignored.
 #' @return FALSE, invisibly
 #' @export
 #' @keywords internal
+#' @md
 init_python_env <- function(venv_path = NULL) {
-  .Deprecated(
-    msg = paste(
-      "init_python_env() is deprecated and does nothing:",
-      "ClassiPyR no longer requires Python (iRfcb >= 0.10.0 writes .mat",
-      "files natively in R). For other iRfcb features that use Python,",
-      "see iRfcb::ifcb_py_install()."
+  lifecycle::deprecate_warn(
+    "0.3.0", "init_python_env()",
+    details = c(
+      "ClassiPyR no longer requires Python: iRfcb >= 0.10.0 reads and writes .mat files natively in R.",
+      "For other iRfcb features that use Python, see `iRfcb::ifcb_py_install()`."
     )
   )
   invisible(FALSE)
