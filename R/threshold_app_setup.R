@@ -12,8 +12,8 @@ THR_FILE_STATUS_MEANING <- c(
     "inference on these bins to review them."
   ),
   duplicate = paste(
-    "A second file of the same model for a sample that is already indexed.",
-    "The first file by path is used."
+    "A second file of the same model for the same sample within the",
+    "class-score folder that was indexed. The first file by path is used."
   ),
   failed = paste(
     "Could not be read, is inconsistent, or is not named after an IFCB",
@@ -71,6 +71,46 @@ thr_check_data_folder <- function(folder, what) {
   thr_normalise_folder(folder)
 }
 
+#' Folders saved last time, as far as they can be put in use at start
+#'
+#' A data folder that was saved and is not there right now (a disk that is
+#' not mounted, an archive that is offline) is left out of use and reported.
+#' It is not forgotten: the start of the app saves nothing.
+#'
+#' @param saved List from \code{thr_load_settings()}.
+#' @return A list with \code{fields} (what the four text fields show:
+#'   \code{review_dir}, \code{h5_folder}, \code{roi_folder} and
+#'   \code{annotator}, \code{""} when not saved), \code{apply} (whether the
+#'   saved review folder exists, so the folders can be put in use),
+#'   \code{h5_folder} and \code{roi_folder} (the saved folder when it exists,
+#'   otherwise \code{""}) and \code{notices} (one sentence per saved data
+#'   folder that is not there).
+#' @noRd
+thr_restorable_settings <- function(saved) {
+  keys <- c("review_dir", "h5_folder", "roi_folder", "annotator")
+  fields <- vapply(keys, function(key) {
+    value <- thr_clean_path_input(saved[[key]])
+    if (is.null(value)) "" else value
+  }, character(1))
+  what <- c(h5_folder = "class-score folder", roi_folder = "raw data folder")
+  gone <- names(what)[nzchar(fields[names(what)]) &
+                        !dir.exists(fields[names(what)])]
+  usable <- fields[names(what)]
+  usable[gone] <- ""
+  list(
+    fields = as.list(fields),
+    apply = nzchar(fields[["review_dir"]]) && dir.exists(fields[["review_dir"]]),
+    h5_folder = usable[["h5_folder"]],
+    roi_folder = usable[["roi_folder"]],
+    notices = sprintf(
+      paste("The saved %s is not there right now and is not in use: %s. It",
+            "stays saved; press Apply once it is available again, or enter",
+            "another folder."),
+      what[gone], fields[gone]
+    )
+  )
+}
+
 #' Validate and save the folders of the threshold app
 #'
 #' The review folder is required and is created when it does not exist. The
@@ -83,6 +123,9 @@ thr_check_data_folder <- function(folder, what) {
 #' @param roi_folder Folder with the raw IFCB data, or empty.
 #' @param annotator Name of the reviewer, or empty.
 #' @param settings_file Path to the threshold app's settings file.
+#' @param save Whether to save the folders. \code{FALSE} when the app puts
+#'   the saved folders in use at start: saving then would erase a data folder
+#'   that is only unavailable for the moment.
 #' @return A list with \code{review_dir}, \code{h5_folder} and
 #'   \code{roi_folder} (normalised; \code{NULL} when left empty),
 #'   \code{annotator} (trimmed, possibly \code{""}), \code{index_path} and
@@ -90,7 +133,8 @@ thr_check_data_folder <- function(folder, what) {
 #' @noRd
 thr_apply_settings <- function(review_dir, h5_folder = NULL, roi_folder = NULL,
                                annotator = NULL,
-                               settings_file = thr_settings_path()) {
+                               settings_file = thr_settings_path(),
+                               save = TRUE) {
   review_dir <- thr_clean_path_input(review_dir)
   if (is.null(review_dir)) {
     stop("Choose a review folder first. The verdicts of the review and the ",
@@ -100,12 +144,14 @@ thr_apply_settings <- function(review_dir, h5_folder = NULL, roi_folder = NULL,
   roi_folder <- thr_check_data_folder(roi_folder, "raw data folder")
   annotator <- thr_clean_path_input(annotator)
   review_dir <- thr_validate_review_dir(review_dir, create = TRUE)
-  thr_save_settings(
-    list(review_dir = review_dir, h5_folder = h5_folder,
-         roi_folder = roi_folder,
-         annotator = if (is.null(annotator)) "" else annotator),
-    settings_file
-  )
+  if (isTRUE(save)) {
+    thr_save_settings(
+      list(review_dir = review_dir, h5_folder = h5_folder,
+           roi_folder = roi_folder,
+           annotator = if (is.null(annotator)) "" else annotator),
+      settings_file
+    )
+  }
   list(
     review_dir = review_dir, h5_folder = h5_folder, roi_folder = roi_folder,
     annotator = if (is.null(annotator)) "" else annotator,
@@ -156,19 +202,62 @@ thr_failure_overview <- function(failures) {
   )
 }
 
-#' The indexed models, for display
+#' The models of a review folder
 #'
-#' @param models Data frame from \code{thr_index_models()}.
-#' @param db_path Path to the verdict SQLite file, which may not exist yet.
+#' The models the index holds usable class-score files of, together with the
+#' models whose review is frozen in the verdict database. The second group
+#' matters when the index was deleted, or was rebuilt after the class-score
+#' files were archived: the review is still there and must stay reachable.
+#'
+#' @param indexed Data frame from \code{thr_index_models()}, or \code{NULL}
+#'   when the index could not be read.
+#' @param frozen Data frame from \code{thr_frozen_models()}, or \code{NULL}
+#'   when the verdict database could not be read.
+#' @return The columns of \code{thr_index_models()} for every model of either
+#'   group, sorted by classifier name, with \code{indexed} (the index holds
+#'   usable files of the model) and \code{frozen} (its review has started). A
+#'   model that is not indexed has 0 files and ROIs.
+#' @noRd
+thr_review_models <- function(indexed, frozen) {
+  if (is.null(indexed)) {
+    indexed <- thr_no_index_models()
+  }
+  if (is.null(frozen)) {
+    frozen <- thr_no_frozen_models()
+  }
+  only_frozen <- frozen[!(frozen$model_id %in% indexed$model_id), , drop = FALSE]
+  models <- rbind(indexed, data.frame(
+    model_id = only_frozen$model_id,
+    classifier_name = only_frozen$classifier_name,
+    checkpoint_sha256 = only_frozen$checkpoint_sha256,
+    transform = only_frozen$transform,
+    n_files = rep(0L, nrow(only_frozen)), n_rois = rep(0L, nrow(only_frozen)),
+    n_threshold_sets = rep(0L, nrow(only_frozen)),
+    stringsAsFactors = FALSE
+  ))
+  # The order the index lists its models in
+  models <- models[order(models$classifier_name, models$model_id,
+                         method = "radix", na.last = FALSE), , drop = FALSE]
+  models$indexed <- models$model_id %in% indexed$model_id
+  models$frozen <- models$model_id %in% frozen$model_id
+  thr_reset_rownames(models)
+}
+
+#' The models of a review folder, for display
+#'
+#' @param models Data frame from \code{thr_review_models()}.
 #' @return Data frame with one row per model: \code{Classifier},
 #'   \code{Model id}, \code{Files}, \code{ROIs}, \code{Threshold sets},
-#'   \code{Transform} and \code{Review} (\code{"frozen"} or
-#'   \code{"not started"}). Models are never pooled.
+#'   \code{Transform} and \code{Review} (\code{"not started"},
+#'   \code{"frozen"}, or \code{"frozen, not in the index"} for a review whose
+#'   class-score files the index no longer holds). \code{Files} and
+#'   \code{ROIs} count each sample of a model once, over every folder the
+#'   index was built on. Models are never pooled.
 #' @noRd
-thr_models_table <- function(models, db_path) {
-  frozen <- vapply(models$model_id, function(model_id) {
-    thr_is_frozen(db_path, model_id)
-  }, logical(1), USE.NAMES = FALSE)
+thr_models_table <- function(models) {
+  thr_check_columns(models, c("model_id", "indexed", "frozen"), "models")
+  review <- ifelse(!models$frozen, "not started",
+                   ifelse(models$indexed, "frozen", "frozen, not in the index"))
   table <- data.frame(
     Classifier = as.character(models$classifier_name),
     id = substr(models$model_id, 1, 8),
@@ -176,7 +265,7 @@ thr_models_table <- function(models, db_path) {
     ROIs = as.integer(models$n_rois),
     sets = as.integer(models$n_threshold_sets),
     Transform = as.character(models$transform),
-    Review = ifelse(frozen, "frozen", "not started"),
+    Review = as.character(review),
     stringsAsFactors = FALSE
   )
   names(table)[c(2, 5)] <- c("Model id", "Threshold sets")
@@ -206,8 +295,8 @@ thr_fallback_source_label <- function(fallback_source) {
 #' @param status List from \code{thr_frame_status()}.
 #' @return A list with \code{facts} (data frame with \code{Item} and
 #'   \code{Value}) and \code{notices}: plain statements about class-score
-#'   files that were indexed after the freeze and about frame files that
-#'   changed since, empty when there are none.
+#'   files that were indexed after the freeze, about frame files that changed
+#'   since and about an index that is gone, empty when there are none.
 #' @noRd
 thr_frozen_summary <- function(model, status) {
   text <- function(value) {
@@ -225,23 +314,58 @@ thr_frozen_summary <- function(model, status) {
     "Classes" = as.character(length(model$class_labels)),
     "Fallback thresholds" = thr_fallback_source_label(model$fallback_source)
   )
-  notices <- c(
+  list(
+    facts = data.frame(Item = names(facts), Value = unname(facts),
+                       stringsAsFactors = FALSE),
+    notices = thr_frozen_notices(model, status)
+  )
+}
+
+#' What a reviewer should know about the files behind a frozen frame
+#'
+#' @param model List from \code{thr_get_model()}.
+#' @param status List from \code{thr_frame_status()}.
+#' @return Character vector of plain statements, empty when the index holds
+#'   every file of the frame as it was frozen and nothing was added.
+#' @noRd
+thr_frozen_notices <- function(model, status) {
+  folder <- if (is.null(model$h5_folder) || is.na(model$h5_folder)) {
+    "the class-score folder"
+  } else {
+    model$h5_folder
+  }
+  if (isFALSE(status$index_available)) {
+    return(paste0(
+      "There is no class-score index in the review folder, so no new images ",
+      "can be drawn for this review. Verdicts already recorded are kept, and ",
+      "Results and Export work without the index. To go on reviewing, put ",
+      folder, " in use as the class-score folder under Folders and press ",
+      "\"Build / update index\"."
+    ))
+  }
+  none_left <- status$n_frame_files > 0 &&
+    status$n_changed_files >= status$n_frame_files
+  as.character(c(
     if (status$n_new_files > 0) sprintf(
       paste("%d class-score file(s) were indexed after this frame was",
             "frozen. They are not part of this review: no images are drawn",
             "from them and they do not count in the estimates."),
       status$n_new_files
     ),
-    if (status$n_changed_files > 0) sprintf(
+    if (none_left) sprintf(
+      paste0("None of the %d class-score file(s) of this frame are in the ",
+             "index as they were frozen: they have changed, moved or been ",
+             "removed. No new images can be drawn, so the Review page has ",
+             "nothing left to show. Verdicts already recorded stay valid, and ",
+             "Results and Export work as before. If the files are only out ",
+             "of reach, bring them back under %s and press \"Build / update ",
+             "index\"."),
+      status$n_frame_files, folder
+    ) else if (status$n_changed_files > 0) sprintf(
       paste("%d class-score file(s) of the frame have changed, moved or been",
             "removed since it was frozen. They are no longer drawn from.",
             "Verdicts already recorded for them stay valid."),
       status$n_changed_files
     )
-  )
-  list(
-    facts = data.frame(Item = names(facts), Value = unname(facts),
-                       stringsAsFactors = FALSE),
-    notices = as.character(notices)
-  )
+  ))
 }

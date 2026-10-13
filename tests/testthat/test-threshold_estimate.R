@@ -238,6 +238,49 @@ test_that("the interval narrows as more verdicts come in", {
   expect_true(all(diff(widths) < 0))
 })
 
+# Share of the possible reviews of one stratum whose interval holds the truth.
+# `n_reviewed` of `n_population` predictions are reviewed at random and
+# `n_truly_correct` of them all are correct, so the number of correct verdicts
+# is hypergeometric: every possible outcome is weighted by its probability,
+# which makes the coverage exact instead of a simulation of its own.
+strata_interval_coverage <- function(n_population, n_truly_correct,
+                                     n_reviewed, conf_level = 0.95) {
+  truth <- n_truly_correct / n_population
+  outcomes <- seq(max(0, n_reviewed - (n_population - n_truly_correct)),
+                  min(n_reviewed, n_truly_correct))
+  covered <- vapply(outcomes, function(n_correct) {
+    counts <- strata_one_class(bin = 1, n_population = n_population,
+                               n_verdicts = n_reviewed, n_correct = n_correct)
+    curve <- estimate_precision_curve(counts, edges = 0,
+                                      conf_level = conf_level, seed = 1)
+    curve$lower <= truth + 1e-12 && curve$upper >= truth - 1e-12
+  }, logical(1))
+  sum(stats::dhyper(outcomes, n_truly_correct,
+                    n_population - n_truly_correct, n_reviewed) * covered)
+}
+
+test_that("the interval of a partly reviewed stratum covers the truth", {
+  # The unreviewed remainder is a finite number of predictions, so how many of
+  # them are correct varies around its expectation. An interval that leaves
+  # that out covers 77% and 50% here instead of 95%.
+  expect_gte(strata_interval_coverage(40, 32, 20), 0.9)
+  expect_gte(strata_interval_coverage(15, 12, 10), 0.9)
+  # A large stratum, where the correction hardly matters, stays covered
+  expect_gte(strata_interval_coverage(1000, 800, 20), 0.9)
+})
+
+test_that("the simulated remainder is a whole number of predictions", {
+  # One unreviewed prediction out of 21 is either correct or not, so the
+  # bounds can only be 15/21 and 16/21, never something in between.
+  counts <- strata_one_class(bin = 1, n_population = 21, n_verdicts = 20,
+                             n_correct = 15)
+
+  curve <- estimate_precision_curve(counts, edges = 0, seed = 1)
+
+  expect_equal(curve$lower, 15 / 21)
+  expect_equal(curve$upper, 16 / 21)
+})
+
 test_that("a wider confidence level gives a wider interval", {
   width_at <- function(conf_level) {
     curve <- estimate_precision_curve(strata_worked_example(),
@@ -332,6 +375,178 @@ test_that("a class with no predictions gives an all-NA curve", {
   expect_true(all(is.na(curve$upper)))
   # NA rather than NaN, so it is written as JSON null
   expect_identical(curve$kept_share, rep(NA_real_, 3))
+})
+
+# =============================================================================
+# estimate_precision_curve: images that cannot be reviewed
+# =============================================================================
+
+# Stratum counts with the `n_unavailable` column the verdict database adds:
+# drawn predictions whose image could not be shown, which are never redrawn.
+strata_with_unavailable <- function(bin, n_population, n_verdicts,
+                                    n_unavailable, n_correct = n_verdicts) {
+  counts <- strata_one_class(bin, n_population, n_verdicts, n_correct)
+  counts$n_unavailable <- as.integer(n_unavailable)
+  counts
+}
+
+test_that("an image that cannot be reviewed does not hold back its bin", {
+  # The top bin has 5 predictions; one image could not be shown, so 4
+  # verdicts are all it will ever get.
+  counts <- strata_with_unavailable(bin = 1:3, n_population = c(100, 100, 5),
+                                    n_verdicts = c(100, 100, 4),
+                                    n_unavailable = c(0, 0, 1))
+
+  curve <- estimate_precision_curve(counts, edges = strata_small_edges(),
+                                    seed = 1)
+
+  expect_identical(curve$supported, c(TRUE, TRUE, TRUE))
+  expect_identical(choose_class_threshold(curve, target = 0.9)$status,
+                   "fitted")
+
+  # Without the column the fifth image counts as still to be reviewed
+  unknown <- counts[names(counts) != "n_unavailable"]
+  expect_identical(
+    estimate_precision_curve(unknown, edges = strata_small_edges(),
+                             seed = 1)$supported,
+    c(FALSE, FALSE, FALSE)
+  )
+})
+
+test_that("support is measured against the images that can be reviewed", {
+  curve_for <- function(n_verdicts) {
+    counts <- strata_with_unavailable(bin = 3, n_population = 50,
+                                      n_verdicts = n_verdicts,
+                                      n_unavailable = 45)
+    estimate_precision_curve(counts, edges = strata_small_edges(),
+                             min_stratum_n = 10, seed = 1)
+  }
+
+  # 5 of the 50 can be reviewed, so 5 verdicts are needed, not 10
+  expect_false(curve_for(4)$supported[3])
+  expect_true(curve_for(5)$supported[3])
+
+  # When more than min_stratum_n can be reviewed, min_stratum_n still decides
+  plenty <- strata_with_unavailable(bin = 3, n_population = 50,
+                                    n_verdicts = 10, n_unavailable = 5)
+  one_short <- strata_with_unavailable(bin = 3, n_population = 50,
+                                       n_verdicts = 9, n_unavailable = 5)
+  expect_true(estimate_precision_curve(plenty, edges = strata_small_edges(),
+                                       min_stratum_n = 10)$supported[3])
+  expect_false(estimate_precision_curve(one_short,
+                                        edges = strata_small_edges(),
+                                        min_stratum_n = 10)$supported[3])
+})
+
+test_that("the verdicts of a bin stand in for its unavailable images", {
+  # Bin 2: 10 predictions, 5 unavailable, 5 verdicts, all correct
+  counts <- strata_with_unavailable(bin = 1:2, n_population = c(100, 10),
+                                    n_verdicts = c(20, 5),
+                                    n_unavailable = c(0, 5),
+                                    n_correct = c(10, 5))
+
+  curve <- estimate_precision_curve(counts, edges = c(0, 0.5), seed = 1)
+
+  # Still weighted by all 10 predictions of the bin
+  expect_equal(curve$precision, c((100 * 0.5 + 10 * 1) / 110, 1))
+  expect_identical(curve$supported, c(TRUE, TRUE))
+  # The 5 unseen images are not known to be correct
+  expect_lt(curve$lower[2], 1)
+})
+
+test_that("a bin in which nothing can be reviewed is left out of the estimate", {
+  edges <- strata_small_edges()
+  # Both predictions of the top bin are unavailable
+  counts <- strata_with_unavailable(bin = 1:3, n_population = c(100, 100, 2),
+                                    n_verdicts = c(100, 100, 0),
+                                    n_unavailable = c(0, 0, 2),
+                                    n_correct = c(90, 100, 0))
+
+  curve <- estimate_precision_curve(counts, edges = edges, seed = 1)
+
+  # The bins below are estimated from what can be known, and are not blocked
+  expect_equal(curve$precision, c(190 / 200, 1, NA))
+  expect_identical(curve$lower, curve$precision)
+  expect_identical(curve$upper, curve$precision)
+  expect_identical(curve$supported, c(TRUE, TRUE, FALSE))
+  # The counts of predictions stay exact
+  expect_identical(curve$n_population_kept, c(202L, 102L, 2L))
+  expect_equal(curve$kept_share, c(1, 102 / 202, 2 / 202))
+  expect_identical(curve$n_verdicts, c(200L, 100L, 0L))
+
+  choice <- choose_class_threshold(curve, target = 0.9)
+  expect_identical(choice$status, "fitted")
+  expect_identical(choice$threshold, 0)
+})
+
+test_that("an unreviewable bin between two others changes no estimate", {
+  edges <- strata_small_edges()
+  with_gap <- strata_with_unavailable(bin = 1:3, n_population = c(100, 3, 50),
+                                      n_verdicts = c(20, 0, 20),
+                                      n_unavailable = c(0, 3, 0),
+                                      n_correct = c(10, 0, 19))
+  without <- with_gap[c(1, 3), ]
+
+  curve <- estimate_precision_curve(with_gap, edges = edges, seed = 1)
+  reference <- estimate_precision_curve(without, edges = edges, seed = 1)
+
+  estimates <- c("precision", "lower", "upper", "supported", "n_verdicts")
+  expect_identical(curve[estimates], reference[estimates])
+  expect_identical(curve$supported, c(TRUE, TRUE, TRUE))
+  expect_equal(curve$precision[1], (100 * 0.5 + 50 * 0.95) / 150)
+  expect_identical(curve$n_population_kept, c(153L, 53L, 50L))
+  expect_equal(curve$kept_share, c(1, 53 / 153, 50 / 153))
+})
+
+test_that("a class in which nothing can be reviewed has no supported edge", {
+  counts <- strata_with_unavailable(bin = 2:3, n_population = c(3, 2),
+                                    n_verdicts = c(0, 0),
+                                    n_unavailable = c(3, 2))
+
+  curve <- estimate_precision_curve(counts, edges = strata_small_edges(),
+                                    seed = 1)
+
+  expect_true(all(is.na(curve$precision)))
+  expect_true(all(is.na(curve$lower)))
+  expect_identical(curve$supported, c(FALSE, FALSE, FALSE))
+  expect_identical(curve$n_population_kept, c(5L, 5L, 2L))
+  expect_identical(choose_class_threshold(curve, 0.9)$status, "under_reviewed")
+})
+
+test_that("an absent n_unavailable column means every image can be reviewed", {
+  counts <- strata_worked_example()
+  with_zeros <- counts
+  with_zeros$n_unavailable <- 0L
+
+  expect_identical(
+    estimate_precision_curve(with_zeros, edges = strata_small_edges(),
+                             seed = 1),
+    estimate_precision_curve(counts, edges = strata_small_edges(), seed = 1)
+  )
+})
+
+test_that("estimate_precision_curve validates n_unavailable", {
+  edges <- strata_small_edges()
+  with_unavailable <- function(n_unavailable) {
+    counts <- strata_worked_example()
+    counts$n_unavailable <- n_unavailable
+    counts
+  }
+
+  expect_error(estimate_precision_curve(with_unavailable(c(0, -1, 0)), edges),
+               "n_unavailable")
+  expect_error(estimate_precision_curve(with_unavailable(c(0, 0.5, 0)), edges),
+               "whole numbers")
+  expect_error(estimate_precision_curve(with_unavailable(c(0, NA, 0)), edges),
+               "n_unavailable")
+  expect_error(estimate_precision_curve(with_unavailable(c("0", "1", "0")),
+                                        edges),
+               "n_unavailable")
+  # Bin 2 has 50 predictions and 10 verdicts: at most 40 can be unavailable
+  expect_no_error(estimate_precision_curve(with_unavailable(c(0, 40, 0)),
+                                           edges))
+  expect_error(estimate_precision_curve(with_unavailable(c(0, 41, 0)), edges),
+               "n_unavailable")
 })
 
 # =============================================================================

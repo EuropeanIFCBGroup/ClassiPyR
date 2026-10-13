@@ -36,13 +36,6 @@ thr_test_app_ids <- function(prefix) {
   sort(unique(sub(paste0(prefix, "\\$"), "", found)))
 }
 
-# What a browser sends on "Confirm page"
-thr_test_app_browser <- function(token, loaded, wrong = integer(),
-                                 failed = integer()) {
-  list(token = token, loaded = as.list(loaded), failed = as.list(failed),
-       wrong = as.list(wrong), nonce = stats::runif(1))
-}
-
 thr_test_app_upload <- function(path) {
   data.frame(name = basename(path), size = file.size(path),
              type = "text/plain", datapath = path, stringsAsFactors = FALSE)
@@ -98,6 +91,34 @@ test_that("the gallery script is trimmed of the main app's server round trips", 
                  "#thr-selection-box {")) {
     expect_match(css, rule, fixed = TRUE)
   }
+})
+
+test_that("the gallery script only watches a card once its image has loaded", {
+  skip_if(thr_test_app_dir() == "", "Package not installed")
+  js <- thr_test_app_read(file.path("www", "threshold-gallery.js"))
+  body_of <- function(name) {
+    start <- regexpr(paste0("function ", name, "("), js, fixed = TRUE)[[1]]
+    expect_gt(start, 0)
+    rest <- substring(js, start)
+    substr(rest, 1, regexpr("\n  }\n", rest)[[1]])
+  }
+
+  # This only reads the script; it does not run it. A card has its full size
+  # before its image loads, so a card watched from the moment it is rendered
+  # counts as seen while it is still blank.
+  expect_no_match(js, "seenObserver.observe(this)", fixed = TRUE)
+  expect_equal(lengths(regmatches(js, gregexpr("seenObserver.observe(", js,
+                                               fixed = TRUE))), 1)
+  # The one place a card starts being watched asks for a loaded image
+  expect_match(body_of("watchCard"), "canMark(card)", fixed = TRUE)
+  expect_match(body_of("setImageState"), "watchCard(card)", fixed = TRUE)
+  # The sweep at confirm never marks a card as seen
+  expect_no_match(body_of("sweepLoaded"), "seen", fixed = TRUE)
+  expect_no_match(body_of("sweepLoaded"), "setImageState", fixed = TRUE)
+  # Cards of a page that is replaced are no longer watched
+  expect_match(js, "seenObserver.disconnect()", fixed = TRUE)
+  # A page of nothing but cards without raw data cannot be confirmed
+  expect_match(js, ".not('.no-raw')", fixed = TRUE)
 })
 
 # ---- UI ----------------------------------------------------------------------
@@ -248,12 +269,51 @@ test_that("the server restores a review folder that was saved earlier", {
   thr_test_app_with_config({
     thr_save_settings(list(review_dir = review, h5_folder = "/no/such/h5",
                            annotator = "Anna"))
+    before <- readLines(thr_settings_path())
     testServer(app_env$server, {
       expect_equal(state$review_dir, normalizePath(review, winslash = "/"))
-      # A data folder that has gone is dropped instead of blocking the start
+      # A data folder that has gone is not in use, without blocking the start
       expect_null(state$h5_folder)
       expect_match(output$thr_settings_status, basename(review), fixed = TRUE)
+      # The reviewer is told, since the field still shows the folder
+      expect_match(output$thr_settings_status, "/no/such/h5", fixed = TRUE)
+      expect_match(output$thr_settings_status, "not in use", fixed = TRUE)
     })
+    # Starting the app saved nothing: the folder is back once its disk is
+    expect_identical(readLines(thr_settings_path()), before)
+    expect_equal(thr_load_settings()$h5_folder, "/no/such/h5")
+    unlink(thr_settings_path())
+  })
+})
+
+test_that("Check and Freeze are refused while no class-score folder is in use", {
+  skip_if(thr_test_app_dir() == "", "Package not installed")
+  app_env <- thr_test_app_source_server()
+  space <- thr_test_open_space()
+  on.exit(unlink(space$root, recursive = TRUE), add = TRUE)
+
+  thr_test_app_with_config({
+    thr_save_settings(list(review_dir = dirname(space$index_path),
+                           h5_folder = file.path(space$root, "unmounted"),
+                           roi_folder = space$roi_folder))
+    server <- app_env$thr_app_server(reader = thr_test_fake_reader())
+    testServer(server, {
+      expect_null(state$h5_folder)
+      session$setInputs(thr_model = space$model_id, thr_fallback_mode = "h5")
+      expect_equal(state$model_id, space$model_id)
+
+      # Without a folder the frame would cover every folder ever indexed
+      session$setInputs(thr_preflight = 1)
+      expect_false(isTRUE(state$preflight$can_freeze))
+      expect_match(state$preflight$problems, "No class-score folder is in use",
+                   fixed = TRUE)
+      expect_match(output$thr_preflight_ui$html, "No class-score folder",
+                   fixed = TRUE)
+      session$setInputs(thr_freeze = 1)
+      session$setInputs(thr_freeze_confirm = 1)
+      expect_false(state$frozen)
+    })
+    expect_false(file.exists(space$db_path))
     unlink(thr_settings_path())
   })
 })
@@ -385,7 +445,8 @@ test_that("the whole review runs through the server", {
       after <- draws()
       status <- stats::setNames(after$status, after$draw_id)
       expect_equal(unique(status[as.character(seen)]), "confirmed")
-      expect_equal(unique(status[as.character(failed)]), "unavailable")
+      # An image that failed to load once is not retired
+      expect_equal(unique(status[as.character(failed)]), "pending")
       expect_equal(unique(status[as.character(not_loaded)]), "pending")
       verdict <- stats::setNames(after$verdict, after$draw_id)
       expect_equal(unname(verdict[as.character(seen)]),
@@ -394,14 +455,16 @@ test_that("the whole review runs through the server", {
                    "Tester")
       # The reviewer is told what happened to every image
       expect_match(state$review_message, "Recorded 153 verdict", fixed = TRUE)
-      expect_match(state$review_message, "2 image(s) were unavailable",
+      expect_match(state$review_message, "2 image(s) failed to load",
                    fixed = TRUE)
       expect_match(state$review_message, "5 image(s) had not been viewed",
                    fixed = TRUE)
-      # The next page is loaded: the five that had not loaded come back
+      expect_no_match(state$review_message, "left out", fixed = TRUE)
+      # The next page is loaded: the five that had not loaded and the two
+      # that failed come back
       second_token <- state$page_token
       expect_false(second_token == first_token)
-      expect_setequal(state$page$draw_id, not_loaded)
+      expect_setequal(state$page$draw_id, c(not_loaded, failed))
       expect_false(any(state$page$is_new))
 
       # ---- confirm again with the old token: nothing is written --------------
@@ -422,9 +485,10 @@ test_that("the whole review runs through the server", {
 
       # ---- confirm the second page; the class is then exhausted --------------
       session$setInputs(thr_confirm = thr_test_app_browser(
-        second_token, loaded = not_loaded
+        second_token, loaded = c(not_loaded, failed)
       ))
       expect_equal(sum(draws()$status == "pending"), 0)
+      expect_equal(sum(draws()$status == "confirmed"), 160)
       expect_equal(nrow(state$page), 0)
       empty_token <- state$page_token
       expect_false(empty_token %in% c(first_token, second_token))
@@ -434,9 +498,9 @@ test_that("the whole review runs through the server", {
 
       # ---- undo: the rows are pending again ----------------------------------
       session$setInputs(thr_undo = 1)
-      expect_equal(sum(draws()$status == "pending"), 5)
-      expect_setequal(state$page$draw_id, not_loaded)
-      expect_match(state$review_message, "5 image(s) are pending again",
+      expect_equal(sum(draws()$status == "pending"), 7)
+      expect_setequal(state$page$draw_id, c(not_loaded, failed))
+      expect_match(state$review_message, "7 image(s) are pending again",
                    fixed = TRUE)
       session$setInputs(thr_undo = 2)
       restored <- draws()

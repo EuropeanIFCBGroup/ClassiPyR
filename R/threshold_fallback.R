@@ -189,7 +189,8 @@ thr_stop_no_label_match <- function(keys, class_labels, json_path) {
 #' @param h5_folder Class-score folder the review covers, or \code{NA} for
 #'   every indexed file of the model. The index keeps files of every folder
 #'   it was built on, and files elsewhere must not decide whether the files
-#'   of this review agree.
+#'   of this review agree. A sample that is usable in more than one indexed
+#'   folder is looked at once, in its first file by path.
 #' @return A list with \code{thresholds} (numeric aligned with the model's
 #'   class labels, \code{NA} where the files hold no threshold; \code{NULL}
 #'   when the files disagree or none matched) and \code{n_sets} (the number
@@ -208,9 +209,13 @@ thr_h5_fallback <- function(index_path, model_id, sample_names = NULL,
   files <- thr_with_index(index_path, function(con) {
     DBI::dbGetQuery(con, "
       SELECT h5_path, sample_name, thresholds_json FROM files
-      WHERE model_id = ? AND status = 'ok'", params = list(model_id))
+      WHERE model_id = ? AND status = 'ok'
+      ORDER BY h5_path", params = list(model_id))
   })
   files <- files[thr_under_folder(files$h5_path, folder), , drop = FALSE]
+  # A sample can be usable in two indexed folders. The frame takes its first
+  # file by path (thr_frame_candidates()), so only that file is looked at.
+  files <- files[!duplicated(files$sample_name), , drop = FALSE]
   if (!is.null(sample_names)) {
     files <- files[files$sample_name %in% sample_names, , drop = FALSE]
   }

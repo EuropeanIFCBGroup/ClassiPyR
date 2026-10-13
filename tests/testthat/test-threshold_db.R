@@ -288,6 +288,45 @@ test_that("thr_get_model refuses a model that is not frozen", {
   expect_error(thr_get_model(space$db_path, 42), "model_id")
 })
 
+# --- thr_frozen_models -------------------------------------------------------
+
+test_that("thr_frozen_models lists the reviews of a folder without the index", {
+  space <- thr_test_db_space()
+  on.exit(unlink(space$root, recursive = TRUE), add = TRUE)
+
+  none <- thr_frozen_models(space$db_path)
+  expect_equal(nrow(none), 0)
+  expect_named(none, c("model_id", "classifier_name", "checkpoint_sha256",
+                       "transform", "frozen_at", "h5_folder", "n_frame_files",
+                       "n_frame_rois"))
+  expect_type(none$model_id, "character")
+  expect_type(none$n_frame_files, "integer")
+  # Asking must not create the database
+  expect_false(file.exists(space$db_path))
+
+  thr_test_fixture_index(space)
+  thr_freeze_frame(space$db_path, space$index_path, thr_test_model_a_id,
+                   excluded_samples = thr_test_a_samples[1],
+                   h5_folder = space$h5_folder)
+  thr_freeze_frame(space$db_path, space$index_path, thr_test_model_b_id,
+                   h5_folder = space$h5_folder)
+  frame <- thr_test_table(space$db_path, "frame_files")
+  # The verdict database alone answers: the index may be gone by now
+  unlink(space$index_path)
+
+  frozen <- thr_frozen_models(space$db_path)
+
+  expect_setequal(frozen$model_id, c(thr_test_model_a_id, thr_test_model_b_id))
+  a <- frozen[frozen$model_id == thr_test_model_a_id, ]
+  expect_identical(a$n_frame_files, 5L)
+  expect_identical(a$n_frame_rois,
+                   as.integer(sum(frame$n_rois[frame$model_id == a$model_id])))
+  expect_equal(a$h5_folder, space$h5_folder)
+  expect_equal(a$classifier_name,
+               thr_get_model(space$db_path, thr_test_model_a_id)$classifier_name)
+  expect_error(thr_frozen_models(NULL), "db_path")
+})
+
 # --- thr_stratum_counts and thr_class_overview -------------------------------
 
 test_that("stratum counts of a fresh frame are the frame's populations", {
@@ -338,10 +377,13 @@ test_that("stratum counts and the overview follow the draws and verdicts", {
   page <- thr_next_page(space$db_path, space$index_path, thr_test_model_a_id,
                         "Debris")
   page <- page[order(page$draw_id), ]
-  page$extracted <- TRUE
+  # The raw file of the ninth draw was read and holds no image for it
+  page$extracted <- seq_len(nrow(page)) != 9
+  page$no_image_reason <- ifelse(page$extracted, NA_character_,
+                                 "not_extractable")
   ids <- page$draw_id
   # 8 verdicts (2 wrong), 1 unavailable, 3 left pending
-  resolved <- thr_resolve_page_verdicts(page, loaded = ids[1:9], failed = ids[9],
+  resolved <- thr_resolve_page_verdicts(page, loaded = ids[1:8], failed = NULL,
                                         wrong = ids[1:2], token = "t",
                                         expected_token = "t")
   thr_save_verdicts(space$db_path, resolved, "Anna", "page-1")

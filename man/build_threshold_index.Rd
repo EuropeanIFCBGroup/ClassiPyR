@@ -52,8 +52,10 @@ Each file ends up with one status:
 ifcb-classify stopped applying training augmentation at inference, so its
 scores do not match current inference and it is refused. Re-run the
 classification to review such a sample.
-\item \code{duplicate}: another file of the same model for the same sample exists;
-the first by path is used.
+\item \code{duplicate}: another file of the same model for the same sample exists
+under \code{h5_folder}; the first by path is used. Files compete only within
+the folder a build is run on, never with files indexed from another
+folder.
 \item \code{failed}: the file could not be read, is inconsistent, or is not named
 after an IFCB sample. The message says why. A failed file is read again
 only once it has changed on disk.
@@ -69,7 +71,12 @@ transform and the class labels. Models are never pooled.
 The index is a cache. It can be deleted at any time and is rebuilt from the
 class-score files; it is also rebuilt when it was written by a version of
 ClassiPyR with another index layout. Files indexed from a different folder
-stay in the index for as long as they exist on disk.
+stay in the index for as long as they exist on disk. A sample scored by one
+model in two indexed folders is usable in both; a review covers one folder
+and uses that folder's file.
+
+A build may run while the app, or another build, uses the same index: each
+waits for the other's write to finish.
 }
 \examples{
 \dontrun{

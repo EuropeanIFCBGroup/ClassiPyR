@@ -7,7 +7,8 @@
 choose_class_threshold(
   curve,
   target = THR_DEFAULT_TARGET_PRECISION,
-  criterion = c("estimate", "lower")
+  criterion = c("estimate", "lower"),
+  min_kept = THR_MIN_STRATUM_VERDICTS
 )
 }
 \arguments{
@@ -18,6 +19,9 @@ choose_class_threshold(
 \item{criterion}{What has to meet the target: \code{"estimate"}, the estimated
 precision (the default), or \code{"lower"}, the lower bound of its interval,
 which is stricter.}
+
+\item{min_kept}{Predictions an edge has to keep to be considered. Use 1
+to consider every supported edge that keeps a prediction.}
 }
 \value{
 A list with:
@@ -38,12 +42,20 @@ Picks the lowest candidate threshold that meets a target precision, using
 only the thresholds the review evidence supports.
 }
 \details{
-Only edges that are \code{supported} and keep at least one prediction are
-considered; supported edges that keep nothing are skipped. The chosen
-threshold is the lowest of these such that it \strong{and every higher one}
-meets the target. A dip below the target therefore blocks all thresholds
-below it, even ones where the precision recovers, because a threshold has
-to be safe for everything it lets through.
+Only edges that are \code{supported} and keep at least \code{min_kept} predictions
+are considered. The precision at an edge that keeps only a handful of
+predictions rests on those few images, so such an edge is neither chosen
+nor allowed to rule out the thresholds below it; when no edge of the class
+keeps \code{min_kept} predictions, every supported edge that keeps any is
+considered instead.
+
+The chosen threshold is the lowest of these such that it \strong{and every
+higher one} meets the target. A dip below the target therefore blocks all
+thresholds below it, even ones where the precision recovers. The precision
+at an edge already covers everything that edge keeps, so the lower
+threshold would meet the target too; it is passed over as a precaution,
+because a curve that falls and rises again as the score increases is a
+sign that the scores of the class do not order its predictions well.
 
 The result is one of:
 \itemize{

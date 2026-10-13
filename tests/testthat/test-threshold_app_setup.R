@@ -111,6 +111,71 @@ test_that("thr_apply_settings lets the data folders be left empty", {
   expect_null(thr_load_settings(settings_file)$h5_folder)
 })
 
+test_that("thr_apply_settings can put folders in use without saving them", {
+  root <- tempfile("thr_settings_")
+  dir.create(file.path(root, "review"), recursive = TRUE)
+  on.exit(unlink(root, recursive = TRUE), add = TRUE)
+  settings_file <- file.path(root, "threshold_settings.json")
+  thr_save_settings(list(review_dir = file.path(root, "review"),
+                         h5_folder = "/archive/offline/h5", annotator = "Anna"),
+                    settings_file)
+  before <- readLines(settings_file)
+
+  # What the app does at start for a data folder that is not there right now
+  applied <- thr_apply_settings(file.path(root, "review"), h5_folder = "",
+                                annotator = "Anna", save = FALSE,
+                                settings_file = settings_file)
+
+  expect_null(applied$h5_folder)
+  expect_equal(applied$review_dir,
+               normalizePath(file.path(root, "review"), winslash = "/"))
+  # The saved folder is still there for when the disk is back
+  expect_identical(readLines(settings_file), before)
+  expect_equal(thr_load_settings(settings_file)$h5_folder, "/archive/offline/h5")
+
+  absent <- file.path(root, "none", "threshold_settings.json")
+  thr_apply_settings(file.path(root, "review"), save = FALSE,
+                     settings_file = absent)
+  expect_false(file.exists(absent))
+})
+
+test_that("thr_restorable_settings leaves out a data folder that is not there", {
+  root <- tempfile("thr_settings_")
+  dir.create(file.path(root, "review"), recursive = TRUE)
+  dir.create(file.path(root, "raw"))
+  on.exit(unlink(root, recursive = TRUE), add = TRUE)
+  saved <- list(review_dir = file.path(root, "review"),
+                h5_folder = "/archive/offline/h5",
+                roi_folder = file.path(root, "raw"), annotator = " Anna ")
+
+  restorable <- thr_restorable_settings(saved)
+
+  # The fields show what was saved, whether or not it can be used now
+  expect_equal(restorable$fields$h5_folder, "/archive/offline/h5")
+  expect_equal(restorable$fields$annotator, "Anna")
+  expect_true(restorable$apply)
+  expect_equal(restorable$h5_folder, "")
+  expect_equal(restorable$roi_folder, file.path(root, "raw"))
+  expect_length(restorable$notices, 1)
+  expect_match(restorable$notices, "class-score folder", fixed = TRUE)
+  expect_match(restorable$notices, "/archive/offline/h5", fixed = TRUE)
+  expect_match(restorable$notices, "stays saved", fixed = TRUE)
+
+  # Nothing saved, or a review folder that has gone: nothing to put in use
+  nothing <- thr_restorable_settings(list())
+  expect_false(nothing$apply)
+  expect_equal(nothing$fields$review_dir, "")
+  expect_equal(nothing$notices, character())
+  expect_false(thr_restorable_settings(
+    list(review_dir = file.path(root, "gone"))
+  )$apply)
+  everything <- thr_restorable_settings(utils::modifyList(
+    saved, list(h5_folder = file.path(root, "raw"))
+  ))
+  expect_equal(everything$notices, character())
+  expect_equal(everything$h5_folder, file.path(root, "raw"))
+})
+
 # ---- index messages ----------------------------------------------------------
 
 test_that("thr_index_build_message says what the build did", {
@@ -153,25 +218,93 @@ test_that("thr_failure_overview counts and explains each status", {
   expect_equal(odd$Files, 1L)
 })
 
+test_that("thr_review_models joins the indexed models and the frozen reviews", {
+  space <- thr_test_app_setup_space()
+  on.exit(unlink(space$root, recursive = TRUE), add = TRUE)
+  indexed <- thr_index_models(space$index_path)
+
+  open <- thr_review_models(indexed, thr_frozen_models(space$db_path))
+  expect_equal(open[names(indexed)], indexed)
+  expect_identical(open$indexed, c(TRUE, TRUE))
+  expect_identical(open$frozen, c(FALSE, FALSE))
+  expect_false(file.exists(space$db_path))
+
+  thr_freeze_frame(space$db_path, space$index_path, thr_test_model_a_id,
+                   h5_folder = space$h5_folder)
+  frozen <- thr_frozen_models(space$db_path)
+  both <- thr_review_models(indexed, frozen)
+  expect_identical(both$frozen, both$model_id == thr_test_model_a_id)
+  expect_identical(both$indexed, c(TRUE, TRUE))
+
+  # The index is a cache: without it the frozen review is still listed
+  for (no_index in list(indexed[0, ], NULL)) {
+    alone <- thr_review_models(no_index, frozen)
+    expect_identical(alone$model_id, thr_test_model_a_id)
+    expect_identical(alone$frozen, TRUE)
+    expect_identical(alone$indexed, FALSE)
+    expect_identical(alone$n_files, 0L)
+    expect_identical(alone$n_rois, 0L)
+    expect_equal(alone$classifier_name,
+                 indexed$classifier_name[indexed$model_id == thr_test_model_a_id])
+  }
+  # A model of the index and another that is only frozen: both are listed
+  mixed <- thr_review_models(indexed[indexed$model_id == thr_test_model_b_id, ],
+                             frozen)
+  expect_setequal(mixed$model_id, c(thr_test_model_a_id, thr_test_model_b_id))
+  expect_identical(mixed$indexed, mixed$model_id == thr_test_model_b_id)
+  expect_equal(nrow(thr_review_models(NULL, NULL)), 0)
+})
+
+test_that("thr_model_choices says which models are frozen or not in the index", {
+  models <- data.frame(
+    model_id = c("aaaaaaaa1111", "bbbbbbbb2222", "cccccccc3333"),
+    classifier_name = c("open_model", "frozen_model", "archived_model"),
+    n_files = c(6L, 4L, 0L), n_rois = c(65L, 40L, 0L),
+    indexed = c(TRUE, TRUE, FALSE), frozen = c(FALSE, TRUE, TRUE),
+    stringsAsFactors = FALSE
+  )
+
+  choices <- thr_model_choices(models)
+
+  expect_equal(unname(choices), models$model_id)
+  expect_false(grepl("frozen", names(choices)[1], fixed = TRUE))
+  expect_match(names(choices)[1], "6 files", fixed = TRUE)
+  expect_match(names(choices)[2], "4 files", fixed = TRUE)
+  expect_match(names(choices)[2], "review frozen", fixed = TRUE)
+  expect_match(names(choices)[3], "review frozen", fixed = TRUE)
+  expect_match(names(choices)[3], "not in the index", fixed = TRUE)
+  expect_false(grepl("0 files", names(choices)[3], fixed = TRUE))
+  expect_match(names(choices)[3], "cccccccc", fixed = TRUE)
+})
+
 test_that("thr_models_table lists the models and whether a review started", {
   space <- thr_test_app_setup_space()
   on.exit(unlink(space$root, recursive = TRUE), add = TRUE)
-  models <- thr_index_models(space$index_path)
+  indexed <- thr_index_models(space$index_path)
+  listed <- function(indexed) {
+    thr_review_models(indexed, thr_frozen_models(space$db_path))
+  }
 
-  before <- thr_models_table(models, space$db_path)
+  before <- thr_models_table(listed(indexed))
   expect_equal(nrow(before), 2)
   expect_equal(before$Review, rep("not started", 2))
   expect_false(file.exists(space$db_path))
 
   thr_freeze_frame(space$db_path, space$index_path, thr_test_model_a_id,
                    h5_folder = space$h5_folder)
-  after <- thr_models_table(models, space$db_path)
-  expect_equal(after$Review[models$model_id == thr_test_model_a_id], "frozen")
-  expect_equal(after$Review[models$model_id == thr_test_model_b_id],
+  after <- thr_models_table(listed(indexed))
+  expect_equal(after$Review[indexed$model_id == thr_test_model_a_id], "frozen")
+  expect_equal(after$Review[indexed$model_id == thr_test_model_b_id],
                "not started")
-  expect_equal(after$Files, models$n_files)
-  expect_equal(after$ROIs, models$n_rois)
-  expect_equal(nrow(thr_models_table(models[0, ], space$db_path)), 0)
+  expect_equal(after$Files, indexed$n_files)
+  expect_equal(after$ROIs, indexed$n_rois)
+  expect_equal(nrow(thr_models_table(listed(indexed)[0, ])), 0)
+
+  # A frozen review whose class-score files are no longer indexed
+  gone <- thr_models_table(listed(indexed[0, ]))
+  expect_equal(nrow(gone), 1)
+  expect_equal(gone$Review, "frozen, not in the index")
+  expect_equal(gone$Files, 0L)
 })
 
 # ---- thr_frozen_summary ------------------------------------------------------
@@ -233,4 +366,31 @@ test_that("thr_frozen_summary says what new and changed files mean", {
     stats::setNames(h5$facts$Value, h5$facts$Item)[["Fallback thresholds"]],
     "class-score files", fixed = TRUE
   )
+})
+
+test_that("thr_frozen_summary says what still works without the index", {
+  space <- thr_test_app_frozen_space()
+  on.exit(unlink(space$root, recursive = TRUE), add = TRUE)
+  model <- thr_get_model(space$db_path, space$model_id)
+  summarise <- function() {
+    thr_frozen_summary(model, thr_frame_status(space$db_path, space$index_path,
+                                               space$model_id))
+  }
+  expect_equal(summarise()$notices, character())
+
+  thr_test_lose_index(space, "archived")
+  archived <- summarise()
+  expect_length(archived$notices, 1)
+  expect_match(archived$notices, "None of the 6 class-score file", fixed = TRUE)
+  expect_match(archived$notices, "Results and Export", fixed = TRUE)
+  expect_match(archived$notices, space$h5_folder, fixed = TRUE)
+
+  thr_test_lose_index(space, "deleted")
+  deleted <- summarise()
+  expect_length(deleted$notices, 1)
+  expect_match(deleted$notices, "no class-score index", fixed = TRUE)
+  expect_match(deleted$notices, "Results and Export", fixed = TRUE)
+  expect_match(deleted$notices, "Build / update index", fixed = TRUE)
+  facts <- stats::setNames(deleted$facts$Value, deleted$facts$Item)
+  expect_equal(facts[["Samples in the frame"]], "6")
 })

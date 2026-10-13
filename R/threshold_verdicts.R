@@ -82,7 +82,8 @@ thr_as_draw_ids <- function(ids, arg) {
 
 #' Check the page a confirmation refers to
 #'
-#' @param page Data frame with \code{draw_id} and \code{extracted}.
+#' @param page Data frame with \code{draw_id}, \code{extracted} and, when
+#'   some draw has no image, \code{no_image_reason}.
 #' @return Integer vector of the page's draw ids.
 #' @noRd
 thr_check_page <- function(page) {
@@ -98,25 +99,73 @@ thr_check_page <- function(page) {
     stop("`page$extracted` must be TRUE or FALSE for every draw: whether its ",
          "image was extracted on the server.", call. = FALSE)
   }
+  thr_check_no_image_reason(page)
   as.integer(ids)
+}
+
+#' Stop unless every draw without an image says why it has none
+#'
+#' What becomes of such a draw depends on the reason, so a page that does not
+#' give one is refused rather than resolved on a guess: a raw data folder
+#' that is away for a moment must never be taken for a ROI without an image.
+#'
+#' @param page Data frame with \code{extracted} (logical, checked).
+#' @return \code{NULL}, invisibly.
+#' @noRd
+thr_check_no_image_reason <- function(page) {
+  missing_image <- !page$extracted
+  if (!any(missing_image)) {
+    return(invisible(NULL))
+  }
+  reason <- page$no_image_reason[missing_image]
+  if (is.null(reason) || !all(reason %in% THR_NO_IMAGE_REASONS)) {
+    stop("`page$no_image_reason` must say why each draw without an image has ",
+         "none: one of ", paste(THR_NO_IMAGE_REASONS, collapse = ", "),
+         " (see thr_extract_page_images()).", call. = FALSE)
+  }
+  invisible(NULL)
+}
+
+#' Which draws without an image can never have one?
+#'
+#' Only these are retired. The raw file was there and was read, and the ROI
+#' could not be made from it (or the draw has no usable sample name or ROI
+#' number), so showing the draw again would change nothing. A draw whose raw
+#' file was not found is not among them: the folder may be back tomorrow.
+#'
+#' @param page Data frame of a checked page.
+#' @return Logical vector aligned with the rows of \code{page}.
+#' @noRd
+thr_draw_is_unavailable <- function(page) {
+  if (is.null(page$no_image_reason)) {
+    return(rep(FALSE, nrow(page)))
+  }
+  !page$extracted &
+    page$no_image_reason %in% c(THR_NO_IMAGE_EXTRACT, THR_NO_IMAGE_INVALID)
 }
 
 #' Turn a page confirmation into verdicts
 #'
 #' The single place the confirmation rules live. A draw gets a verdict only
 #' when its image was extracted on the server and the browser reported it as
-#' loaded and not as failed: 0 when it was marked wrong, 1 otherwise. A draw
-#' whose image failed in the browser, or was never extracted, is unavailable
-#' (a draw without an image would otherwise come back on every page). A draw
-#' that was extracted but reported neither way stays pending.
+#' loaded and not as failed: 0 when it was marked wrong, 1 otherwise.
+#'
+#' A draw is unavailable, which is final, only when its image can never be
+#' made: the raw file was read and did not give the ROI (see
+#' \code{thr_draw_is_unavailable()}). Everything that may be different next
+#' time stays pending and comes back on a later page: a draw whose raw file
+#' was not found, an image the browser failed to load, and an image that was
+#' extracted but reported neither way.
 #'
 #' Nothing is resolved when the confirmation is not for the current page, or
 #' when an image is marked wrong that is not on the page or cannot have a
 #' verdict: both mean the browser and the server disagree about what was
 #' shown.
 #'
-#' @param page Data frame of the page as it was rendered: \code{draw_id} and
-#'   \code{extracted} (logical).
+#' @param page Data frame of the page as it was rendered: \code{draw_id},
+#'   \code{extracted} (logical) and \code{no_image_reason} (why a draw that
+#'   was not extracted has no image, see \code{thr_extract_page_images()};
+#'   may be left out when every draw was extracted).
 #' @param loaded,failed Draw ids the browser reported as loaded and as
 #'   failed. Ids that are not on the page are ignored.
 #' @param wrong Draw ids the reviewer marked as not being the class.
@@ -125,8 +174,11 @@ thr_check_page <- function(page) {
 #' @return A list with \code{verdicts} (data frame with \code{draw_id} and
 #'   \code{verdict}, 1 correct and 0 wrong), \code{unavailable} and
 #'   \code{still_pending} (integer vectors of draw ids). Every draw of the
-#'   page is in exactly one of the three. A token mismatch signals an error of
-#'   class \code{thr_stale_page}.
+#'   page is in exactly one of the three. \code{no_raw} and
+#'   \code{load_failed} name the draws among \code{still_pending} that are
+#'   pending because their raw file was not found, or because the browser
+#'   failed to load their image. A token mismatch signals an error of class
+#'   \code{thr_stale_page}.
 #' @noRd
 thr_resolve_page_verdicts <- function(page, loaded, failed, wrong, token,
                                       expected_token) {
@@ -140,10 +192,10 @@ thr_resolve_page_verdicts <- function(page, loaded, failed, wrong, token,
   failed <- thr_as_draw_ids(failed, "failed")
   wrong <- thr_as_draw_ids(wrong, "wrong")
 
-  did_fail <- page_ids %in% failed
   # An image reported both ways was not reliably seen
+  did_fail <- page$extracted & page_ids %in% failed
   has_verdict <- page$extracted & page_ids %in% loaded & !did_fail
-  unavailable <- !page$extracted | did_fail
+  unavailable <- thr_draw_is_unavailable(page)
   thr_check_wrong_marks(wrong, page_ids, has_verdict)
 
   verdict_ids <- page_ids[has_verdict]
@@ -151,7 +203,9 @@ thr_resolve_page_verdicts <- function(page, loaded, failed, wrong, token,
     verdicts = data.frame(draw_id = verdict_ids,
                           verdict = as.integer(!(verdict_ids %in% wrong))),
     unavailable = page_ids[unavailable],
-    still_pending = page_ids[!has_verdict & !unavailable]
+    still_pending = page_ids[!has_verdict & !unavailable],
+    no_raw = page_ids[!page$extracted & !unavailable],
+    load_failed = page_ids[did_fail]
   )
 }
 

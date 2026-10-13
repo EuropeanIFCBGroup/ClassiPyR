@@ -120,18 +120,30 @@ thr_class_from_choice <- function(choice, class_labels) {
 
 #' Choices of the model picker
 #'
-#' @param models Data frame from \code{thr_index_models()}.
+#' @param models Data frame from \code{thr_review_models()} or
+#'   \code{thr_index_models()}. The counts are over every folder the index
+#'   was built on, each sample once; Check tells how many of them the
+#'   class-score folder in use holds.
 #' @return Named character vector: the names describe each model and the
-#'   values are the model identifiers.
+#'   values are the model identifiers. A model whose review is frozen is
+#'   marked, and so is a frozen model the index holds no usable files of: it
+#'   can still be picked for its results and its export.
 #' @noRd
 thr_model_choices <- function(models) {
   thr_check_columns(models, c("model_id", "classifier_name", "n_files",
                               "n_rois"), "models")
   name <- ifelse(is.na(models$classifier_name) | !nzchar(models$classifier_name),
                  "unnamed model", models$classifier_name)
-  labels <- sprintf("%s (%d files, %d ROIs, id %s)", name,
-                    as.integer(models$n_files), as.integer(models$n_rois),
-                    substr(models$model_id, 1, 8))
+  id <- substr(models$model_id, 1, 8)
+  # Models straight from the index are indexed, and say nothing of a review
+  frozen <- if (is.null(models$frozen)) FALSE else as.logical(models$frozen)
+  absent <- if (is.null(models$indexed)) FALSE else !as.logical(models$indexed)
+  absent <- rep_len(absent, nrow(models))
+  labels <- sprintf("%s (%d files, %d ROIs, id %s%s)", name,
+                    as.integer(models$n_files), as.integer(models$n_rois), id,
+                    ifelse(rep_len(frozen, nrow(models)), ", review frozen", ""))
+  labels[absent] <- sprintf("%s (review frozen, not in the index, id %s)",
+                            name[absent], id[absent])
   stats::setNames(as.character(models$model_id), labels)
 }
 
@@ -140,7 +152,8 @@ thr_model_choices <- function(models) {
 #' @param counts Data frame from \code{thr_stratum_counts()} for one class.
 #' @param edges Lower edges of the score bins the frame was frozen with.
 #' @param min_stratum_n Verdicts a bin needs before a threshold at or below
-#'   it can be fitted (the whole bin, when it holds fewer predictions).
+#'   it can be fitted (every prediction of the bin whose image can be shown,
+#'   when those are fewer), as in \code{estimate_precision_curve()}.
 #' @return Data frame with one row per bin that holds predictions and the
 #'   columns \code{Score bin}, \code{Predictions}, \code{Verdicts},
 #'   \code{Correct}, \code{Pending}, \code{Unavailable} and
@@ -151,7 +164,7 @@ thr_coverage_table <- function(counts, edges = THR_SCORE_EDGES,
   thr_check_columns(counts, c("bin", "n_population", "n_verdicts", "n_correct",
                               "n_pending", "n_unavailable"), "counts")
   counts <- counts[order(counts$bin), , drop = FALSE]
-  needed <- pmin(counts$n_population, min_stratum_n)
+  needed <- pmin(counts$n_population - counts$n_unavailable, min_stratum_n)
   enough <- ifelse(counts$n_verdicts >= needed, "yes",
                    sprintf("no (%d of %d)", as.integer(counts$n_verdicts),
                            as.integer(needed)))
@@ -179,6 +192,19 @@ thr_card_has_image <- function(row) {
   isTRUE(row$extracted) && !is.null(row$png_file) && !is.na(row$png_file)
 }
 
+#' Was the raw data of a draw not found?
+#'
+#' @param row One row of a page, or a whole page.
+#' @return Logical vector with one element per row; \code{FALSE} for a page
+#'   that does not say why its draws have no image.
+#' @noRd
+thr_card_lacks_raw <- function(row) {
+  if (is.null(row$no_image_reason)) {
+    return(rep(FALSE, nrow(row)))
+  }
+  !row$extracted & row$no_image_reason %in% THR_NO_IMAGE_RAW
+}
+
 #' One positive whole number of a page row, or NULL
 #'
 #' @param value A value that may be absent or missing.
@@ -195,17 +221,21 @@ thr_card_pixels <- function(value) {
 #'
 #' The card is keyed by its draw id. A draw whose image was extracted gets a
 #' lazily loaded image; any other draw gets a greyed card without one, which
-#' the browser code will not let the reviewer mark.
+#' the browser code will not let the reviewer mark. A draw whose raw data was
+#' not found says so and carries the class \code{no-raw}: the browser code
+#' does not offer a page of nothing but such cards for confirmation.
 #'
 #' @param row One row of a page: \code{draw_id}, \code{sample_name},
 #'   \code{roi_number}, \code{score}, \code{png_file}, \code{extracted} and,
-#'   optionally, \code{width} and \code{height} of the image in pixels.
+#'   optionally, \code{no_image_reason} and the \code{width} and
+#'   \code{height} of the image in pixels.
 #' @param resource_prefix Resource path the session's images are served
 #'   under.
 #' @return A \code{div} tag. Everything taken from \code{row} is escaped.
 #' @noRd
 thr_gallery_card <- function(row, resource_prefix) {
   has_image <- thr_card_has_image(row)
+  lacks_raw <- !has_image && thr_card_lacks_raw(row)
   picture <- if (has_image) {
     shiny::tags$img(
       src = paste0(resource_prefix, "/", row$png_file), loading = "lazy",
@@ -214,12 +244,16 @@ thr_gallery_card <- function(row, resource_prefix) {
     )
   }
   shiny::tags$div(
-    class = if (has_image) "thr-card" else "thr-card unavailable",
+    class = paste(c("thr-card", if (!has_image) "unavailable",
+                    if (lacks_raw) "no-raw"), collapse = " "),
     `data-draw` = as.integer(row$draw_id),
     picture,
     # Shown by the style sheet for a draw without an image, and for an image
     # the browser failed to load
-    shiny::tags$div(class = "thr-placeholder", "Image unavailable"),
+    shiny::tags$div(
+      class = "thr-placeholder",
+      if (lacks_raw) "Raw data not found" else "Image unavailable"
+    ),
     shiny::tags$div(
       class = "thr-caption",
       shiny::tags$span(class = "thr-score", thr_format_score(row$score)),
@@ -231,6 +265,56 @@ thr_gallery_card <- function(row, resource_prefix) {
   )
 }
 
+#' What to say about a page that came back without draws
+#'
+#' A class is only called finished when it is. A page is also empty when the
+#' predictions that are left cannot be drawn: they sit in class-score files
+#' that changed on disk, or dropped out of the index, after the frame was
+#' frozen. Saying "nothing left" then would hide that part of the class was
+#' never reviewed.
+#'
+#' @param remaining \code{NULL} when nothing is known, or the list from
+#'   \code{thr_class_remaining()}.
+#' @return A \code{div} tag with the notice.
+#' @noRd
+thr_empty_page_notice <- function(remaining) {
+  alert <- function(type, ...) {
+    shiny::tags$div(class = paste0("alert alert-", type), paste(...))
+  }
+  if (is.null(remaining)) {
+    return(alert("success", "Nothing left to review for this class: every",
+                 "prediction of it that can be drawn has been drawn and",
+                 "resolved."))
+  }
+  if (remaining$n_undrawn > 0) {
+    # NA without an index: how many files changed is then not known
+    why <- if (isTRUE(remaining$n_changed_files > 0)) sprintf(
+      paste("%d class-score file(s) of the frozen frame have changed on disk",
+            "or are no longer in the index, and predictions in such files",
+            "are not drawn. See the Setup page."),
+      remaining$n_changed_files
+    )
+    return(alert("warning", sprintf(
+      paste("No more images of this class can be drawn, but it has not been",
+            "reviewed in full: %d of its %d predictions were never shown."),
+      remaining$n_undrawn, remaining$n_predicted
+    ), why))
+  }
+  if (remaining$n_pending > 0) {
+    return(alert("warning", sprintf(
+      paste("No image is shown, but %d image(s) of this class are still",
+            "pending, for example on a page open in another session. Press",
+            "\"Load page\" to see them."),
+      remaining$n_pending
+    )))
+  }
+  alert("success", sprintf(
+    paste("Nothing left to review for this class: all %d predictions of it",
+          "have been drawn and resolved."),
+    remaining$n_predicted
+  ))
+}
+
 #' Gallery of a review page
 #'
 #' @param page Data frame of the page as loaded by
@@ -240,10 +324,17 @@ thr_gallery_card <- function(row, resource_prefix) {
 #' @param token Token of the page. The browser sends it back with the
 #'   confirmation, so that a confirmation of a page that has been replaced
 #'   is recognised.
+#' @param notice \code{NULL}, or one string shown as a warning above the
+#'   cards, such as \code{thr_missing_raw_notice()} gives.
+#' @param remaining \code{NULL}, or what is left of the class, from
+#'   \code{thr_class_remaining()}. Only used for a page without draws, see
+#'   \code{thr_empty_page_notice()}.
 #' @return A tag: the container \code{#thr-gallery} holding one card per
 #'   draw, highest score first, or a notice when there is nothing to show.
+#'   With a \code{notice}, a tag list of the warning and that container.
 #' @noRd
-thr_gallery_ui <- function(page, resource_prefix, token) {
+thr_gallery_ui <- function(page, resource_prefix, token, notice = NULL,
+                           remaining = NULL) {
   if (is.null(page)) {
     return(shiny::tags$div(
       class = "alert alert-info",
@@ -255,19 +346,22 @@ thr_gallery_ui <- function(page, resource_prefix, token) {
   if (nrow(page) == 0) {
     return(shiny::tags$div(
       id = "thr-gallery", class = "thr-gallery", `data-token` = token,
-      shiny::tags$div(
-        class = "alert alert-success",
-        paste("Nothing left to review for this class: every prediction of it",
-              "that can be drawn has been drawn and resolved.")
-      )
+      thr_empty_page_notice(remaining)
     ))
   }
   page <- page[order(-page$score, page$draw_id), , drop = FALSE]
   cards <- lapply(seq_len(nrow(page)), function(i) {
     thr_gallery_card(page[i, , drop = FALSE], resource_prefix)
   })
-  shiny::tags$div(id = "thr-gallery", class = "thr-gallery",
-                  `data-token` = token, cards)
+  gallery <- shiny::tags$div(id = "thr-gallery", class = "thr-gallery",
+                             `data-token` = token, cards)
+  if (!thr_is_single_string(notice)) {
+    return(gallery)
+  }
+  shiny::tagList(
+    shiny::tags$div(class = "alert alert-warning thr-page-notice", notice),
+    gallery
+  )
 }
 
 #' One line describing a loaded page
@@ -280,10 +374,12 @@ thr_page_caption <- function(page, class_name) {
   if (is.null(page)) {
     return("")
   }
-  n_missing <- sum(!page$extracted)
+  n_no_raw <- sum(thr_card_lacks_raw(page))
+  n_missing <- sum(!page$extracted) - n_no_raw
   n_seen <- if (is.null(page$is_new)) 0L else sum(!page$is_new)
   parts <- c(
     sprintf("%d images predicted as %s", nrow(page), class_name),
+    if (n_no_raw > 0) sprintf("%d whose raw data was not found", n_no_raw),
     if (n_missing > 0) sprintf("%d without an image", n_missing),
     if (n_seen > 0) sprintf("%d shown before and not yet resolved", n_seen)
   )

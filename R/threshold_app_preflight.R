@@ -5,6 +5,13 @@
 # without raw data and the fallback thresholds. The result is shown to the
 # reviewer and only then handed to thr_freeze_frame().
 
+# Shown when Check or Freeze is asked for without a class-score folder
+THR_NO_H5_FOLDER_MESSAGE <- paste(
+  "No class-score folder is in use. A review covers the class-score files of",
+  "one folder: enter that folder under Folders and press Apply, then check",
+  "again."
+)
+
 #' Read the samples to leave out of a review as training samples
 #'
 #' @param exclusion_file \code{NULL}, or the path of a text file with one
@@ -137,6 +144,67 @@ thr_preflight_notices <- function(exclusions, n_no_raw, roi_folder, absent) {
   )
 }
 
+#' Stop unless the index holds a class-score folder as it is on disk
+#'
+#' A frame is frozen from the index and cannot be changed afterwards, so the
+#' index must not be behind the files: a file that was rewritten would be
+#' frozen with its old scores, a deleted one would still count, a new one
+#' would be left out for good. The folder is listed once and its files are
+#' stat-ed; no file is read.
+#'
+#' @param index_path Path to the index SQLite file, which may not exist.
+#' @param h5_folder Class-score folder the review covers.
+#' @return \code{NULL}, invisibly. Stops, saying how many files are new,
+#'   changed or missing, when the folder and the index differ, and when files
+#'   of the folder really lie outside it (\code{thr_check_folder_links()}).
+#' @noRd
+thr_check_index_current <- function(index_path, h5_folder) {
+  scanned <- thr_scan_h5_folder(h5_folder)
+  folder <- thr_normalise_folder(h5_folder)
+  stale <- thr_with_index(index_path, function(con) {
+    thr_stale_files(con, scanned, folder = folder)
+  })
+  counts <- if (is.null(stale)) {
+    c(new = nrow(scanned), changed = 0L, missing = 0L)
+  } else {
+    c(new = nrow(stale$new), changed = nrow(stale$changed),
+      missing = length(stale$missing))
+  }
+  if (sum(counts) > 0) {
+    stop("The class-score folder has changed since the index was built: ",
+         counts[["new"]], " new, ", counts[["changed"]], " changed and ",
+         counts[["missing"]], " missing class-score file(s) under ", folder,
+         ". A frame cannot be changed once it is frozen, so it is not frozen ",
+         "from an index that is out of date. Press \"Build / update index\" ",
+         "and check again.", call. = FALSE)
+  }
+  thr_check_folder_links(scanned$h5_path, folder)
+}
+
+#' Stop when files of a class-score folder really lie outside it
+#'
+#' The index stores every file under its real path. A file reached through a
+#' symbolic link inside the folder is therefore stored somewhere else, and a
+#' frame, which holds the files stored under its folder, would leave it out
+#' without a word.
+#'
+#' @param paths Real paths of the class-score files found in the folder.
+#' @param folder The folder, from \code{thr_normalise_folder()}.
+#' @return \code{NULL}, invisibly.
+#' @noRd
+thr_check_folder_links <- function(paths, folder) {
+  outside <- paths[!thr_under_folder(paths, folder)]
+  if (length(outside) > 0) {
+    stop(length(outside), " class-score file(s) in ", folder, " are reached ",
+         "through a symbolic link and really lie elsewhere, for example ",
+         outside[1], ". A review covers the files stored under its ",
+         "class-score folder, so these would be left out. Use the folder the ",
+         "files really are in as the class-score folder, or put the files ",
+         "themselves in this folder.", call. = FALSE)
+  }
+  invisible(NULL)
+}
+
 #' Run a pre-flight step, collecting its error as a problem
 #'
 #' @param step Function of no arguments.
@@ -158,9 +226,16 @@ thr_preflight_step <- function(step) {
 #' returned as a problem instead of being raised, so the app can show all of
 #' it at once.
 #'
+#' The frame is worked out from the index, so the class-score folder is first
+#' compared with it (\code{thr_check_index_current()}): files that are new,
+#' changed or missing on disk are a problem, to be solved by updating the
+#' index.
+#'
 #' @param index_path Path to the index SQLite file.
 #' @param model_id Model identifier.
-#' @param h5_folder Class-score folder the review covers.
+#' @param h5_folder Class-score folder the review covers. Without one nothing
+#'   is worked out and the missing folder is the problem: a frame is never
+#'   frozen over every folder the index happens to hold.
 #' @param roi_folder Raw data folder.
 #' @inheritParams thr_read_exclusions
 #' @param fallback_mode \code{"h5"} or \code{"json"}; see
@@ -186,7 +261,15 @@ thr_setup_preflight <- function(index_path, model_id, h5_folder, roi_folder,
       !(fallback_mode %in% c("h5", "json"))) {
     stop("`fallback_mode` must be \"h5\" or \"json\".", call. = FALSE)
   }
+  h5_folder <- thr_clean_path_input(h5_folder)
+  if (is.null(h5_folder)) {
+    return(thr_preflight_refused(THR_NO_H5_FOLDER_MESSAGE, roi_folder))
+  }
   samples <- thr_frame_sample_names(index_path, model_id, h5_folder)
+  # The index is what gets frozen: it has to match the files on disk
+  current <- thr_preflight_step(function() {
+    thr_check_index_current(index_path, h5_folder)
+  })
   read <- thr_preflight_step(function() {
     thr_read_exclusions(exclusion_file, annotations_folder, samples)
   })
@@ -204,6 +287,7 @@ thr_setup_preflight <- function(index_path, model_id, h5_folder, roi_folder,
                            frame, h5_folder)
   })
   problems <- c(
+    current$problem,
     thr_preflight_frame_problems(length(samples), length(frame), h5_folder,
                                  roi_folder),
     read$problem,
@@ -212,6 +296,25 @@ thr_setup_preflight <- function(index_path, model_id, h5_folder, roi_folder,
   )
   thr_preflight_result(samples, exclusions, no_raw, frame, chosen$value,
                        problems, h5_folder, roi_folder)
+}
+
+#' Result of a pre-flight that was refused before looking at anything
+#'
+#' @param problem Why the pre-flight cannot run.
+#' @param roi_folder Raw data folder.
+#' @return The list \code{thr_setup_preflight()} returns, with no samples, no
+#'   notices and \code{problem} as its only problem.
+#' @noRd
+thr_preflight_refused <- function(problem, roi_folder) {
+  result <- thr_preflight_result(
+    samples = character(),
+    exclusions = thr_read_exclusions(NULL, NULL, character()),
+    no_raw = character(), frame = character(), chosen = NULL,
+    problems = problem, h5_folder = NA_character_, roi_folder = roi_folder
+  )
+  # Notices describe a frame, and there is none to describe
+  result$notices <- character()
+  result
 }
 
 #' Problems with the frame a pre-flight would freeze

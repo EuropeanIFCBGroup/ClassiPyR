@@ -3,8 +3,22 @@
 # A review page shows ROIs drawn from many samples at once. Their images are
 # cut out of each sample's raw .roi file on the server, a few ROIs per sample,
 # into a folder the browser can read. An image that cannot be made is never
-# an error here: the draw is reported as not extracted, and the verdict rules
-# turn that into "unavailable" rather than into a verdict nobody gave.
+# an error here: the draw is reported as not extracted, together with the
+# reason, and the verdict rules decide from the reason what becomes of it.
+
+# Why a draw has no image (the page column `no_image_reason`):
+#   no_raw           the sample's .roi file was not found, so nothing was
+#                    tried. The folder may only be away (a disk that is not
+#                    mounted, a renamed folder): the draw stays pending.
+#   not_extractable  the .roi file was there and was read, and this ROI could
+#                    not be made from it. Final: the draw becomes unavailable.
+#   invalid          the draw has no valid sample name or ROI number, so no
+#                    file name was ever built for it. Final as well.
+THR_NO_IMAGE_RAW <- "no_raw"
+THR_NO_IMAGE_EXTRACT <- "not_extractable"
+THR_NO_IMAGE_INVALID <- "invalid"
+THR_NO_IMAGE_REASONS <- c(THR_NO_IMAGE_RAW, THR_NO_IMAGE_EXTRACT,
+                          THR_NO_IMAGE_INVALID)
 
 #' List the raw .roi files under a folder
 #'
@@ -54,6 +68,32 @@ thr_resolve_roi_paths <- function(sample_names, roi_folder) {
     scanned <- thr_scan_roi_files(roi_folder)
     at <- match(paste0(sample_names[missing], ".roi"), basename(scanned))
     paths[missing] <- scanned[at]
+  }
+  paths
+}
+
+#' Find the raw files that an earlier lookup did not find
+#'
+#' A lookup is only ever final for a sample whose file was found. A sample
+#' without one is looked up again, so that raw data that was away (a disk
+#' that was not mounted, a folder that had been renamed) is found as soon as
+#' it is back. Samples that have their file cost nothing here.
+#'
+#' @param known Named character vector from an earlier call, or \code{NULL}.
+#' @inheritParams thr_resolve_roi_paths
+#' @return Named character vector as from \code{thr_resolve_roi_paths()}, one
+#'   element per distinct sample name.
+#' @noRd
+thr_refresh_roi_paths <- function(known, sample_names, roi_folder) {
+  sample_names <- unique(as.character(sample_names))
+  paths <- stats::setNames(rep(NA_character_, length(sample_names)),
+                           sample_names)
+  carried <- intersect(sample_names, names(known))
+  paths[carried] <- as.character(known[carried])
+  unresolved <- is.na(paths)
+  if (any(unresolved)) {
+    paths[unresolved] <- thr_resolve_roi_paths(sample_names[unresolved],
+                                               roi_folder)
   }
   paths
 }
@@ -130,12 +170,61 @@ thr_extract_sample <- function(extractor, roi_file, out_folder, roi_numbers,
   invisible(NULL)
 }
 
+#' Extract the images a page does not have yet
+#'
+#' One extractor call per sample, and none for a sample whose raw file is not
+#' there.
+#'
+#' @inheritParams thr_extract_page_images
+#' @param png_file Image file name of every draw, relative to
+#'   \code{out_folder}; \code{NA} for a draw that cannot have one.
+#' @return Logical vector aligned with the rows of \code{page}: was the
+#'   extractor run for the draw against a raw file that is still there
+#'   afterwards? Only then does a missing image say something about the ROI
+#'   rather than about where the raw data is.
+#' @noRd
+thr_extract_missing_images <- function(page, png_file, roi_paths, out_folder,
+                                       extractor) {
+  todo <- !is.na(png_file) & !thr_png_exists(out_folder, png_file)
+  attempted <- rep(FALSE, nrow(page))
+  for (sample_name in unique(page$sample_name[todo])) {
+    roi_file <- unname(roi_paths[sample_name])
+    if (is.na(roi_file) || !file.exists(roi_file)) {
+      next
+    }
+    rows <- todo & page$sample_name == sample_name
+    thr_extract_sample(extractor, roi_file, out_folder,
+                       as.integer(page$roi_number[rows]), png_file[rows])
+    # A raw file that went away while it was read explains the failure
+    attempted[rows] <- file.exists(roi_file)
+  }
+  attempted
+}
+
+#' Why each draw of a page has no image
+#'
+#' @param png_file Image file name of every draw; \code{NA} for a draw that
+#'   cannot have one.
+#' @param extracted Logical: the image file exists.
+#' @param attempted Logical, from \code{thr_extract_missing_images()}.
+#' @return Character vector: \code{NA} for a draw with an image, otherwise
+#'   one of \code{THR_NO_IMAGE_REASONS}.
+#' @noRd
+thr_no_image_reason <- function(png_file, extracted, attempted) {
+  reason <- rep(NA_character_, length(png_file))
+  reason[!extracted] <- THR_NO_IMAGE_RAW
+  reason[!extracted & attempted] <- THR_NO_IMAGE_EXTRACT
+  reason[is.na(png_file)] <- THR_NO_IMAGE_INVALID
+  reason
+}
+
 #' Extract the images of a review page
 #'
 #' Cuts the page's ROIs out of the raw files, one extractor call per sample.
 #' Images that are already in the folder are not extracted again. A sample
 #' without a raw file, or an extractor that fails, never stops the page: the
-#' draws concerned come back with \code{extracted = FALSE}.
+#' draws concerned come back with \code{extracted = FALSE} and the reason in
+#' \code{no_image_reason}.
 #'
 #' @param page Data frame of the draws on the page, with \code{draw_id},
 #'   \code{sample_name} and \code{roi_number} (see \code{thr_next_page()}).
@@ -146,10 +235,14 @@ thr_extract_sample <- function(extractor, roi_file, out_folder, roi_numbers,
 #' @param extractor Function called as \code{extractor(roi_file = ,
 #'   out_folder = , ROInumbers = , verbose = FALSE)} that writes
 #'   \code{out_folder/<sample>/<sample>_<5-digit ROI>.png}.
-#' @return \code{page} with two more columns: \code{png_file} (the image file
-#'   relative to \code{out_folder}, \code{NA} for a draw whose sample name or
-#'   ROI number is not valid) and \code{extracted} (logical: the image file
-#'   exists afterwards).
+#' @return \code{page} with three more columns: \code{png_file} (the image
+#'   file relative to \code{out_folder}, \code{NA} for a draw whose sample
+#'   name or ROI number is not valid), \code{extracted} (logical: the image
+#'   file exists afterwards) and \code{no_image_reason} (\code{NA} for an
+#'   extracted draw, otherwise \code{"no_raw"} when the sample's raw file was
+#'   not found, \code{"not_extractable"} when the raw file was read and did
+#'   not give the ROI, and \code{"invalid"} when the draw has no valid sample
+#'   name or ROI number).
 #' @noRd
 thr_extract_page_images <- function(page, roi_paths, out_folder,
                                     extractor = iRfcb::ifcb_extract_pngs) {
@@ -164,20 +257,13 @@ thr_extract_page_images <- function(page, roi_paths, out_folder,
   }
   dir.create(out_folder, recursive = TRUE, showWarnings = FALSE)
   png_file <- thr_png_file_names(page$sample_name, page$roi_number)
-  todo <- !is.na(png_file) & !thr_png_exists(out_folder, png_file)
-
-  for (sample_name in unique(page$sample_name[todo])) {
-    roi_file <- unname(roi_paths[sample_name])
-    if (is.na(roi_file) || !file.exists(roi_file)) {
-      next
-    }
-    rows <- todo & page$sample_name == sample_name
-    thr_extract_sample(extractor, roi_file, out_folder,
-                       as.integer(page$roi_number[rows]), png_file[rows])
-  }
+  attempted <- thr_extract_missing_images(page, png_file, roi_paths,
+                                          out_folder, extractor)
   result <- page
   result$png_file <- png_file
   result$extracted <- thr_png_exists(out_folder, png_file)
+  result$no_image_reason <- thr_no_image_reason(png_file, result$extracted,
+                                                attempted)
   result
 }
 

@@ -90,6 +90,67 @@ test_that("thr_resolve_roi_paths returns each sample once", {
   expect_named(paths, thr_test_app_raw_sample)
 })
 
+# ---- thr_refresh_roi_paths ---------------------------------------------------
+
+test_that("thr_refresh_roi_paths looks up again only what did not resolve", {
+  roi_folder <- tempfile("thr_raw_")
+  on.exit(unlink(roi_folder, recursive = TRUE), add = TRUE)
+  samples <- sprintf("D2023010%dT120000_IFCB134", 1:3)
+  thr_test_app_raw_layout(roi_folder, samples[1])
+  first <- thr_refresh_roi_paths(NULL, samples, roi_folder)
+  expect_named(first, samples)
+  expect_equal(is.na(unname(first)), c(FALSE, TRUE, TRUE))
+
+  # The raw data of the second sample arrives
+  thr_test_app_raw_layout(roi_folder, samples[2])
+  n_scans <- 0
+  local_mocked_bindings(
+    thr_scan_roi_files = function(roi_folder) {
+      n_scans <<- n_scans + 1
+      list.files(roi_folder, "\\.roi$", recursive = TRUE, full.names = TRUE)
+    }
+  )
+  second <- thr_refresh_roi_paths(first, samples, roi_folder)
+
+  expect_named(second, samples)
+  expect_equal(second[[1]], first[[1]])
+  expect_true(file.exists(second[[2]]))
+  expect_true(is.na(second[[3]]))
+  expect_equal(n_scans, 1)
+
+  # Nothing is looked up once every sample has its file
+  thr_test_app_raw_layout(roi_folder, samples[3])
+  third <- thr_refresh_roi_paths(second, samples, roi_folder)
+  expect_true(all(file.exists(third)))
+  n_scans <- 0
+  expect_equal(thr_refresh_roi_paths(third, samples, roi_folder), third)
+  expect_equal(n_scans, 0)
+})
+
+test_that("thr_refresh_roi_paths recovers when the raw folder comes back", {
+  roi_folder <- tempfile("thr_raw_")
+  away <- paste0(roi_folder, "_away")
+  on.exit(unlink(c(roi_folder, away), recursive = TRUE), add = TRUE)
+  samples <- sprintf("D2023010%dT120000_IFCB134", 1:2)
+  thr_test_app_raw_layout(away, samples)
+
+  # Resolved while the folder was away: nothing is found
+  nowhere <- thr_refresh_roi_paths(NULL, samples, roi_folder)
+  expect_true(all(is.na(nowhere)))
+  expect_named(nowhere, samples)
+
+  file.rename(away, roi_folder)
+  back <- thr_refresh_roi_paths(nowhere, samples, roi_folder)
+  expect_true(all(file.exists(back)))
+
+  # Paths of samples that are not asked for are dropped, new ones are added
+  other <- thr_refresh_roi_paths(back, c(samples[2], "not a sample"), roi_folder)
+  expect_named(other, c(samples[2], "not a sample"))
+  expect_equal(other[[1]], back[[2]])
+  expect_true(is.na(other[[2]]))
+  expect_length(thr_refresh_roi_paths(back, character(), roi_folder), 0)
+})
+
 # ---- thr_extract_page_images -------------------------------------------------
 
 test_that("thr_extract_page_images extracts the real bin's ROIs", {
@@ -108,6 +169,8 @@ test_that("thr_extract_page_images extracts the real bin's ROIs", {
             2:8)
   )
   expect_true(all(result$extracted))
+  expect_true(all(is.na(result$no_image_reason)))
+  expect_type(result$no_image_reason, "character")
   expect_true(all(file.exists(file.path(out_folder, result$png_file))))
   # Nothing but the requested images is written
   expect_setequal(list.files(out_folder, recursive = TRUE), result$png_file)
@@ -127,6 +190,9 @@ test_that("thr_extract_page_images marks a ROI without an image", {
 
   expect_equal(result$extracted, c(FALSE, TRUE, FALSE, TRUE))
   expect_equal(result$draw_id, page$draw_id)
+  # The raw file was read and did not give these ROIs: that is final
+  expect_equal(result$no_image_reason,
+               c("not_extractable", NA, "not_extractable", NA))
 })
 
 test_that("thr_extract_page_images handles a missing ROI file", {
@@ -149,12 +215,62 @@ test_that("thr_extract_page_images handles a missing ROI file", {
   expect_equal(result$extracted, c(TRUE, FALSE, FALSE))
   expect_equal(fake$n_calls(), 1)
   expect_false(anyNA(result$png_file))
+  # Nothing was tried, so nothing is known about these ROIs
+  expect_equal(result$no_image_reason, c(NA, "no_raw", "no_raw"))
 
   # A path to a file that has since been removed
   roi_paths[[gone]] <- file.path(tempdir(), paste0(gone, ".roi"))
   result <- thr_extract_page_images(page, roi_paths, out_folder, fake$extractor)
   expect_equal(result$extracted, c(TRUE, FALSE, FALSE))
+  expect_equal(result$no_image_reason, c(NA, "no_raw", "no_raw"))
   expect_equal(fake$n_calls(), 1)
+})
+
+test_that("thr_extract_page_images tells a missing raw folder from a bad ROI", {
+  out_folder <- tempfile("thr_png_")
+  roi_folder <- tempfile("thr_raw_")
+  on.exit(unlink(c(out_folder, roi_folder), recursive = TRUE), add = TRUE)
+  samples <- c("D20230101T120000_IFCB134", "D20230102T120000_IFCB134")
+  thr_test_app_raw_layout(roi_folder, samples)
+  fake <- thr_test_app_fake_extractor()
+  page <- thr_test_app_page(sample_name = samples, roi_number = 2:5)
+  roi_paths <- thr_resolve_roi_paths(samples, roi_folder)
+
+  # The whole raw data folder goes away after its files were looked up
+  away <- paste0(roi_folder, "_away")
+  file.rename(roi_folder, away)
+  on.exit(unlink(away, recursive = TRUE), add = TRUE)
+  result <- thr_extract_page_images(page, roi_paths, out_folder, fake$extractor)
+
+  expect_false(any(result$extracted))
+  expect_equal(unique(result$no_image_reason), "no_raw")
+  expect_equal(fake$n_calls(), 0)
+
+  # It comes back: the same page gets its images
+  file.rename(away, roi_folder)
+  result <- thr_extract_page_images(page, roi_paths, out_folder, fake$extractor)
+  expect_true(all(result$extracted))
+  expect_true(all(is.na(result$no_image_reason)))
+})
+
+test_that("thr_extract_page_images does not blame a ROI when the raw file vanishes", {
+  out_folder <- tempfile("thr_png_")
+  roi_folder <- tempfile("thr_raw_")
+  on.exit(unlink(c(out_folder, roi_folder), recursive = TRUE), add = TRUE)
+  sample_name <- "D20230101T120000_IFCB134"
+  thr_test_app_raw_layout(roi_folder, sample_name)
+  roi_paths <- thr_resolve_roi_paths(sample_name, roi_folder)
+  # The disk goes away while the file is being read
+  vanishing <- function(roi_file, ...) {
+    unlink(roi_file)
+    stop("cannot open file", call. = FALSE)
+  }
+  page <- thr_test_app_page(sample_name = sample_name, roi_number = 2:3)
+
+  result <- thr_extract_page_images(page, roi_paths, out_folder, vanishing)
+
+  expect_false(any(result$extracted))
+  expect_equal(unique(result$no_image_reason), "no_raw")
 })
 
 test_that("thr_extract_page_images survives an extractor that throws", {
@@ -175,6 +291,9 @@ test_that("thr_extract_page_images survives an extractor that throws", {
   )
 
   expect_equal(result$extracted, c(FALSE, FALSE, TRUE))
+  # The raw file is there and reading it failed
+  expect_equal(result$no_image_reason,
+               c("not_extractable", "not_extractable", NA))
   # One call for the sample, then one per ROI to rescue what can be rescued
   failing <- vapply(fake$calls(), function(call) call$sample_name == bad,
                     logical(1))
@@ -192,6 +311,7 @@ test_that("thr_extract_page_images rescues the ROIs a failed call left out", {
   result <- thr_extract_page_images(page, roi_paths, out_folder, fake$extractor)
 
   expect_equal(result$extracted, c(TRUE, FALSE, TRUE))
+  expect_equal(result$no_image_reason, c(NA, "not_extractable", NA))
   expect_equal(fake$n_calls(), 4)
 })
 
@@ -230,6 +350,12 @@ test_that("thr_extract_page_images does not extract an image twice", {
   expect_equal(fake$n_calls(), 1)
   expect_equal(again, first)
 
+  # An image that is already there needs no raw file
+  cached <- thr_extract_page_images(thr_test_app_page(roi_number = 2:3),
+                                    character(), out_folder, fake$extractor)
+  expect_true(all(cached$extracted))
+  expect_true(all(is.na(cached$no_image_reason)))
+
   # A page that overlaps: only the new ROI is asked for
   more <- thr_extract_page_images(thr_test_app_page(roi_number = 2:4),
                                   roi_paths, out_folder, fake$extractor)
@@ -250,6 +376,7 @@ test_that("thr_extract_page_images handles an empty page", {
   expect_equal(nrow(result), 0)
   expect_type(result$png_file, "character")
   expect_type(result$extracted, "logical")
+  expect_type(result$no_image_reason, "character")
   expect_equal(fake$n_calls(), 0)
 })
 
@@ -264,6 +391,7 @@ test_that("thr_extract_page_images never builds a path from a bad name", {
 
   expect_false(result$extracted)
   expect_true(is.na(result$png_file))
+  expect_equal(result$no_image_reason, "invalid")
   expect_equal(fake$n_calls(), 0)
 })
 

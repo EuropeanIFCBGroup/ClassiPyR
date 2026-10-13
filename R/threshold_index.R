@@ -3,7 +3,9 @@
 # Sampling ROIs across thousands of class-score files needs the winning class
 # and score of every ROI at hand. Reading the HDF5 files each time is far too
 # slow, so they are read once into a SQLite cache. The cache holds nothing that
-# cannot be read again from the files: deleting it only costs a rebuild.
+# cannot be read again from the files: deleting it only costs a rebuild. Until
+# it is rebuilt no new images can be drawn, but a frozen review is still
+# listed, shown and exported from the verdict database alone.
 
 # Bump when the tables below change shape; an index written with another
 # version is dropped and rebuilt rather than migrated.
@@ -54,7 +56,10 @@ thr_init_index_schema <- function(con) {
        PRIMARY KEY (file_id, roi_number)
      ) WITHOUT ROWID",
     "CREATE INDEX IF NOT EXISTS rois_class_score ON rois (class_idx, score)",
-    "CREATE INDEX IF NOT EXISTS files_model ON files (model_id, status)"
+    "CREATE INDEX IF NOT EXISTS files_model ON files (model_id, status)",
+    # A build looks every sample up to find its duplicates. Being an index,
+    # it is added to an index file that lacks it without a new schema version.
+    "CREATE INDEX IF NOT EXISTS files_sample ON files (sample_name, status)"
   )
   for (statement in statements) {
     DBI::dbExecute(con, statement)
@@ -64,6 +69,28 @@ thr_init_index_schema <- function(con) {
     params = list(THR_INDEX_SCHEMA_VERSION)
   )
   invisible(NULL)
+}
+
+#' Open the index cache
+#'
+#' The app and a scripted build may use the index at the same moment, so the
+#' connection waits for the other one's write to finish instead of failing
+#' with "database is locked". The caller closes the connection.
+#'
+#' @param index_path Path to the index SQLite file. Created if needed.
+#' @return A DBI connection.
+#' @noRd
+thr_connect_index <- function(index_path) {
+  # RSQLite would otherwise set the synchronous mode while connecting, before
+  # any busy handler can be in place, and warn when the file is in use
+  con <- DBI::dbConnect(RSQLite::SQLite(), index_path, synchronous = NULL)
+  ready <- FALSE
+  on.exit(if (!ready) DBI::dbDisconnect(con), add = TRUE)
+  RSQLite::sqliteSetBusyHandler(con, THR_DB_BUSY_MS)
+  # RSQLite's default. The index is a cache: losing it costs a rebuild.
+  DBI::dbExecute(con, "PRAGMA synchronous = OFF")
+  ready <- TRUE
+  con
 }
 
 #' Make an index database ready for a build
@@ -139,12 +166,15 @@ thr_scan_h5_folder <- function(h5_folder) {
 #'
 #' @param con A DBI connection to the index SQLite file.
 #' @param scanned Data frame from \code{thr_scan_h5_folder()}.
+#' @param folder \code{NA} to look for missing files among everything the
+#'   index knows, as a build does, or a folder from
+#'   \code{thr_normalise_folder()} to look only among the files under it.
 #' @return A list with \code{new} (scanned rows the index does not know),
 #'   \code{changed} (scanned rows whose size or modification time differs from
 #'   the index, or that the index had marked missing) and \code{missing}
 #'   (paths the index knows that were not scanned and are no longer on disk).
 #' @noRd
-thr_stale_files <- function(con, scanned) {
+thr_stale_files <- function(con, scanned, folder = NA_character_) {
   known <- DBI::dbGetQuery(con, "SELECT h5_path, size, mtime, status FROM files")
   at <- match(scanned$h5_path, known$h5_path)
   is_new <- is.na(at)
@@ -160,6 +190,7 @@ thr_stale_files <- function(con, scanned) {
   # frozen sampling frame may still point at them.
   unseen <- known$h5_path[!(known$h5_path %in% scanned$h5_path) &
                             known$status != "missing"]
+  unseen <- unseen[thr_under_folder(unseen, folder)]
   list(
     new = thr_reset_rownames(scanned[is_new, , drop = FALSE]),
     changed = thr_reset_rownames(candidates[differs, , drop = FALSE]),
@@ -196,8 +227,10 @@ thr_reset_rownames <- function(df) {
 #'   ifcb-classify stopped applying training augmentation at inference, so its
 #'   scores do not match current inference and it is refused. Re-run the
 #'   classification to review such a sample.
-#' * `duplicate`: another file of the same model for the same sample exists;
-#'   the first by path is used.
+#' * `duplicate`: another file of the same model for the same sample exists
+#'   under `h5_folder`; the first by path is used. Files compete only within
+#'   the folder a build is run on, never with files indexed from another
+#'   folder.
 #' * `failed`: the file could not be read, is inconsistent, or is not named
 #'   after an IFCB sample. The message says why. A failed file is read again
 #'   only once it has changed on disk.
@@ -212,7 +245,12 @@ thr_reset_rownames <- function(df) {
 #' The index is a cache. It can be deleted at any time and is rebuilt from the
 #' class-score files; it is also rebuilt when it was written by a version of
 #' ClassiPyR with another index layout. Files indexed from a different folder
-#' stay in the index for as long as they exist on disk.
+#' stay in the index for as long as they exist on disk. A sample scored by one
+#' model in two indexed folders is usable in both; a review covers one folder
+#' and uses that folder's file.
+#'
+#' A build may run while the app, or another build, uses the same index: each
+#' waits for the other's write to finish.
 #'
 #' @param h5_folder Folder searched recursively for `*_class*.h5` files.
 #' @param index_path Path to the index SQLite file, usually
@@ -253,7 +291,7 @@ build_threshold_index <- function(h5_folder, index_path,
   scanned <- thr_scan_h5_folder(h5_folder)
 
   dir.create(dirname(index_path), recursive = TRUE, showWarnings = FALSE)
-  con <- DBI::dbConnect(RSQLite::SQLite(), index_path)
+  con <- thr_connect_index(index_path)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
   thr_prepare_index(con)
 
@@ -261,8 +299,10 @@ build_threshold_index <- function(h5_folder, index_path,
   thr_mark_missing(con, stale$missing)
   todo <- rbind(stale$new, stale$changed)
   todo <- todo[order(todo$h5_path, method = "radix"), , drop = FALSE]
-  thr_index_files(con, todo, reader, progress, batch_size)
-  promoted <- thr_promote_duplicates(con, reader, batch_size)
+  thr_index_files(con, todo, reader, progress, batch_size,
+                  scope = scanned$h5_path)
+  promoted <- thr_promote_duplicates(con, reader, batch_size,
+                                     scope = scanned$h5_path)
 
   read_paths <- c(todo$h5_path, promoted)
   invisible(list(
@@ -315,7 +355,7 @@ thr_mark_missing <- function(con, paths) {
   if (length(paths) == 0) {
     return(invisible(NULL))
   }
-  DBI::dbWithTransaction(con, {
+  thr_write_transaction(con, function() {
     DBI::dbExecute(
       con,
       "DELETE FROM rois WHERE file_id IN
@@ -338,9 +378,11 @@ thr_mark_missing <- function(con, paths) {
 #' @param todo Data frame of files to read (\code{thr_stat_files()} columns),
 #'   sorted by path.
 #' @inheritParams build_threshold_index
+#' @param scope Paths of the class-score files found in the folder being
+#'   built: the files a duplicate is resolved among.
 #' @return \code{NULL}, invisibly.
 #' @noRd
-thr_index_files <- function(con, todo, reader, progress, batch_size) {
+thr_index_files <- function(con, todo, reader, progress, batch_size, scope) {
   total <- nrow(todo)
   batches <- split(seq_len(total), ceiling(seq_len(total) / batch_size))
   for (rows in batches) {
@@ -349,7 +391,7 @@ thr_index_files <- function(con, todo, reader, progress, batch_size) {
       entries[[k]] <- thr_read_index_entry(todo[rows[k], , drop = FALSE], reader)
       thr_report_progress(progress, rows[k], total)
     }
-    thr_write_index_batch(con, entries)
+    thr_write_index_batch(con, entries, scope)
   }
   invisible(NULL)
 }
@@ -366,33 +408,6 @@ thr_report_progress <- function(progress, done, total) {
     tryCatch(progress(done, total), error = function(e) NULL)
   }
   invisible(NULL)
-}
-
-#' Re-read duplicates left without a kept file
-#'
-#' When the file that was kept for a sample goes missing or stops being
-#' usable, its duplicates have no ROI rows to fall back on, although their
-#' size and modification time are unchanged. They are read again so the first
-#' of them by path takes over.
-#'
-#' @param con A DBI connection to the index SQLite file.
-#' @inheritParams build_threshold_index
-#' @return Character vector of the paths that were read again.
-#' @noRd
-thr_promote_duplicates <- function(con, reader, batch_size) {
-  orphans <- DBI::dbGetQuery(con, "
-    SELECT d.h5_path FROM files d
-    WHERE d.status = 'duplicate' AND NOT EXISTS (
-      SELECT 1 FROM files k
-      WHERE k.status = 'ok' AND k.model_id = d.model_id
-        AND k.sample_name = d.sample_name)")$h5_path
-  orphans <- orphans[file.exists(orphans)]
-  if (length(orphans) == 0) {
-    return(character())
-  }
-  todo <- thr_stat_files(orphans)
-  thr_index_files(con, todo, reader, progress = NULL, batch_size = batch_size)
-  todo$h5_path
 }
 
 #' Read one file into an index entry
@@ -488,12 +503,16 @@ thr_index_entry <- function(file, status, message = NA_character_, model = NULL,
 #'
 #' @param con A DBI connection to the index SQLite file.
 #' @param entries List of index entries from \code{thr_read_index_entry()}.
+#' @param scope Paths of the class-score files found in the folder being
+#'   built.
 #' @return \code{NULL}, invisibly.
 #' @noRd
-thr_write_index_batch <- function(con, entries) {
+thr_write_index_batch <- function(con, entries, scope) {
   files <- do.call(rbind, lapply(entries, `[[`, "file"))
-  DBI::dbWithTransaction(con, {
-    resolved <- thr_resolve_duplicates(con, files)
+  # The write lock is taken first: a transaction that read before it wrote
+  # could not wait for another session and would fail instead
+  thr_write_transaction(con, function() {
+    resolved <- thr_resolve_duplicates(con, files, scope)
     file_ids <- thr_upsert_files(con, resolved$files)
     DBI::dbExecute(con, "DELETE FROM rois WHERE file_id = ?",
                    params = list(file_ids))
@@ -503,84 +522,6 @@ thr_write_index_batch <- function(con, entries) {
     thr_insert_rois(con, entries[keep], file_ids[keep])
   })
   invisible(NULL)
-}
-
-#' Decide which file is kept when a model scored a sample more than once
-#'
-#' The first file by path is kept. That can be a file of this batch or one
-#' already in the index, in which case whichever sorts later is set aside.
-#'
-#' @param con A DBI connection to the index SQLite file.
-#' @param files Data frame of \code{files} rows about to be written, sorted by
-#'   path.
-#' @return A list with \code{files} (the rows, with later duplicates given
-#'   status \code{duplicate}) and \code{demote} (data frame of \code{h5_path}
-#'   and \code{message} for indexed files that lose their place).
-#' @noRd
-thr_resolve_duplicates <- function(con, files) {
-  demote <- data.frame(h5_path = character(), message = character(),
-                       stringsAsFactors = FALSE)
-  candidates <- which(files$status == "ok")
-  if (length(candidates) == 0) {
-    return(list(files = files, demote = demote))
-  }
-  indexed <- DBI::dbGetQuery(
-    con,
-    "SELECT h5_path, model_id, sample_name FROM files
-     WHERE status = 'ok' AND sample_name = ?",
-    params = list(unique(files$sample_name[candidates]))
-  )
-  # Rows of this batch are about to be replaced, so they do not compete
-  indexed <- indexed[!(indexed$h5_path %in% files$h5_path), , drop = FALSE]
-  kept <- stats::setNames(indexed$h5_path,
-                          thr_sample_key(indexed$model_id, indexed$sample_name))
-
-  for (i in candidates) {
-    key <- thr_sample_key(files$model_id[i], files$sample_name[i])
-    holder <- unname(kept[key])
-    if (is.na(holder)) {
-      kept[key] <- files$h5_path[i]
-    } else if (thr_path_sorts_first(holder, files$h5_path[i])) {
-      files$status[i] <- "duplicate"
-      files$message[i] <- thr_duplicate_message(holder)
-    } else {
-      demote <- rbind(demote, data.frame(
-        h5_path = holder, message = thr_duplicate_message(files$h5_path[i]),
-        stringsAsFactors = FALSE
-      ))
-      kept[key] <- files$h5_path[i]
-    }
-  }
-  list(files = files, demote = demote)
-}
-
-#' Key for one model's score of one sample
-#'
-#' @param model_id Character vector of model identifiers.
-#' @param sample_name Character vector of sample names.
-#' @return Character vector of keys.
-#' @noRd
-thr_sample_key <- function(model_id, sample_name) {
-  paste(model_id, sample_name, sep = "\r")
-}
-
-#' Does one path sort before another?
-#'
-#' @param a,b Single paths.
-#' @return \code{TRUE} when \code{a} comes first in C-locale order.
-#' @noRd
-thr_path_sorts_first <- function(a, b) {
-  a != b && order(c(a, b), method = "radix")[1] == 1L
-}
-
-#' Message for a file set aside as a duplicate
-#'
-#' @param kept_path Path of the file that is kept instead.
-#' @return One string.
-#' @noRd
-thr_duplicate_message <- function(kept_path) {
-  paste0("The same model scored this sample in another file, which sorts ",
-         "first and is used instead: ", kept_path)
 }
 
 #' Insert or update rows of the files table
@@ -608,29 +549,6 @@ thr_upsert_files <- function(con, files) {
   ids <- DBI::dbGetQuery(con, "SELECT file_id, h5_path FROM files WHERE h5_path = ?",
                          params = list(files$h5_path))
   as.integer(ids$file_id[match(files$h5_path, ids$h5_path)])
-}
-
-#' Set indexed files aside as duplicates
-#'
-#' @param con A DBI connection to the index SQLite file.
-#' @param demote Data frame with \code{h5_path} and \code{message}.
-#' @return \code{NULL}, invisibly.
-#' @noRd
-thr_demote_files <- function(con, demote) {
-  if (nrow(demote) == 0) {
-    return(invisible(NULL))
-  }
-  DBI::dbExecute(
-    con,
-    "DELETE FROM rois WHERE file_id IN
-       (SELECT file_id FROM files WHERE h5_path = ?)",
-    params = list(demote$h5_path)
-  )
-  DBI::dbExecute(
-    con, "UPDATE files SET status = 'duplicate', message = ? WHERE h5_path = ?",
-    params = list(demote$message, demote$h5_path)
-  )
-  invisible(NULL)
 }
 
 #' Register the models of a batch of entries
@@ -692,7 +610,7 @@ thr_with_index <- function(index_path, query) {
   if (!file.exists(index_path)) {
     return(NULL)
   }
-  con <- DBI::dbConnect(RSQLite::SQLite(), index_path)
+  con <- thr_connect_index(index_path)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
   if (!all(c("files", "models") %in% DBI::dbListTables(con))) {
     return(NULL)
@@ -707,7 +625,12 @@ thr_with_index <- function(index_path, query) {
 #'   \code{model_id}, \code{classifier_name}, \code{checkpoint_sha256},
 #'   \code{transform}, \code{n_files}, \code{n_rois} and
 #'   \code{n_threshold_sets} (distinct thresholds vectors stored in the files),
-#'   counted over files with status \code{ok}. No rows when there is no index.
+#'   counted over files with status \code{ok} in every folder the index was
+#'   built on. A sample that is usable in more than one of those folders
+#'   counts once, by its first file by path, so the counts are those of a
+#'   frame over every indexed folder: \code{n_files} is the number of samples
+#'   the model scored. A frame on one folder holds at most that. No rows when
+#'   there is no index.
 #' @noRd
 thr_index_models <- function(index_path) {
   models <- thr_with_index(index_path, function(con) {
@@ -717,22 +640,36 @@ thr_index_models <- function(index_path) {
              COALESCE(SUM(f.n_rois), 0) AS n_rois,
              COUNT(DISTINCT f.thresholds_json) AS n_threshold_sets
       FROM models m
-      JOIN files f ON f.model_id = m.model_id AND f.status = 'ok'
+      JOIN (
+        SELECT model_id, n_rois, thresholds_json,
+               ROW_NUMBER() OVER (PARTITION BY model_id, sample_name
+                                  ORDER BY h5_path) AS copy
+        FROM files WHERE status = 'ok'
+      ) f ON f.model_id = m.model_id AND f.copy = 1
       GROUP BY m.model_id
       ORDER BY m.classifier_name, m.model_id")
   })
   if (is.null(models)) {
-    models <- data.frame(
-      model_id = character(), classifier_name = character(),
-      checkpoint_sha256 = character(), transform = character(),
-      n_files = integer(), n_rois = integer(), n_threshold_sets = integer(),
-      stringsAsFactors = FALSE
-    )
+    return(thr_no_index_models())
   }
   for (column in c("n_files", "n_rois", "n_threshold_sets")) {
     models[[column]] <- as.integer(models[[column]])
   }
   models
+}
+
+#' The models of an index that holds none
+#'
+#' @return Data frame with the columns of \code{thr_index_models()} and no
+#'   rows.
+#' @noRd
+thr_no_index_models <- function() {
+  data.frame(
+    model_id = character(), classifier_name = character(),
+    checkpoint_sha256 = character(), transform = character(),
+    n_files = integer(), n_rois = integer(), n_threshold_sets = integer(),
+    stringsAsFactors = FALSE
+  )
 }
 
 #' Class labels of an indexed model

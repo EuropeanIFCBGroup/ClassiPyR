@@ -51,6 +51,52 @@ test_that("thr_evidence_status validates its input", {
                "min_class_n")
 })
 
+test_that("thr_evidence_status counts only the images that can be reviewed", {
+  counts <- function(n_population, n_verdicts, n_unavailable) {
+    data.frame(bin = seq_along(n_population), n_population = n_population,
+               n_verdicts = n_verdicts, n_correct = n_verdicts,
+               n_unavailable = n_unavailable)
+  }
+
+  # 50 predictions, one image unavailable: 49 verdicts are all there will be
+  expect_identical(thr_evidence_status(counts(50, 49, 1), 50), "sufficient")
+  expect_identical(thr_evidence_status(counts(50, 48, 1), 50),
+                   "under_reviewed")
+  # Summed over the bins of the class
+  expect_identical(
+    thr_evidence_status(counts(c(30, 30), c(20, 20), c(10, 10)), 50),
+    "sufficient"
+  )
+  expect_identical(
+    thr_evidence_status(counts(c(30, 30), c(20, 19), c(10, 10)), 50),
+    "under_reviewed"
+  )
+  # min_class_n still applies when more than that can be reviewed
+  expect_identical(thr_evidence_status(counts(500, 49, 100), 50),
+                   "under_reviewed")
+  expect_identical(thr_evidence_status(counts(500, 50, 100), 50), "sufficient")
+})
+
+test_that("thr_evidence_status keeps the prediction minimum on all predictions", {
+  counts <- function(n_population, n_verdicts, n_unavailable) {
+    data.frame(bin = 1L, n_population = n_population, n_verdicts = n_verdicts,
+               n_correct = n_verdicts, n_unavailable = n_unavailable)
+  }
+
+  # 49 predictions are too few, however many of them can be reviewed
+  expect_identical(thr_evidence_status(counts(49, 49, 0), 50),
+                   "too_few_predictions")
+  expect_identical(thr_evidence_status(counts(49, 40, 9), 50),
+                   "too_few_predictions")
+  # A class of which nothing can be reviewed has not been reviewed
+  expect_identical(thr_evidence_status(counts(60, 0, 60), 50), "not_reviewed")
+  # Without the column every prediction is taken to be reviewable
+  expect_identical(
+    thr_evidence_status(counts(50, 49, 1)[c("n_population", "n_verdicts")], 50),
+    "under_reviewed"
+  )
+})
+
 # =============================================================================
 # choose_class_threshold
 # =============================================================================
@@ -103,6 +149,57 @@ test_that("an unreachable target gives no threshold and says how close it got", 
   expect_identical(choice$kept_share, NA_real_)
   expect_match(choice$reason, "85.0%", fixed = TRUE)
   expect_match(choice$reason, "90.0%", fixed = TRUE)
+})
+
+test_that("an edge that keeps a handful of predictions does not veto the class", {
+  # One prediction in the top bin, judged wrong: precision at 0.9999 is 0%,
+  # while every threshold that keeps a meaningful share is well above target
+  counts <- data.frame(bin = 1:3, n_population = c(1000, 5000, 1),
+                       n_verdicts = c(50, 200, 1), n_correct = c(40, 199, 0))
+  curve <- estimate_precision_curve(counts, edges = c(0, 0.5, 0.9999), seed = 1)
+
+  choice <- choose_class_threshold(curve, target = 0.9)
+
+  expect_identical(choice$status, "fitted")
+  expect_identical(choice$threshold, 0)
+  expect_gt(choice$precision, 0.96)
+  # The old rule is still there for whoever asks for it
+  expect_identical(choose_class_threshold(curve, 0.9, min_kept = 1)$status,
+                   "target_unreachable")
+})
+
+test_that("an edge that keeps a handful of predictions is not chosen either", {
+  curve <- strata_curve(threshold = c(0, 0.5, 0.9999),
+                        precision = c(0.6, 0.8, 1),
+                        kept_share = c(1, 0.4, 0.005))
+
+  choice <- choose_class_threshold(curve, target = 0.9)
+
+  # 5 of 1000 predictions is not a threshold worth having
+  expect_identical(choice$status, "target_unreachable")
+  expect_match(choice$reason, "0.5", fixed = TRUE)
+  expect_match(choice$reason, "80.0%", fixed = TRUE)
+  expect_identical(choose_class_threshold(curve, 0.9, min_kept = 1)$threshold,
+                   0.9999)
+})
+
+test_that("a class whose every edge keeps few predictions is judged on them all", {
+  curve <- strata_curve(threshold = c(0, 0.5, 0.9),
+                        precision = c(0.7, 0.95, 0.97), n_total = 6)
+
+  choice <- choose_class_threshold(curve, target = 0.9)
+
+  expect_identical(choice$status, "fitted")
+  expect_identical(choice$threshold, 0.5)
+})
+
+test_that("choose_class_threshold validates min_kept", {
+  curve <- strata_curve(threshold = c(0, 0.5), precision = c(0.8, 0.95))
+
+  expect_error(choose_class_threshold(curve, 0.9, min_kept = 0), "min_kept")
+  expect_error(choose_class_threshold(curve, 0.9, min_kept = c(1, 2)),
+               "min_kept")
+  expect_error(choose_class_threshold(curve, 0.9, min_kept = NA), "min_kept")
 })
 
 test_that("a passing edge below a failing top edge is not chosen", {

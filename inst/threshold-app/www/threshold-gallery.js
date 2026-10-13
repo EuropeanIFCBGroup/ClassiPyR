@@ -3,9 +3,11 @@
 // Everything a reviewer marks stays in the browser until "Confirm page" is
 // pressed. The state of a card is kept as classes on the card itself:
 //   loaded  - its image has loaded
-//   seen    - the card has been on screen
+//   seen    - the card has been on screen with its image loaded
 //   failed  - its image could not be loaded
 //   wrong   - the reviewer marked it as not being the class
+// The server adds 'unavailable' to a card without an image, and 'no-raw' as
+// well when that is because the raw data was not found.
 // A new page replaces the cards, so nothing has to be reset by hand.
 // Adapted from gallery_js() of the main app (inst/app/ui.R).
 (function() {
@@ -39,7 +41,7 @@
       var missing = cards.filter('.failed, .unavailable').length;
       text = cards.filter('.wrong').length + ' marked wrong; ' + viewed +
         ' of ' + cards.length + ' images viewed';
-      if (missing > 0) text += ', ' + missing + ' unavailable';
+      if (missing > 0) text += ', ' + missing + ' could not be shown';
       if (viewed + missing < cards.length) {
         text += ' (scroll down to view the rest; images you have not ' +
           'scrolled to are not recorded)';
@@ -71,14 +73,22 @@
     }, {threshold: SEEN_STEPS});
   }
 
+  // A card is watched only once its image has loaded. It has its full size
+  // from the start, so watched any earlier it would count as seen while still
+  // blank, and an image that then loaded off screen would be recorded as
+  // correct although nobody had looked at it.
+  function watchCard(card) {
+    if (!seenObserver || card.hasClass('seen') || !canMark(card)) return;
+    seenObserver.observe(card[0]);
+  }
+
+  // The cards of a new page: those whose image is already there are marked
+  // and watched now, the others when their load event arrives.
   function watchCards() {
-    $(GALLERY + ' .thr-card').each(function() {
-      var card = $(this);
-      if (card.hasClass('seen') || card.hasClass('unavailable')) return;
-      // Without an observer there is no way to tell, so fall back to treating
-      // a loaded image as seen
-      if (seenObserver) seenObserver.observe(this); else card.addClass('seen');
+    $(GALLERY + ' .thr-card img').each(function() {
+      if (this.complete && this.naturalWidth > 0) setImageState(this, 'loaded');
     });
+    updateCount();
   }
 
   function setImageState(img, state) {
@@ -97,6 +107,9 @@
       card.removeClass('loaded wrong').addClass('failed');
     } else if (!card.hasClass('failed')) {
       card.addClass('loaded');
+      // Without an observer there is no way to tell what has been on screen,
+      // so fall back to treating a loaded image as seen
+      if (seenObserver) watchCard(card); else card.addClass('seen');
     }
     updateCount();
   }
@@ -109,22 +122,35 @@
     if (e.target && e.target.tagName === 'IMG') setImageState(e.target, 'failed');
   }, true);
 
-  // Images that finished loading before their event could be seen. A failure
-  // is only ever taken from an error event: an image that has not started
-  // loading must stay unreported, so that it comes back on a later page.
+  // At confirm: an image whose load event was missed is counted as loaded
+  // and watched from now on. It is never made viewed here, with or without
+  // an observer: an image only just found to be there has not been looked
+  // at, so it is not reported and comes back on a later page. A failure is
+  // only ever taken from an error event: an image that has not started
+  // loading must stay unreported as well.
   function sweepLoaded() {
     $(GALLERY + ' .thr-card img').each(function() {
-      if (this.complete && this.naturalWidth > 0) setImageState(this, 'loaded');
+      if (!(this.complete && this.naturalWidth > 0)) return;
+      var card = $(this).closest('.thr-card');
+      if (card.hasClass('loaded') || card.hasClass('failed')) return;
+      card.addClass('loaded');
+      watchCard(card);
     });
     updateCount();
   }
 
+  // Can the page be confirmed? Not when it holds nothing but cards whose raw
+  // data was not found. The server applies the same rule.
+  function canConfirm() {
+    return $(GALLERY + ' .thr-card').not('.no-raw').length > 0;
+  }
+
+  // This event comes before the cards are replaced: stop watching the old
+  // ones now, and look at the new ones once they are in the page
   $(document).on('shiny:value', function(e) {
     if (e.name !== 'thr_gallery') return;
-    setTimeout(function() {
-      watchCards();
-      sweepLoaded();
-    }, 0);
+    if (seenObserver) seenObserver.disconnect();
+    setTimeout(watchCards, 0);
   });
 
   // Single click toggles a mark
@@ -243,7 +269,7 @@
     // working would only come back as "no longer the current page"
     var button = $(this).prop('disabled', true);
     $(document).one('shiny:idle', function() {
-      button.prop('disabled', $(GALLERY + ' .thr-card').length === 0);
+      button.prop('disabled', !canConfirm());
     });
   });
 

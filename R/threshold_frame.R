@@ -171,7 +171,8 @@ thr_check_fallback_arg <- function(fallback, fallback_source) {
 #' @param fallback_source \code{"none"}, \code{"h5"} or
 #'   \code{"json:<path>"}: where \code{fallback} came from.
 #' @param h5_folder Class-score folder the review covers, or \code{NA} for
-#'   every indexed file of the model.
+#'   every indexed file of the model. A sample that is usable in more than
+#'   one indexed folder is taken once, from its first file by path.
 #' @param roi_folder Raw data folder, recorded for reference.
 #' @param edges Lower edges of the score bins.
 #' @return Invisibly, a list with \code{model_id}, \code{n_frame_files},
@@ -292,9 +293,9 @@ thr_align_fallback <- function(fallback, class_labels) {
 #'   sees it: \code{idx.files} when the index is attached to the verdict
 #'   database, \code{files} on a connection to the index itself.
 #' @return Data frame with \code{h5_path}, \code{sample_name}, \code{size},
-#'   \code{mtime} and \code{n_rois}. A file whose size or modification time
-#'   the index could not read is left out: it could never be recognised later
-#'   as the file that was frozen.
+#'   \code{mtime} and \code{n_rois}, one row per sample, sorted by path. A
+#'   file whose size or modification time the index could not read is left
+#'   out: it could never be recognised later as the file that was frozen.
 #' @noRd
 thr_frame_candidates <- function(con, model_id, h5_folder,
                                  files_table = "idx.files") {
@@ -306,7 +307,11 @@ thr_frame_candidates <- function(con, model_id, h5_folder,
     params = list(model_id))
   files$h5_path <- enc2utf8(files$h5_path)
   # The index keeps files of every folder it was ever built on
-  files[thr_under_folder(files$h5_path, h5_folder), , drop = FALSE]
+  files <- files[thr_under_folder(files$h5_path, h5_folder), , drop = FALSE]
+  # Duplicates are set aside within one build, so a sample can be usable in
+  # two indexed folders (a copy, or a folder inside another). A frame holds a
+  # sample once: the first file by path, which the query sorted by.
+  thr_reset_rownames(files[!duplicated(files$sample_name), , drop = FALSE])
 }
 
 #' Samples a frame of a model would be drawn from
@@ -504,31 +509,42 @@ thr_insert_strata <- function(con, model_id, strata) {
 
 #' State of a model's sampling frame
 #'
+#' What the frame holds and what was left out of it is read from the verdict
+#' database alone. Only the comparison with the class-score files of today
+#' needs the index, and is left out when there is none.
+#'
 #' @param db_path Path to the verdict SQLite file. It is not created when it
 #'   does not exist.
-#' @param index_path Path to the index SQLite file.
+#' @param index_path Path to the index SQLite file, which may not exist.
 #' @param model_id Model identifier.
 #' @return A list with \code{frozen}; \code{n_frame_files} (samples in the
 #'   frame); \code{n_excluded} (indexed samples of the model that were left
 #'   out of the frame, for either reason), split into
 #'   \code{n_excluded_training} and \code{n_no_raw}; \code{n_new_files}
 #'   (usable files of the model in the index, under the folder the frame was
-#'   frozen on, whose sample is neither in the frame nor excluded); and
+#'   frozen on, whose sample is neither in the frame nor excluded);
 #'   \code{n_changed_files} (frame files that the index no longer holds as
-#'   they were: another size or modification time, missing, or not usable).
-#'   All counts are 0 for a model that is not frozen.
+#'   they were: another size or modification time, missing, or not usable);
+#'   and \code{index_available}. Without an index file the two counts that
+#'   need it are \code{NA} for a frozen model. All counts are 0 for a model
+#'   that is not frozen.
 #' @noRd
 thr_frame_status <- function(db_path, index_path, model_id) {
   thr_check_db_path(db_path)
   thr_check_model_id(model_id)
-  thr_check_index_exists(index_path)
+  if (!thr_is_single_string(index_path)) {
+    stop("`index_path` must be a single file path, e.g. ",
+         "file.path(review_dir, \"", THR_INDEX_DB_FILE, "\").", call. = FALSE)
+  }
+  has_index <- file.exists(index_path)
   not_frozen <- list(frozen = FALSE, n_frame_files = 0L, n_excluded = 0L,
                      n_new_files = 0L, n_changed_files = 0L,
-                     n_excluded_training = 0L, n_no_raw = 0L)
+                     n_excluded_training = 0L, n_no_raw = 0L,
+                     index_available = has_index)
   if (!file.exists(db_path)) {
     return(not_frozen)
   }
-  con <- thr_connect_verdicts(db_path, index_path)
+  con <- thr_connect_verdicts(db_path, if (has_index) index_path)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
   model <- thr_model_query(con, model_id)
   if (is.null(model)) {
@@ -542,16 +558,23 @@ thr_frame_status <- function(db_path, index_path, model_id) {
     con, "SELECT sample_name, reason FROM excluded_samples WHERE model_id = ?",
     params = list(model_id)
   )
-  indexed <- thr_frame_candidates(con, model_id, model$h5_folder)
-  is_new <- !(indexed$sample_name %in% c(frame_samples, excluded$sample_name))
+  indexed <- if (has_index) {
+    thr_frame_candidates(con, model_id, model$h5_folder)$sample_name
+  }
+  is_new <- !(indexed %in% c(frame_samples, excluded$sample_name))
   list(
     frozen = TRUE,
     n_frame_files = length(frame_samples),
     n_excluded = nrow(excluded),
-    n_new_files = sum(is_new),
-    n_changed_files = thr_count_changed_files(con, model_id),
+    n_new_files = if (has_index) sum(is_new) else NA_integer_,
+    n_changed_files = if (has_index) {
+      thr_count_changed_files(con, model_id)
+    } else {
+      NA_integer_
+    },
     n_excluded_training = sum(excluded$reason == THR_REASON_TRAINING),
-    n_no_raw = sum(excluded$reason == THR_REASON_NO_RAW)
+    n_no_raw = sum(excluded$reason == THR_REASON_NO_RAW),
+    index_available = has_index
   )
 }
 

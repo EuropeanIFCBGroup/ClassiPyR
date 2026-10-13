@@ -318,6 +318,43 @@ test_that("without h5_folder the frame takes every indexed file of the model", {
   expect_identical(result$n_frame_files, 2L)
 })
 
+test_that("a sample that is usable in two folders is taken once, first by path", {
+  space <- thr_test_db_space()
+  on.exit(unlink(space$root, recursive = TRUE), add = TRUE)
+  folders <- thr_test_write_copies(space$h5_folder, c("a_old", "b_new"),
+                                   thr_test_a_samples[1:3])
+  thr_test_write_fake(folders[["b_new"]], thr_test_a_samples[4])
+  for (folder in folders) {
+    build_threshold_index(folder, space$index_path, reader = thr_test_fake_reader())
+  }
+  model_id <- thr_index_models(space$index_path)$model_id
+  expect_equal(sum(thr_test_files_table(space$index_path)$status == "ok"), 7)
+
+  # Over every folder, and over a folder that holds both
+  for (folder in list(NA_character_, space$h5_folder)) {
+    expect_identical(thr_frame_sample_names(space$index_path, model_id, folder),
+                     thr_test_a_samples[1:4])
+    db_path <- tempfile(fileext = ".sqlite")
+    result <- thr_freeze_frame(db_path, space$index_path, model_id,
+                               h5_folder = folder)
+    expect_identical(result$n_frame_files, 4L)
+    expect_identical(result$n_rois, 16L)
+    frame <- thr_test_table(db_path, "frame_files")
+    frame <- frame[order(frame$sample_name), ]
+    expect_identical(basename(dirname(frame$h5_path)),
+                     c("a_old", "a_old", "a_old", "b_new"))
+    expect_equal(sum(thr_test_table(db_path, "strata")$n_population), 16)
+    unlink(db_path)
+  }
+
+  # A frame on the second folder holds that folder's own files
+  thr_freeze_frame(space$db_path, space$index_path, model_id,
+                   h5_folder = folders[["b_new"]])
+  frame <- thr_test_table(space$db_path, "frame_files")
+  expect_identical(unique(basename(dirname(frame$h5_path))), "b_new")
+  expect_equal(nrow(frame), 4)
+})
+
 test_that("the samples a frame would start from can be listed before freezing", {
   space <- thr_test_db_space()
   on.exit(unlink(space$root, recursive = TRUE), add = TRUE)
@@ -695,14 +732,29 @@ test_that("a frame file whose only change is its modification time counts as cha
   expect_identical(status$n_changed_files, 1L)
 })
 
-test_that("frame status needs the index", {
-  space <- thr_test_frozen_fixture()
+test_that("frame status of a frozen frame is read without the index", {
+  space <- thr_test_frozen_fixture(excluded_samples = thr_test_a_samples[1],
+                                   no_raw_samples = thr_test_a_samples[2])
   on.exit(unlink(space$root, recursive = TRUE), add = TRUE)
+  with_index <- thr_frame_status(space$db_path, space$index_path,
+                                 thr_test_model_a_id)
+  expect_true(with_index$index_available)
   unlink(space$index_path)
 
-  expect_error(
-    thr_frame_status(space$db_path, space$index_path, thr_test_model_a_id),
-    "build_threshold_index"
-  )
+  status <- thr_frame_status(space$db_path, space$index_path, thr_test_model_a_id)
+
+  # What the verdict database holds is known; what only the index can tell
+  # is not, and is not made up
+  expect_true(status$frozen)
+  expect_false(status$index_available)
+  expect_identical(status$n_frame_files, 4L)
+  expect_identical(status$n_excluded_training, 1L)
+  expect_identical(status$n_no_raw, 1L)
+  expect_identical(status$n_new_files, NA_integer_)
+  expect_identical(status$n_changed_files, NA_integer_)
   expect_false(file.exists(space$index_path))
+  expect_false(thr_frame_status(space$db_path, space$index_path,
+                                thr_test_model_b_id)$frozen)
+  expect_error(thr_frame_status(space$db_path, NULL, thr_test_model_a_id),
+               "index_path")
 })

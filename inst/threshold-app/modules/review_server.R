@@ -10,11 +10,18 @@ setup_thr_review_server <- function(input, output, session, state,
     thr_app_try(thr_get_model(db_path(), state$model_id))
   })
 
-  # A page belongs to one model in one review folder
-  observeEvent(list(state$review_dir, state$model_id), {
+  # Nothing of the page shown so far is left, including what was said about it
+  clear_page <- function() {
     state$page <- NULL
     state$page_token <- NULL
     state$page_class <- NULL
+    state$page_notice <- NULL
+    state$page_remaining <- NULL
+  }
+
+  # A page belongs to one model in one review folder
+  observeEvent(list(state$review_dir, state$model_id), {
+    clear_page()
     state$undo_stack <- list()
     state$review_message <- NULL
   }, ignoreInit = TRUE)
@@ -53,18 +60,48 @@ setup_thr_review_server <- function(input, output, session, state,
 
   # ---- Loading a page --------------------------------------------------------
 
-  # The raw file of every sample of the frame, looked up once
-  roi_paths <- reactive({
-    frame_model <- req(model())
-    roi_folder <- state$roi_folder %||% frame_model$roi_folder
-    thr_app_try(thr_frame_roi_paths(db_path(), state$model_id, roi_folder))
-  })
+  # The raw file of every sample of the frame. A file that was found is
+  # looked up once, for the review folder, model and raw data folder it was
+  # found for. A sample without a file is looked up again for every page, and
+  # a failed lookup is not kept at all: raw data that was away (a disk that
+  # was not mounted, a renamed folder) is found as soon as it is back.
+  roi_cache <- new.env(parent = emptyenv())
+
+  raw_folder <- function() {
+    state$roi_folder %||% req(model())$roi_folder
+  }
+
+  roi_paths <- function() {
+    key <- list(db_path(), state$model_id, raw_folder())
+    known <- if (identical(roi_cache$key, key)) roi_cache$paths
+    paths <- thr_app_try(
+      thr_frame_roi_paths(key[[1]], key[[2]], key[[3]], known = known)
+    )
+    roi_cache$key <- key
+    roi_cache$paths <- paths
+    paths
+  }
+
+  # What the reviewer has to be told about a page beyond its images
+  describe_page <- function(page, class_name) {
+    notice <- thr_missing_raw_notice(page, raw_folder())
+    state$page_notice <- notice
+    if (is.null(notice)) {
+      removeNotification("thr_missing_raw")
+    } else {
+      showNotification(notice, type = "warning", duration = 15,
+                       id = "thr_missing_raw")
+    }
+    # Why a page is empty: the class is finished, or it cannot be drawn
+    state$page_remaining <- if (nrow(page) == 0) {
+      thr_app_try(thr_class_remaining(db_path(), index_path(), state$model_id,
+                                      class_name))
+    }
+  }
 
   load_page <- function(class_name) {
     # Whatever happens next, the page shown so far can no longer be confirmed
-    state$page <- NULL
-    state$page_token <- NULL
-    state$page_class <- NULL
+    clear_page()
     paths <- roi_paths()
     if (is.null(paths)) {
       return(invisible(FALSE))
@@ -84,6 +121,9 @@ setup_thr_review_server <- function(input, output, session, state,
     if (is.null(loaded)) {
       return(invisible(FALSE))
     }
+    # A raw file that was not where it had been found is looked up again
+    roi_cache$paths <- thr_forget_lost_roi_paths(paths, loaded$page)
+    describe_page(loaded$page, class_name)
     state$page <- loaded$page
     state$page_token <- loaded$token
     state$page_class <- loaded$class_name

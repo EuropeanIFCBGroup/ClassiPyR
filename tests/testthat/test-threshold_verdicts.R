@@ -2,9 +2,16 @@
 
 library(testthat)
 
-thr_test_page <- function(draw_id = 1:6, extracted = TRUE) {
-  data.frame(draw_id = as.integer(draw_id),
-             extracted = rep_len(extracted, length(draw_id)))
+# A page as the verdict rules see it. Draws without an image say why:
+# "not_extractable" (the raw file was read and the ROI could not be made)
+# unless `reason` says otherwise.
+thr_test_page <- function(draw_id = 1:6, extracted = TRUE,
+                          reason = "not_extractable") {
+  extracted <- rep_len(extracted, length(draw_id))
+  data.frame(draw_id = as.integer(draw_id), extracted = extracted,
+             no_image_reason = ifelse(extracted, NA_character_,
+                                      rep_len(reason, length(draw_id))),
+             stringsAsFactors = FALSE)
 }
 
 thr_test_resolve <- function(page = thr_test_page(), loaded = page$draw_id,
@@ -21,6 +28,14 @@ thr_test_drawn_page <- function() {
   page <- page[order(page$draw_id), ]
   page$extracted <- TRUE
   c(space, list(page = page))
+}
+
+# Mark rows of a drawn page as ROIs the raw file could not give an image for
+thr_test_unextractable <- function(page, rows) {
+  page$extracted[rows] <- FALSE
+  page$no_image_reason <- NA_character_
+  page$no_image_reason[rows] <- "not_extractable"
+  page
 }
 
 thr_test_draws <- function(db_path) {
@@ -53,11 +68,14 @@ test_that("page tokens do not depend on or disturb the random number state", {
 test_that("loaded images get a verdict: wrong when marked, correct otherwise", {
   resolved <- thr_test_resolve(wrong = c(2, 5))
 
-  expect_identical(names(resolved), c("verdicts", "unavailable", "still_pending"))
+  expect_identical(names(resolved), c("verdicts", "unavailable", "still_pending",
+                                      "no_raw", "load_failed"))
   expect_identical(resolved$verdicts$draw_id, 1:6)
   expect_identical(resolved$verdicts$verdict, c(1L, 0L, 1L, 1L, 0L, 1L))
   expect_identical(resolved$unavailable, integer())
   expect_identical(resolved$still_pending, integer())
+  expect_identical(resolved$no_raw, integer())
+  expect_identical(resolved$load_failed, integer())
 })
 
 test_that("a page with nothing marked is all correct", {
@@ -99,21 +117,26 @@ test_that("a wrong mark on an image without a verdict is an error", {
   expect_error(thr_test_resolve(page = page, wrong = 2), "cannot have a verdict")
 })
 
-test_that("failed images become unavailable, also when reported as loaded too", {
+test_that("an image that failed in the browser stays pending, also when reported as loaded too", {
+  # A failed load is transient (a dropped connection, a slow disk): the draw
+  # must come back on a later page instead of being retired for good
   resolved <- thr_test_resolve(loaded = 1:6, failed = c(3, 4), wrong = 1)
 
   expect_identical(resolved$verdicts$draw_id, c(1L, 2L, 5L, 6L))
   expect_identical(resolved$verdicts$verdict, c(0L, 1L, 1L, 1L))
-  expect_identical(resolved$unavailable, c(3L, 4L))
-  expect_identical(resolved$still_pending, integer())
+  expect_identical(resolved$unavailable, integer())
+  expect_identical(resolved$still_pending, c(3L, 4L))
+  expect_identical(resolved$load_failed, c(3L, 4L))
+  expect_identical(resolved$no_raw, integer())
 })
 
 test_that("images neither loaded nor failed stay pending", {
   resolved <- thr_test_resolve(loaded = c(1, 2), failed = 3)
 
   expect_identical(resolved$verdicts$draw_id, c(1L, 2L))
-  expect_identical(resolved$unavailable, 3L)
-  expect_identical(resolved$still_pending, c(4L, 5L, 6L))
+  expect_identical(resolved$unavailable, integer())
+  expect_identical(resolved$still_pending, c(3L, 4L, 5L, 6L))
+  expect_identical(resolved$load_failed, 3L)
 })
 
 test_that("a draw that was not extracted never gets a verdict", {
@@ -131,8 +154,45 @@ test_that("a draw that was not extracted never gets a verdict", {
   expect_identical(unreported$still_pending, c(5L, 6L))
 })
 
+test_that("a draw whose raw data was not found stays pending", {
+  # An unmounted disk or a renamed folder must not retire draws
+  page <- thr_test_page(extracted = c(TRUE, TRUE, FALSE, FALSE, TRUE, TRUE),
+                        reason = "no_raw")
+
+  # Whatever the browser says about it
+  for (failed in list(integer(), 3:4)) {
+    resolved <- thr_test_resolve(page = page, loaded = 1:6, failed = failed)
+
+    expect_identical(resolved$verdicts$draw_id, c(1L, 2L, 5L, 6L))
+    expect_identical(resolved$unavailable, integer())
+    expect_identical(resolved$still_pending, c(3L, 4L))
+    expect_identical(resolved$no_raw, c(3L, 4L))
+    expect_identical(resolved$load_failed, integer())
+  }
+
+  nothing <- thr_test_resolve(page = thr_test_page(extracted = FALSE,
+                                                   reason = "no_raw"),
+                              loaded = NULL)
+  expect_equal(nrow(nothing$verdicts), 0)
+  expect_identical(nothing$unavailable, integer())
+  expect_identical(nothing$still_pending, 1:6)
+})
+
+test_that("only a ROI the raw file could not give is unavailable", {
+  page <- thr_test_page(1:4, extracted = c(TRUE, FALSE, FALSE, FALSE))
+  page$no_image_reason <- c(NA, "no_raw", "not_extractable", "invalid")
+
+  resolved <- thr_test_resolve(page = page, loaded = 1)
+
+  expect_identical(resolved$verdicts$draw_id, 1L)
+  expect_identical(resolved$still_pending, 2L)
+  # A draw without a valid sample name or ROI number can never have an image
+  expect_identical(resolved$unavailable, c(3L, 4L))
+})
+
 test_that("every draw of the page ends up in exactly one group", {
-  page <- thr_test_page(1:10, extracted = rep(c(TRUE, FALSE), c(8, 2)))
+  page <- thr_test_page(1:10, extracted = rep(c(TRUE, FALSE), c(8, 2)),
+                        reason = rep(c("no_raw", "not_extractable"), c(9, 1)))
 
   resolved <- thr_test_resolve(page = page, loaded = c(1:5, 9), failed = c(5, 6),
                                wrong = c(1, 4))
@@ -142,8 +202,11 @@ test_that("every draw of the page ends up in exactly one group", {
   expect_setequal(groups, 1:10)
   expect_equal(anyDuplicated(groups), 0)
   expect_identical(resolved$verdicts$draw_id, 1:4)
-  expect_identical(resolved$unavailable, c(5L, 6L, 9L, 10L))
-  expect_identical(resolved$still_pending, c(7L, 8L))
+  expect_identical(resolved$unavailable, 10L)
+  expect_identical(resolved$still_pending, 5:9)
+  # Why a draw is still pending, for those with a reason beyond "not viewed"
+  expect_identical(resolved$load_failed, c(5L, 6L))
+  expect_identical(resolved$no_raw, 9L)
 })
 
 test_that("an empty page resolves to nothing", {
@@ -196,7 +259,8 @@ test_that("loaded or failed ids that are not on the page are ignored", {
   resolved <- thr_test_resolve(loaded = c(1:6, 77), failed = c(3, 88))
 
   expect_identical(resolved$verdicts$draw_id, c(1L, 2L, 4L, 5L, 6L))
-  expect_identical(resolved$unavailable, 3L)
+  expect_identical(resolved$unavailable, integer())
+  expect_identical(resolved$still_pending, 3L)
 })
 
 test_that("the page itself is validated", {
@@ -214,6 +278,21 @@ test_that("the page itself is validated", {
   expect_error(thr_test_resolve(page = bad), "draw_id")
 })
 
+test_that("a draw without an image must say why", {
+  # Without the reason a missing raw folder could not be told from a ROI
+  # that has no image, and the draw would be retired on a guess
+  no_reason <- data.frame(draw_id = 1:3, extracted = c(TRUE, FALSE, TRUE))
+  expect_error(thr_test_resolve(page = no_reason), "no_image_reason")
+  bad <- thr_test_page(extracted = c(TRUE, FALSE, TRUE, TRUE, TRUE, TRUE))
+  bad$no_image_reason[2] <- NA
+  expect_error(thr_test_resolve(page = bad), "no_image_reason")
+  bad$no_image_reason[2] <- "who knows"
+  expect_error(thr_test_resolve(page = bad), "no_image_reason")
+  # A page on which every image was extracted needs no reasons
+  all_there <- data.frame(draw_id = 1:3, extracted = TRUE)
+  expect_identical(thr_test_resolve(page = all_there)$verdicts$draw_id, 1:3)
+})
+
 # --- thr_save_verdicts -------------------------------------------------------
 
 test_that("saving records verdicts, the annotator, the time and the page token", {
@@ -222,7 +301,8 @@ test_that("saving records verdicts, the annotator, the time and the page token",
   ids <- drawn$page$draw_id
   expect_length(ids, 12)
   resolved <- thr_resolve_page_verdicts(
-    drawn$page, loaded = ids[1:10], failed = ids[9:10], wrong = ids[c(2, 7)],
+    thr_test_unextractable(drawn$page, 9:10), loaded = ids[1:8],
+    failed = NULL, wrong = ids[c(2, 7)],
     token = "page-1", expected_token = "page-1"
   )
 
@@ -260,7 +340,8 @@ test_that("a double submit writes once", {
   drawn <- thr_test_drawn_page()
   on.exit(unlink(drawn$root, recursive = TRUE), add = TRUE)
   ids <- drawn$page$draw_id
-  resolved <- thr_resolve_page_verdicts(drawn$page, loaded = ids, failed = ids[12],
+  resolved <- thr_resolve_page_verdicts(thr_test_unextractable(drawn$page, 12),
+                                        loaded = ids, failed = NULL,
                                         wrong = ids[1:3], token = "t",
                                         expected_token = "t")
   thr_save_verdicts(drawn$db_path, resolved, "Anna", "page-1")
@@ -329,7 +410,8 @@ test_that("saving is all or nothing", {
   drawn <- thr_test_drawn_page()
   on.exit(unlink(drawn$root, recursive = TRUE), add = TRUE)
   ids <- drawn$page$draw_id
-  resolved <- thr_resolve_page_verdicts(drawn$page, loaded = ids, failed = ids[12],
+  resolved <- thr_resolve_page_verdicts(thr_test_unextractable(drawn$page, 12),
+                                        loaded = ids, failed = NULL,
                                         wrong = NULL, token = "t",
                                         expected_token = "t")
   before <- thr_test_draws(drawn$db_path)
@@ -382,11 +464,29 @@ test_that("thr_save_verdicts validates its arguments", {
   expect_false(file.exists(missing_db))
 })
 
-test_that("a page on which every image failed records no verdict", {
+test_that("a page on which every image failed in the browser retires nothing", {
   drawn <- thr_test_drawn_page()
   on.exit(unlink(drawn$root, recursive = TRUE), add = TRUE)
   ids <- drawn$page$draw_id
   resolved <- thr_resolve_page_verdicts(drawn$page, loaded = NULL, failed = ids,
+                                        wrong = NULL, token = "t",
+                                        expected_token = "t")
+
+  expect_identical(thr_save_verdicts(drawn$db_path, resolved, "Anna", "page-1"),
+                   list(n_confirmed = 0L, n_unavailable = 0L))
+  expect_true(all(thr_test_draws(drawn$db_path)$status == "pending"))
+  # The same draws are offered again
+  page <- thr_next_page(drawn$db_path, drawn$index_path, thr_test_model_a_id,
+                        "Debris")
+  expect_setequal(page$draw_id, ids)
+})
+
+test_that("a page of ROIs the raw files cannot give records no verdict", {
+  drawn <- thr_test_drawn_page()
+  on.exit(unlink(drawn$root, recursive = TRUE), add = TRUE)
+  ids <- drawn$page$draw_id
+  resolved <- thr_resolve_page_verdicts(thr_test_unextractable(drawn$page, 1:12),
+                                        loaded = NULL, failed = NULL,
                                         wrong = NULL, token = "t",
                                         expected_token = "t")
 
@@ -430,8 +530,9 @@ test_that("undo returns a page's confirmed and unavailable draws to pending", {
   on.exit(unlink(drawn$root, recursive = TRUE), add = TRUE)
   ids <- drawn$page$draw_id
   before <- thr_test_draws(drawn$db_path)
-  resolved <- thr_resolve_page_verdicts(drawn$page, loaded = ids[1:10],
-                                        failed = ids[9:10], wrong = ids[1:2],
+  resolved <- thr_resolve_page_verdicts(thr_test_unextractable(drawn$page, 9:10),
+                                        loaded = ids[1:8], failed = NULL,
+                                        wrong = ids[1:2],
                                         token = "t", expected_token = "t")
   thr_save_verdicts(drawn$db_path, resolved, "Anna", "page-1")
 

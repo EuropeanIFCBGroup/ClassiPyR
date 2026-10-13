@@ -38,6 +38,7 @@ thr_app_server <- local({
       # everything that reads the index, the frame or the verdicts refresh.
       state <- reactiveValues(
         review_dir = NULL, h5_folder = NULL, roi_folder = NULL,
+        settings_notice = NULL,
         index_version = 0, index_message = NULL,
         model_id = NULL, frozen = FALSE, frame_version = 0,
         annotations_folder = NULL, preflight = NULL,

@@ -308,6 +308,28 @@ test_that("files outside the review's class-score folder do not count", {
                                h5_folder = c("a", "b")), "h5_folder")
 })
 
+test_that("a sample that is usable twice counts once, as in the frame", {
+  space <- thr_test_db_space()
+  on.exit(unlink(space$root, recursive = TRUE), add = TRUE)
+  sample_name <- "D20240101T000000_IFCB134"
+  first <- file.path(space$h5_folder, "a_first")
+  copy <- file.path(space$h5_folder, "b_rerun")
+  thr_test_write_fake(first, sample_name)
+  thr_test_write_fake(copy, sample_name,
+                      thr_test_summary(thresholds = rep(0.7, 5)))
+  # Built one folder at a time, so neither file is set aside for the other
+  build_threshold_index(first, space$index_path, reader = thr_test_fake_reader())
+  build_threshold_index(copy, space$index_path, reader = thr_test_fake_reader())
+  model_id <- thr_index_models(space$index_path)$model_id
+
+  # The frame on the enclosing folder takes the first file by path, and so
+  # does the fallback: the unused copy's thresholds are not a second set
+  expect_identical(
+    thr_h5_fallback(space$index_path, model_id, h5_folder = space$h5_folder),
+    list(thresholds = c(0.3, 0.05, 0.9, NA, 0.6), n_sets = 1L)
+  )
+})
+
 test_that("a file indexed without a thresholds vector counts as having none", {
   space <- thr_test_db_space()
   on.exit(unlink(space$root, recursive = TRUE), add = TRUE)

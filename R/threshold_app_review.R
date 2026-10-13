@@ -27,15 +27,125 @@ thr_frame_samples_db <- function(db_path, model_id) {
 #'
 #' Resolved once for the whole frame rather than page by page: when the raw
 #' data is not in the standard folder layout, finding it takes a scan of the
-#' raw data folder, which must not be repeated for every page.
+#' raw data folder, which must not be repeated for every page. Only a file
+#' that was found is remembered, though. A sample without one is looked up
+#' again on every call, so that the review carries on by itself once raw
+#' data that was away is back.
 #'
 #' @param db_path Path to the verdict SQLite file.
 #' @param model_id Model identifier.
 #' @param roi_folder Raw data folder.
+#' @param known What an earlier call returned for the same frame and folder,
+#'   or \code{NULL}.
 #' @return Named character vector, see \code{thr_resolve_roi_paths()}.
 #' @noRd
-thr_frame_roi_paths <- function(db_path, model_id, roi_folder) {
-  thr_resolve_roi_paths(thr_frame_samples_db(db_path, model_id), roi_folder)
+thr_frame_roi_paths <- function(db_path, model_id, roi_folder, known = NULL) {
+  thr_refresh_roi_paths(known, thr_frame_samples_db(db_path, model_id),
+                        roi_folder)
+}
+
+#' Samples of a page whose raw file was not found
+#'
+#' @param page Data frame of a loaded page, or \code{NULL}.
+#' @return Character vector of distinct sample names.
+#' @noRd
+thr_page_lost_samples <- function(page) {
+  if (is.null(page) || is.null(page$no_image_reason)) {
+    return(character())
+  }
+  lost <- page$no_image_reason %in% THR_NO_IMAGE_RAW
+  unique(as.character(page$sample_name[lost]))
+}
+
+#' Forget the raw files a page could not use
+#'
+#' A path that was found earlier is worth nothing once its file has gone: the
+#' sample is marked as not found, so that the next page looks it up again.
+#'
+#' @param roi_paths Named character vector from \code{thr_frame_roi_paths()}.
+#' @param page Data frame of the page loaded with those paths.
+#' @return \code{roi_paths}, with \code{NA} for the samples whose draws came
+#'   back without an image because their raw file was not found.
+#' @noRd
+thr_forget_lost_roi_paths <- function(roi_paths, page) {
+  roi_paths[names(roi_paths) %in% thr_page_lost_samples(page)] <- NA_character_
+  roi_paths
+}
+
+#' Tell the reviewer that raw data of a page was not found
+#'
+#' @param page Data frame of a loaded page, or \code{NULL}.
+#' @param roi_folder Raw data folder the images were looked for in.
+#' @return \code{NULL} when no draw of the page lacks its raw file; otherwise
+#'   one string naming the folder and the number of images concerned.
+#' @noRd
+thr_missing_raw_notice <- function(page, roi_folder) {
+  lost <- thr_page_lost_samples(page)
+  if (length(lost) == 0) {
+    return(NULL)
+  }
+  n_missing <- sum(page$no_image_reason %in% THR_NO_IMAGE_RAW)
+  folder <- if (thr_is_single_string(roi_folder)) roi_folder else "(none set)"
+  what <- if (thr_is_single_string(roi_folder) && dir.exists(roi_folder)) {
+    sprintf(paste("the raw data (.roi file) of %d sample(s), such as %s, was",
+                  "not found in the raw data folder %s."),
+            length(lost), lost[1], folder)
+  } else {
+    sprintf(paste("the raw data folder %s was not found. Is the disk mounted,",
+                  "or has the folder been moved or renamed?"), folder)
+  }
+  paste(
+    sprintf("%d of the %d image(s) on this page cannot be shown:", n_missing,
+            nrow(page)),
+    what,
+    "Nothing is recorded for these images: they stay pending and are shown",
+    "once their raw data is back. Press \"Load page\" to try again."
+  )
+}
+
+#' Would confirming a page settle any of its draws?
+#'
+#' A page can be confirmed when it has an image to give a verdict on, or a
+#' draw whose ROI the raw file could not give, which a confirmation retires.
+#' A page that holds nothing but draws whose raw data was not found cannot:
+#' nothing on it was reviewed and nothing on it is to be recorded.
+#'
+#' @param page Data frame of a loaded page, or \code{NULL}.
+#' @return \code{TRUE} or \code{FALSE}.
+#' @noRd
+thr_page_can_confirm <- function(page) {
+  if (is.null(page) || nrow(page) == 0) {
+    return(FALSE)
+  }
+  any(page$extracted | thr_draw_is_unavailable(page))
+}
+
+#' What is left of a class when a page comes back without draws
+#'
+#' @param db_path Path to the verdict SQLite file.
+#' @param index_path Path to the index SQLite file.
+#' @param model_id Model identifier of a frozen frame.
+#' @param class_name One class label of the model.
+#' @return A list with \code{n_predicted} (predictions of the class in the
+#'   frame), \code{n_undrawn} (those never drawn), \code{n_pending} (drawn
+#'   and not yet resolved) and \code{n_changed_files} (class-score files of
+#'   the frame, of any class, that the index no longer holds as they were
+#'   frozen, which is why a prediction cannot be drawn).
+#' @noRd
+thr_class_remaining <- function(db_path, index_path, model_id, class_name) {
+  overview <- thr_class_overview(db_path, model_id)
+  class_row <- overview[overview$class_name %in% enc2utf8(class_name), ,
+                        drop = FALSE]
+  if (!thr_is_single_string(class_name) || nrow(class_row) != 1) {
+    stop("`class_name` is not a class of this model.", call. = FALSE)
+  }
+  status <- thr_frame_status(db_path, index_path, model_id)
+  list(
+    n_predicted = class_row$n_predicted,
+    n_undrawn = class_row$n_predicted - class_row$n_drawn,
+    n_pending = class_row$n_pending,
+    n_changed_files = status$n_changed_files
+  )
 }
 
 #' Remove the images of earlier pages
@@ -75,8 +185,9 @@ thr_clear_image_folder <- function(image_folder) {
 #' @param seed \code{NULL}, or a number that makes the draw reproducible.
 #' @return A list with \code{page} (the data frame of
 #'   \code{thr_next_page()} plus \code{png_file}, \code{extracted},
-#'   \code{width} and \code{height}; zero rows when the class is exhausted),
-#'   \code{token} and \code{class_name}.
+#'   \code{no_image_reason}, \code{width} and \code{height}; zero rows when
+#'   no draw of the class is pending and none can be drawn), \code{token} and
+#'   \code{class_name}.
 #' @noRd
 thr_load_review_page <- function(db_path, index_path, model_id, class_name,
                                  page_size, roi_paths, image_folder,
@@ -100,30 +211,47 @@ thr_load_review_page <- function(db_path, index_path, model_id, class_name,
 #' @noRd
 thr_confirm_nothing <- function(status, message) {
   list(status = status, message = message, n_confirmed = 0L, n_wrong = 0L,
-       n_unavailable = 0L, n_pending = 0L)
+       n_unavailable = 0L, n_pending = 0L, n_no_raw = 0L, n_load_failed = 0L)
 }
 
 #' Tell the reviewer what a confirmation recorded
 #'
 #' @param n_confirmed Verdicts written.
 #' @param n_wrong How many of the page's verdicts were "wrong".
-#' @param n_unavailable Draws marked unavailable.
-#' @param n_pending Draws left pending.
+#' @param n_unavailable Draws marked unavailable: their raw file was read and
+#'   did not give the ROI.
+#' @param n_pending Draws left pending, for whatever reason.
 #' @param n_elsewhere Draws the page resolved that had already been resolved,
 #'   by an earlier submit or another session.
+#' @param n_no_raw How many of the pending draws are pending because their
+#'   raw data was not found.
+#' @param n_load_failed How many of the pending draws are pending because the
+#'   browser failed to load their image.
 #' @return One string.
 #' @noRd
 thr_confirm_message <- function(n_confirmed, n_wrong, n_unavailable, n_pending,
-                                n_elsewhere = 0L) {
+                                n_elsewhere = 0L, n_no_raw = 0L,
+                                n_load_failed = 0L) {
+  n_not_viewed <- n_pending - n_no_raw - n_load_failed
   paste(c(
     sprintf("Recorded %d verdict(s), %d marked wrong.", n_confirmed, n_wrong),
     if (n_unavailable > 0) sprintf(
-      "%d image(s) were unavailable and are left out of the estimates.",
+      paste("%d image(s) could not be read from their raw file and are left",
+            "out of the estimates."),
       n_unavailable
     ),
-    if (n_pending > 0) sprintf(
+    if (n_no_raw > 0) sprintf(
+      paste("%d image(s) could not be shown because their raw data was not",
+            "found: they are still pending and will come back."),
+      n_no_raw
+    ),
+    if (n_load_failed > 0) sprintf(
+      "%d image(s) failed to load and will come back on a later page.",
+      n_load_failed
+    ),
+    if (n_not_viewed > 0) sprintf(
       "%d image(s) had not been viewed and will come back on a later page.",
-      n_pending
+      n_not_viewed
     ),
     if (n_elsewhere > 0) sprintf(
       "%d image(s) had already been resolved and were not changed.",
@@ -132,13 +260,39 @@ thr_confirm_message <- function(n_confirmed, n_wrong, n_unavailable, n_pending,
   ), collapse = " ")
 }
 
+#' Result of a confirmation that was saved
+#'
+#' @param resolved A list from \code{thr_resolve_page_verdicts()}.
+#' @param saved A list from \code{thr_save_verdicts()}.
+#' @return A list shaped like the result of \code{thr_confirm_page()}.
+#' @noRd
+thr_confirm_saved <- function(resolved, saved) {
+  n_resolved <- nrow(resolved$verdicts) + length(resolved$unavailable)
+  counts <- list(
+    n_confirmed = saved$n_confirmed,
+    n_wrong = as.integer(sum(resolved$verdicts$verdict == 0)),
+    n_unavailable = saved$n_unavailable,
+    n_pending = length(resolved$still_pending),
+    n_no_raw = length(resolved$no_raw),
+    n_load_failed = length(resolved$load_failed)
+  )
+  message <- thr_confirm_message(
+    counts$n_confirmed, counts$n_wrong, counts$n_unavailable, counts$n_pending,
+    n_elsewhere = n_resolved - saved$n_confirmed - saved$n_unavailable,
+    n_no_raw = counts$n_no_raw, n_load_failed = counts$n_load_failed
+  )
+  c(list(status = "saved", message = message), counts)
+}
+
 #' Record the confirmation of a review page
 #'
 #' Turns what the browser sent into verdicts with
 #' \code{thr_resolve_page_verdicts()} and stores them with
 #' \code{thr_save_verdicts()}. Nothing is written when the confirmation
-#' belongs to a page that is no longer the current one, or when the browser
-#' and the server disagree about what was shown; the result then says why.
+#' belongs to a page that is no longer the current one, when the browser and
+#' the server disagree about what was shown, or when the page has no draw a
+#' confirmation could settle (see \code{thr_page_can_confirm()}); the result
+#' then says why.
 #'
 #' @param db_path Path to the verdict SQLite file.
 #' @param page Data frame of the page the server last rendered, or
@@ -149,7 +303,9 @@ thr_confirm_message <- function(n_confirmed, n_wrong, n_unavailable, n_pending,
 #' @param annotator Name of the reviewer.
 #' @return A list with \code{status} (\code{"saved"}, \code{"stale"} or
 #'   \code{"error"}), \code{message} for the reviewer, \code{n_confirmed},
-#'   \code{n_wrong}, \code{n_unavailable} and \code{n_pending}.
+#'   \code{n_wrong}, \code{n_unavailable}, \code{n_pending} (every draw of
+#'   the page left pending) and, among those, \code{n_no_raw} (raw data not
+#'   found) and \code{n_load_failed} (image failed in the browser).
 #' @noRd
 thr_confirm_page <- function(db_path, page, payload, expected_token,
                              annotator) {
@@ -164,20 +320,14 @@ thr_confirm_page <- function(db_path, page, payload, expected_token,
       page, payload$loaded, payload$failed, payload$wrong, payload$token,
       expected_token
     )
+    if (nrow(page) > 0 && !thr_page_can_confirm(page)) {
+      stop("Nothing was recorded: none of the ", nrow(page), " image(s) on ",
+           "this page could be shown, because their raw data was not found. ",
+           "They stay pending. Make the raw data folder available and press ",
+           "\"Load page\" again.", call. = FALSE)
+    }
     saved <- thr_save_verdicts(db_path, resolved, annotator, expected_token)
-    n_resolved <- nrow(resolved$verdicts) + length(resolved$unavailable)
-    n_elsewhere <- n_resolved - saved$n_confirmed - saved$n_unavailable
-    n_wrong <- sum(resolved$verdicts$verdict == 0)
-    list(
-      status = "saved",
-      message = thr_confirm_message(saved$n_confirmed, n_wrong,
-                                    saved$n_unavailable,
-                                    length(resolved$still_pending),
-                                    n_elsewhere),
-      n_confirmed = saved$n_confirmed, n_wrong = as.integer(n_wrong),
-      n_unavailable = saved$n_unavailable,
-      n_pending = length(resolved$still_pending)
-    )
+    thr_confirm_saved(resolved, saved)
   },
   thr_stale_page = function(e) thr_confirm_nothing("stale", conditionMessage(e)),
   error = function(e) {

@@ -115,10 +115,12 @@ thr_count_column <- function(strata_counts, column) {
 #' absent from the input become empty strata.
 #'
 #' @param strata_counts Data frame with columns \code{bin},
-#'   \code{n_population}, \code{n_verdicts} and \code{n_correct}.
+#'   \code{n_population}, \code{n_verdicts} and \code{n_correct}, and
+#'   optionally \code{n_unavailable} (taken as 0 when absent).
 #' @param n_bins Number of score bins.
-#' @return List of three numeric vectors of length \code{n_bins}:
-#'   \code{n_population}, \code{n_verdicts}, \code{n_correct}.
+#' @return List of four numeric vectors of length \code{n_bins}:
+#'   \code{n_population}, \code{n_verdicts}, \code{n_correct} and
+#'   \code{n_unavailable}.
 #' @noRd
 thr_strata_by_bin <- function(strata_counts, n_bins) {
   required <- c("bin", "n_population", "n_verdicts", "n_correct")
@@ -129,18 +131,23 @@ thr_strata_by_bin <- function(strata_counts, n_bins) {
   }
   counts <- lapply(stats::setNames(required, required), thr_count_column,
                    strata_counts = strata_counts)
+  counts$n_unavailable <- if ("n_unavailable" %in% names(strata_counts)) {
+    thr_count_column(strata_counts, "n_unavailable")
+  } else {
+    numeric(nrow(strata_counts))
+  }
   thr_check_stratum_counts(counts, n_bins)
 
   by_bin <- function(values) {
     replace(numeric(n_bins), counts$bin, values)
   }
-  lapply(counts[required[-1]], by_bin)
+  lapply(counts[names(counts) != "bin"], by_bin)
 }
 
 #' Check that stratum counts are consistent with each other
 #'
 #' @param counts List with numeric vectors \code{bin}, \code{n_population},
-#'   \code{n_verdicts} and \code{n_correct}.
+#'   \code{n_verdicts}, \code{n_correct} and \code{n_unavailable}.
 #' @param n_bins Number of score bins.
 #' @return \code{NULL}, invisibly; called for its errors.
 #' @noRd
@@ -163,7 +170,34 @@ thr_check_stratum_counts <- function(counts, n_bins) {
     stop("`strata_counts$n_correct` is larger than `n_verdicts` in at least ",
          "one bin.", call. = FALSE)
   }
+  if (any(counts$n_verdicts + counts$n_unavailable > counts$n_population)) {
+    stop("`strata_counts$n_unavailable` and `n_verdicts` add up to more than ",
+         "`n_population` in at least one bin: a prediction whose image is ",
+         "unavailable cannot have a verdict.", call. = FALSE)
+  }
   invisible(NULL)
+}
+
+#' Leave the strata in which nothing can be reviewed out of the estimate
+#'
+#' A non-empty stratum whose images are all unavailable has no verdicts and
+#' can never get any. For the estimate it is turned into an empty stratum, so
+#' that it neither blocks the edges at or below it nor enters the precision
+#' or its interval. A stratum in which only some images are unavailable is
+#' left as it is: its verdicts stand in for the whole stratum.
+#'
+#' @param strata List from \code{\link{thr_strata_by_bin}}.
+#' @return The same list with \code{n_population} and \code{n_unavailable}
+#'   set to 0 in the strata that hold predictions but none that can be
+#'   reviewed.
+#' @noRd
+thr_drop_unreviewable <- function(strata) {
+  unreviewable <- strata$n_population > 0 &
+    strata$n_unavailable == strata$n_population
+  utils::modifyList(strata, list(
+    n_population = ifelse(unreviewable, 0, strata$n_population),
+    n_unavailable = ifelse(unreviewable, 0, strata$n_unavailable)
+  ))
 }
 
 #' Check the settings of the precision curve
@@ -224,9 +258,12 @@ thr_sim_with_seed <- function(seed, simulate) {
 #' Simulate the uncertainty interval of the precision at or above each edge
 #'
 #' The verdicts of a stratum are known, so only its unreviewed remainder is
-#' uncertain: that remainder's precision is drawn from the Jeffreys posterior
-#' \code{Beta(correct + 0.5, wrong + 0.5)}. The interval therefore narrows
-#' smoothly as a stratum is reviewed and closes when it is reviewed in full.
+#' uncertain. That remainder's precision is drawn from the Jeffreys posterior
+#' \code{Beta(correct + 0.5, wrong + 0.5)}, and the number of correct
+#' predictions among the remainder is then drawn from a binomial with that
+#' precision, because the remainder is a finite number of predictions whose
+#' count of correct ones varies around its expectation. The interval therefore
+#' narrows as a stratum is reviewed and closes when it is reviewed in full.
 #' The same draws are combined for every edge, so the intervals along the
 #' curve are consistent with each other.
 #'
@@ -251,7 +288,8 @@ thr_simulate_interval <- function(strata, n_sim, conf_level) {
       wrong <- strata$n_verdicts[b] - strata$n_correct[b]
       draws <- stats::rbeta(n_sim, strata$n_correct[b] + 0.5, wrong + 0.5)
       unreviewed <- strata$n_population[b] - strata$n_verdicts[b]
-      weighted_sum <- weighted_sum + strata$n_correct[b] + unreviewed * draws
+      weighted_sum <- weighted_sum + strata$n_correct[b] +
+        stats::rbinom(n_sim, unreviewed, draws)
     } else if (reviewed[b]) {
       weighted_sum <- weighted_sum + strata$n_correct[b]
     }
@@ -280,31 +318,51 @@ thr_simulate_interval <- function(strata, n_sim, conf_level) {
 #' over the non-empty strata \eqn{h} at or above the edge, with \eqn{N_h}
 #' predictions, \eqn{n_h} verdicts and \eqn{y_h} correct verdicts.
 #'
+#' A prediction whose image could not be shown (`n_unavailable`) can never be
+#' reviewed. In a stratum where some images are unavailable, the verdicts on
+#' the others stand in for the whole stratum, which keeps its full weight
+#' \eqn{N_h}. A stratum in which **no** image can be reviewed carries no
+#' information and can never get any, so it is left out of the estimate and
+#' its interval altogether, numerator and denominator, instead of blocking
+#' the curve: the precision at an edge then describes the strata that could
+#' be reviewed. `n_population_kept` and `kept_share` still count every
+#' prediction.
+#'
 #' The interval is simulated. The reviewed predictions of a stratum are known;
 #' the precision of its unreviewed remainder is drawn from
-#' `Beta(y_h + 0.5, n_h - y_h + 0.5)`, and the strata are combined by their
-#' populations. The interval therefore narrows as more of a stratum is
-#' reviewed, and a stratum reviewed in full (`n_verdicts == n_population`)
-#' contributes no uncertainty. The bounds are widened where needed to include
-#' the point estimate, which happens when every verdict of a sampled stratum
-#' agrees.
+#' `Beta(y_h + 0.5, n_h - y_h + 0.5)`, the number of correct predictions among
+#' the \eqn{N_h - n_h} unreviewed ones is drawn from a binomial with that
+#' precision, and the strata are added up. The interval therefore covers both
+#' the uncertainty about the precision of a stratum and the chance variation
+#' in a finite remainder. It narrows as more of a stratum is reviewed, and a
+#' stratum reviewed in full (`n_verdicts == n_population`) contributes no
+#' uncertainty. The bounds are widened where needed to include the point
+#' estimate, which happens when every verdict of a sampled stratum agrees.
 #'
-#' An edge has no estimate (`NA`) as soon as one non-empty stratum at or above
-#' it has no verdicts, or when it keeps no predictions at all. It is
-#' `supported` when every non-empty stratum at or above it has at least
-#' `min(n_population, min_stratum_n)` verdicts; an edge that keeps nothing is
-#' trivially supported.
+#' An edge has no estimate (`NA`) as soon as one stratum at or above it has
+#' images that can be reviewed but no verdicts, or when it keeps no prediction
+#' that can be reviewed. It is `supported` when every stratum at or above it
+#' has at least `min(n_population - n_unavailable, min_stratum_n)` verdicts,
+#' that is `min_stratum_n` of them or all that can be given. An edge that
+#' keeps nothing is trivially supported; an edge that keeps only predictions
+#' that cannot be reviewed is not supported, but does not hold back the edges
+#' below it.
 #'
 #' @param strata_counts Data frame for **one** class with one row per score
 #'   bin and the columns `bin` (1 to `length(edges)`), `n_population`
 #'   (predictions in the bin), `n_verdicts` (reviewed predictions) and
 #'   `n_correct` (reviewed predictions judged correct). Bins that are absent
-#'   or have `n_population` 0 are empty strata. Other columns are ignored.
+#'   or have `n_population` 0 are empty strata. An optional column
+#'   `n_unavailable` gives the predictions of the bin that can never be
+#'   reviewed because their image could not be shown; it is taken as 0 when
+#'   absent, and `n_verdicts + n_unavailable` cannot exceed `n_population`.
+#'   Other columns are ignored.
 #' @param edges Lower edges of the score bins, increasing and starting at 0.
 #'   Bin `b` is `[edges[b], edges[b + 1])` and the last bin includes 1. These
 #'   are also the candidate thresholds.
 #' @param min_stratum_n Verdicts a stratum needs before the edges at or below
-#'   it count as supported (the whole stratum, when it is smaller).
+#'   it count as supported (every prediction of the stratum that can be
+#'   reviewed, when those are fewer).
 #' @param n_sim Number of simulation draws for the interval.
 #' @param conf_level Confidence level of the interval.
 #' @param seed `NULL`, or a single number that makes the interval
@@ -318,7 +376,8 @@ thr_simulate_interval <- function(strata, n_sim, conf_level) {
 #'     \item{kept_share}{Their share of all predictions of the class (exact;
 #'       `NA` when the class has no predictions).}
 #'     \item{n_verdicts}{Verdicts in the bins at or above the edge.}
-#'     \item{precision}{Estimated precision at or above the edge, or `NA`.}
+#'     \item{precision}{Estimated precision at or above the edge, or `NA`.
+#'       Strata in which nothing can be reviewed are left out of it.}
 #'     \item{lower, upper}{Bounds of the interval, or `NA`.}
 #'     \item{supported}{Whether the evidence at or above the edge is enough
 #'       to act on.}
@@ -347,26 +406,29 @@ estimate_precision_curve <- function(strata_counts, edges = THR_SCORE_EDGES,
   edges <- thr_validate_edges(edges)
   thr_check_curve_settings(min_stratum_n, n_sim, conf_level, seed)
   strata <- thr_strata_by_bin(strata_counts, length(edges))
+  # What the estimate is built from; `strata` keeps the exact counts.
+  assessed <- thr_drop_unreviewable(strata)
 
-  population <- strata$n_population
-  non_empty <- population > 0
-  unreviewed <- non_empty & strata$n_verdicts == 0
-  too_few <- non_empty &
-    strata$n_verdicts < pmin(population, min_stratum_n)
+  population <- assessed$n_population
+  unreviewed <- population > 0 & assessed$n_verdicts == 0
+  too_few <- assessed$n_verdicts <
+    pmin(population - assessed$n_unavailable, min_stratum_n)
 
-  kept <- thr_sum_from(population)
-  estimable <- kept > 0 & thr_sum_from(unreviewed) == 0
+  kept <- thr_sum_from(strata$n_population)
+  assessed_kept <- thr_sum_from(population)
+  estimable <- assessed_kept > 0 & thr_sum_from(unreviewed) == 0
   # N * y / n, multiplied first so that a stratum reviewed in full contributes
   # exactly its number of correct verdicts.
-  expected_correct <- ifelse(strata$n_verdicts > 0,
-                             population * strata$n_correct / strata$n_verdicts,
+  expected_correct <- ifelse(assessed$n_verdicts > 0,
+                             population * assessed$n_correct /
+                               assessed$n_verdicts,
                              0)
-  precision <- ifelse(estimable, thr_sum_from(expected_correct) / kept,
+  precision <- ifelse(estimable, thr_sum_from(expected_correct) / assessed_kept,
                       NA_real_)
   interval <- thr_sim_with_seed(seed, function() {
-    thr_simulate_interval(strata, n_sim, conf_level)
+    thr_simulate_interval(assessed, n_sim, conf_level)
   })
-  total <- sum(population)
+  total <- sum(strata$n_population)
 
   data.frame(
     threshold = edges,
@@ -379,7 +441,10 @@ estimate_precision_curve <- function(strata_counts, edges = THR_SCORE_EDGES,
     # side of the estimate, so the bounds are stretched to include it.
     lower = ifelse(estimable, pmin(interval[, "lower"], precision), NA_real_),
     upper = ifelse(estimable, pmax(interval[, "upper"], precision), NA_real_),
-    supported = thr_sum_from(unreviewed | too_few) == 0,
+    # Nothing short of verdicts at or above the edge, and something to judge
+    # it by unless it keeps nothing at all.
+    supported = thr_sum_from(unreviewed | too_few) == 0 &
+      (assessed_kept > 0 | kept == 0),
     stringsAsFactors = FALSE
   )
 }

@@ -114,6 +114,157 @@ test_that("at most one ok file exists per model and sample after any build", {
   expect_identical(files$status, c("ok", "duplicate", "duplicate"))
 })
 
+# --- build: duplicates are a matter of one folder ----------------------------
+
+test_that("copies in a folder indexed earlier do not make a folder's files duplicates", {
+  ws <- thr_test_workspace()
+  on.exit(unlink(ws$root, recursive = TRUE), add = TRUE)
+  folders <- thr_test_write_copies(ws$h5_folder, c("a_old", "b_new"),
+                                   thr_test_samples[1:4])
+  build_threshold_index(folders[["a_old"]], ws$index_path,
+                        reader = thr_test_fake_reader())
+  result <- build_threshold_index(folders[["b_new"]], ws$index_path,
+                                  reader = thr_test_fake_reader())
+
+  # A frame is frozen on one folder, so the files of another do not compete
+  files <- thr_test_files_table(ws$index_path)
+  expect_identical(files$status, rep("ok", 8))
+  expect_identical(result$n_ok, 8L)
+  expect_equal(nrow(result$failures), 0)
+  expect_equal(thr_test_query(ws$index_path, "SELECT COUNT(*) AS n FROM rois")$n, 32)
+
+  # A sample scored in two folders is still one sample of the model
+  model <- thr_index_models(ws$index_path)
+  expect_identical(model$n_files, 4L)
+  expect_identical(model$n_rois, 16L)
+  expect_identical(
+    thr_frame_sample_names(ws$index_path, model$model_id, folders[["b_new"]]),
+    thr_test_samples[1:4]
+  )
+})
+
+test_that("building a folder that sorts first leaves the files of another alone", {
+  ws <- thr_test_workspace()
+  on.exit(unlink(ws$root, recursive = TRUE), add = TRUE)
+  folders <- thr_test_write_copies(ws$h5_folder, c("backup", "scores"),
+                                   thr_test_samples[1:3])
+  build_threshold_index(folders[["scores"]], ws$index_path,
+                        reader = thr_test_fake_reader())
+  before <- thr_test_query(ws$index_path, "SELECT * FROM rois ORDER BY 1, 2")
+
+  build_threshold_index(folders[["backup"]], ws$index_path,
+                        reader = thr_test_fake_reader())
+
+  files <- thr_test_files_table(ws$index_path)
+  expect_identical(files$status, rep("ok", 6))
+  kept <- thr_test_query(ws$index_path, "
+    SELECT r.* FROM rois r JOIN files f ON f.file_id = r.file_id
+    WHERE f.h5_path LIKE '%/scores/%' ORDER BY 1, 2")
+  expect_identical(kept, before)
+})
+
+test_that("files set aside for a copy in another folder are used after a rebuild", {
+  ws <- thr_test_workspace()
+  on.exit(unlink(ws$root, recursive = TRUE), add = TRUE)
+  folders <- thr_test_write_copies(ws$h5_folder, c("a_old", "b_new"),
+                                   thr_test_samples[1:4])
+  build_threshold_index(ws$h5_folder, ws$index_path, reader = thr_test_fake_reader())
+  # Within the one folder that was built, the copies are duplicates. This is
+  # also what an index holds that resolved duplicates across every folder.
+  files <- thr_test_files_table(ws$index_path)
+  expect_identical(files$status, rep(c("ok", "duplicate"), each = 4))
+
+  counter <- thr_test_counting_reader()
+  result <- build_threshold_index(folders[["b_new"]], ws$index_path,
+                                  reader = counter$reader)
+
+  expect_length(counter$paths(), 4)
+  expect_identical(result$n_read, 4L)
+  files <- thr_test_files_table(ws$index_path)
+  expect_identical(files$status, rep("ok", 8))
+  expect_true(all(is.na(files$message)))
+  expect_equal(thr_test_query(ws$index_path, "SELECT COUNT(*) AS n FROM rois")$n, 32)
+
+  # Stable from here on, whichever of the folders is built again
+  for (folder in c(ws$h5_folder, folders[["a_old"]], folders[["b_new"]])) {
+    counter$reset()
+    build_threshold_index(folder, ws$index_path, reader = counter$reader)
+    expect_length(counter$paths(), 0)
+    expect_identical(thr_test_files_table(ws$index_path)$status, rep("ok", 8),
+                     info = folder)
+  }
+})
+
+test_that("a new file in an enclosing folder still takes over by path order", {
+  ws <- thr_test_workspace()
+  on.exit(unlink(ws$root, recursive = TRUE), add = TRUE)
+  child <- file.path(ws$h5_folder, "run2")
+  thr_test_write_fake(child, thr_test_samples[1])
+  build_threshold_index(child, ws$index_path, reader = thr_test_fake_reader())
+  thr_test_write_fake(file.path(ws$h5_folder, "run1"), thr_test_samples[1])
+
+  # Both files are inside the folder being built, so they compete
+  build_threshold_index(ws$h5_folder, ws$index_path, reader = thr_test_fake_reader())
+  files <- thr_test_files_table(ws$index_path)
+  expect_identical(basename(dirname(files$h5_path)), c("run1", "run2"))
+  expect_identical(files$status, c("ok", "duplicate"))
+
+  # Inside its own folder the second file has no competitor
+  counter <- thr_test_counting_reader()
+  build_threshold_index(child, ws$index_path, reader = counter$reader)
+  expect_length(counter$paths(), 1)
+  expect_identical(thr_test_files_table(ws$index_path)$status, c("ok", "ok"))
+})
+
+test_that("indexing a copy in a sibling folder leaves a frozen frame intact", {
+  space <- thr_test_app_frozen_space()
+  on.exit(unlink(space$root, recursive = TRUE), add = TRUE)
+  # "backup" sorts before "h5", the folder the frame was frozen on
+  backup <- file.path(space$root, "backup")
+  dir.create(backup)
+  file.copy(list.files(space$h5_folder, full.names = TRUE), backup,
+            copy.date = TRUE)
+
+  result <- build_threshold_index(backup, space$index_path,
+                                  reader = thr_test_fake_reader())
+
+  expect_identical(result$n_read, 6L)
+  expect_equal(nrow(result$failures), 0)
+  status <- thr_frame_status(space$db_path, space$index_path, space$model_id)
+  expect_identical(status$n_changed_files, 0L)
+  expect_identical(status$n_new_files, 0L)
+  # The review goes on: pages are still drawn from the frame's own files
+  page <- thr_next_page(space$db_path, space$index_path, space$model_id,
+                        thr_test_labels[1], page_size = 30, seed = 1)
+  expect_equal(nrow(page), 30)
+})
+
+test_that("a frame set aside by a build of an enclosing folder comes back", {
+  space <- thr_test_app_frozen_space()
+  on.exit(unlink(space$root, recursive = TRUE), add = TRUE)
+  sibling <- file.path(space$root, "backup")
+  dir.create(sibling)
+  file.copy(list.files(space$h5_folder, full.names = TRUE), sibling,
+            copy.date = TRUE)
+
+  # Built as one folder, the copies in "backup" sort first and are kept, as
+  # for any two files of a sample inside one folder
+  build_threshold_index(space$root, space$index_path,
+                        reader = thr_test_fake_reader())
+  status <- thr_frame_status(space$db_path, space$index_path, space$model_id)
+  expect_identical(status$n_changed_files, 6L)
+
+  # Building the frame's own folder again makes its files usable as frozen
+  build_threshold_index(space$h5_folder, space$index_path,
+                        reader = thr_test_fake_reader())
+  status <- thr_frame_status(space$db_path, space$index_path, space$model_id)
+  expect_identical(status$n_changed_files, 0L)
+  expect_identical(status$n_new_files, 0L)
+  page <- thr_next_page(space$db_path, space$index_path, space$model_id,
+                        thr_test_labels[1], page_size = 30, seed = 1)
+  expect_equal(nrow(page), 30)
+})
+
 # --- build: batches, progress, resuming --------------------------------------
 
 test_that("progress is reported per file and ends at the total", {
@@ -211,6 +362,26 @@ test_that("many files over several batches are all indexed", {
   models <- thr_index_models(ws$index_path)
   expect_identical(models$n_files, 60L)
   expect_identical(models$n_rois, as.integer(60 * n_rois))
+})
+
+# --- build: another session using the index ----------------------------------
+
+test_that("a build waits for another process that holds the index", {
+  skip_on_cran()
+  ws <- thr_test_workspace()
+  on.exit(unlink(ws$root, recursive = TRUE), add = TRUE)
+  thr_test_write_fake(ws$h5_folder, thr_test_samples[1])
+  build_threshold_index(ws$h5_folder, ws$index_path, reader = thr_test_fake_reader())
+  thr_test_write_fake(ws$h5_folder, thr_test_samples[2])
+
+  # The app, or a scripted build, writing a batch while this build starts
+  locked <- thr_test_lock_from_other_process(ws$index_path, seconds = 1.5)
+  skip_if_not(locked, "Could not start a second R process")
+  result <- build_threshold_index(ws$h5_folder, ws$index_path,
+                                  reader = thr_test_fake_reader())
+
+  expect_identical(result$n_read, 1L)
+  expect_identical(result$n_ok, 2L)
 })
 
 # --- build: schema version ---------------------------------------------------
@@ -325,6 +496,19 @@ test_that("index queries treat a database without index tables as empty", {
   expect_error(thr_index_class_labels(other_db, "abc"), "build_threshold_index")
   expect_identical(thr_test_query(other_db, "SELECT name FROM sqlite_master")$name,
                    "unrelated")
+})
+
+test_that("index queries wait for a writer as long as the verdict database does", {
+  ws <- thr_test_workspace()
+  on.exit(unlink(ws$root, recursive = TRUE), add = TRUE)
+  thr_test_write_fake(ws$h5_folder, thr_test_samples[1])
+  build_threshold_index(ws$h5_folder, ws$index_path, reader = thr_test_fake_reader())
+
+  timeout <- thr_with_index(ws$index_path, function(con) {
+    DBI::dbGetQuery(con, "PRAGMA busy_timeout")[[1]]
+  })
+
+  expect_equal(timeout, THR_DB_BUSY_MS)
 })
 
 test_that("index queries reject a malformed index path", {

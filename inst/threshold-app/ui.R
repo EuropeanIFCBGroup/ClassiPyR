@@ -65,7 +65,11 @@ thr_setup_panel <- nav_panel(
     selectInput("thr_model", "Model to review", choices = character(),
                 width = "100%"),
     helpText("Each model is reviewed on its own. Verdicts of different",
-             "models are never pooled.")
+             "models are never pooled. The counts are over every folder that",
+             "was indexed, each sample once; Check tells how many of them the",
+             "class-score folder in use holds. A model marked \"review",
+             "frozen\" can be opened for its results and its export even when",
+             "its class-score files are no longer indexed.")
   ),
   conditionalPanel(
     condition = "output.thr_frame_state == 'open'",

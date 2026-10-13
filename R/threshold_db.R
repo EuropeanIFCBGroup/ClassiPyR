@@ -9,7 +9,8 @@
 # version is refused, never dropped: verdicts are hours of somebody's work.
 THR_VERDICT_SCHEMA_VERSION <- "1"
 
-# How long a connection waits for another session's write to finish
+# How long a connection to the verdict database or to the index cache waits
+# for another session's write to finish
 THR_DB_BUSY_MS <- 30000L
 
 # Statements that create the verdict database tables
@@ -163,8 +164,10 @@ thr_check_index_exists <- function(index_path) {
          "file.path(review_dir, \"", THR_INDEX_DB_FILE, "\").", call. = FALSE)
   }
   if (!file.exists(index_path)) {
-    stop("No class-score index at ", index_path, ". Run ",
-         "build_threshold_index() on the class-score folder first.",
+    stop("No class-score index at ", index_path, ". Checking a frame and ",
+         "drawing images need it: press \"Build / update index\" on the ",
+         "Setup page, or run build_threshold_index() on the class-score ",
+         "folder. Results and Export of a frozen review work without it.",
          call. = FALSE)
   }
   invisible(NULL)
@@ -233,7 +236,8 @@ thr_attach_index <- function(con, index_path) {
 #' code reads cannot change before it writes. Anything that stops the code,
 #' an error or an interrupt, rolls every change back.
 #'
-#' @param con A DBI connection to the verdict SQLite file.
+#' @param con A DBI connection to the verdict SQLite file, or to the index
+#'   cache.
 #' @param code Function of no arguments doing the reads and writes.
 #' @return The value of \code{code()}.
 #' @noRd
@@ -344,6 +348,63 @@ thr_get_model <- function(db_path, model_id) {
   con <- thr_connect_verdicts(db_path)
   on.exit(DBI::dbDisconnect(con), add = TRUE)
   thr_require_model(con, model_id)
+}
+
+#' Models with a frozen sampling frame in a review folder
+#'
+#' Read from the verdict database alone: the index is a cache, and a review
+#' has to be found, shown and exported when the cache is gone or no longer
+#' holds the model's class-score files.
+#'
+#' @param db_path Path to the verdict SQLite file. It is not created when it
+#'   does not exist.
+#' @return Data frame with one row per frozen model, sorted by classifier
+#'   name: \code{model_id}, \code{classifier_name},
+#'   \code{checkpoint_sha256}, \code{transform}, \code{frozen_at},
+#'   \code{h5_folder}, \code{n_frame_files} (samples in the frame) and
+#'   \code{n_frame_rois} (predictions in the frame). No rows when nothing is
+#'   frozen.
+#' @noRd
+thr_frozen_models <- function(db_path) {
+  thr_check_db_path(db_path)
+  if (!file.exists(db_path)) {
+    return(thr_no_frozen_models())
+  }
+  con <- thr_connect_verdicts(db_path)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  stored <- DBI::dbGetQuery(con, "
+    SELECT m.model_id, m.classifier_name, m.checkpoint_sha256, m.transform,
+           m.frozen_at, m.h5_folder,
+           COUNT(ff.sample_name) AS n_frame_files,
+           COALESCE(SUM(ff.n_rois), 0) AS n_frame_rois
+    FROM models m
+    LEFT JOIN frame_files ff ON ff.model_id = m.model_id
+    GROUP BY m.model_id
+    ORDER BY m.classifier_name, m.model_id")
+  typed <- thr_no_frozen_models()
+  for (column in names(typed)) {
+    stored[[column]] <- if (is.integer(typed[[column]])) {
+      as.integer(stored[[column]])
+    } else {
+      enc2utf8(as.character(stored[[column]]))
+    }
+  }
+  stored[names(typed)]
+}
+
+#' The frozen models of a review folder that has none
+#'
+#' @return Data frame with the columns of \code{thr_frozen_models()} and no
+#'   rows.
+#' @noRd
+thr_no_frozen_models <- function() {
+  data.frame(
+    model_id = character(), classifier_name = character(),
+    checkpoint_sha256 = character(), transform = character(),
+    frozen_at = character(), h5_folder = character(),
+    n_frame_files = integer(), n_frame_rois = integer(),
+    stringsAsFactors = FALSE
+  )
 }
 
 #' Stratum counts of a model, read on an open connection
@@ -582,7 +643,7 @@ thr_resolve_inputs_db <- function(db_path, model_id) {
   list(
     model = model,
     strata_counts = counts[c("class_name", "bin", "n_population", "n_verdicts",
-                             "n_correct")],
+                             "n_correct", "n_unavailable")],
     overrides = thr_override_query(con, model_id, model$class_labels)
   )
 }

@@ -70,6 +70,8 @@ The app has four pages: **Setup**, **Review**, **Results** and **Export**.
 
 Fill in the review folder, the class-score folder and the raw data folder, add your name, and press **Apply**. The folders are remembered for next time.
 
+If a remembered data folder is not available when the app starts, for example because a disk is not mounted, it is left out of use and the page says so. It stays remembered: press **Apply** once the folder is back. A review cannot be checked or frozen while no class-score folder is in use.
+
 ### Class-score index
 
 **Build / update index** reads every class-score file once and stores, for each image, its predicted class and top score. Later runs only read files that are new or have changed.
@@ -83,9 +85,13 @@ build_threshold_index(
 )
 ```
 
-The index file must be named `threshold_index.sqlite` and sit in the review folder.
+The index file must be named `threshold_index.sqlite` and sit in the review folder. A scripted build can run while the app is open on the same review folder; each waits for the other to finish writing.
 
 After the build the page lists the models found. Class-score files from different checkpoints are listed as different models and are never mixed. Files that cannot be used are listed with the reason.
+
+If a model scored the same sample more than once inside the class-score folder, the first file by path is used and the others are listed as duplicates. This is decided within the folder that is indexed: a copy of the files in another folder that was indexed earlier does not take their place, and a review always uses the files of its own class-score folder. The counts shown for a model cover every folder that was indexed, with each sample counted once.
+
+The index is a cache. If it is deleted, or the class-score files are archived, a review that is already frozen stays in the model list: **Results** and **Export** only need the review folder. Reviewing more images needs the class-score files and a rebuilt index.
 
 ### Start review
 
@@ -95,6 +101,10 @@ Pick the model, then:
 2. **Samples without raw data** are counted and left out automatically.
 3. **Fallback thresholds.** A class that the review cannot fit keeps the threshold the model has now. Point the app at the model's `*_thresholds_and_metrics.json` from training, or use the values stored in the class-score files.
 4. Press **Check** to see what the review would cover, then **Freeze and start**.
+
+**Check** also compares the class-score folder with the index. If files were added, rewritten or removed since the index was built, the review cannot be frozen until you press **Build / update index** again: a frozen review would otherwise be stuck with scores that are no longer on disk.
+
+A review covers the files stored under its class-score folder. Files that are only linked into the folder with a symbolic link are stored elsewhere and would be left out, so **Check** stops and names them; use the folder the files really are in.
 
 Freezing fixes the set of samples, the exclusions and the score ranges for this model. This is what makes the later estimates valid, so it cannot be changed afterwards:
 
@@ -115,13 +125,19 @@ The page shows images the model labelled as that class, drawn from across the sa
 - **Drag** from the space between images to mark several at once.
 - Press **Confirm page**. Unmarked images are recorded as correct.
 
-Only images you have actually had on screen are recorded. Images further down the page that you have not scrolled to, and images that did not load, are left out and come back on a later page. The counter above the gallery shows how many images of the page you have viewed.
+Only images you have actually had on screen, with the image loaded, are recorded. Images further down the page that you have not scrolled to, and images that failed to load, are not recorded and come back on a later page. The counter above the gallery shows how many images of the page you have viewed.
+
+If the raw data of an image cannot be found, for example because a disk is not mounted or the raw data folder has been renamed, the page says so, names the folder and shows the image as *Raw data not found*. Nothing is recorded for such an image: it stays pending and is shown again once its raw data is back and you press **Load page**. A page that holds nothing else cannot be confirmed.
+
+An image is only left out of the review for good when its raw file was read and holds no image for it. These are counted as *Unavailable* under *Verdicts per score bin for this class*.
+
+When a class has no more images to show, the page says whether all of its predictions have been reviewed. If some could not be drawn because their class-score files changed after the freeze, it says how many.
 
 **Undo last page** takes back the verdicts of the last confirmed page.
 
 Each new page fills up the score ranges with the fewest verdicts first. *Verdicts per score bin for this class* shows how far each range has come. Small ranges are reviewed in full.
 
-As a guide, a class needs at least 50 verdicts, and at least 10 in every score range above the threshold, before a threshold is fitted. Reviewing every class of a large model is a lot of images, so start with the classes you know to be unreliable.
+As a guide, a class needs at least 50 verdicts, and at least 10 in every score range above the threshold, before a threshold is fitted. Images that are left out for good because their raw file holds no image for them do not count towards these numbers: a range, or a class, with fewer images that can be shown is complete once all of those have a verdict. Reviewing every class of a large model is a lot of images, so start with the classes you know to be unreliable.
 
 ---
 
@@ -129,7 +145,7 @@ As a guide, a class needs at least 50 verdicts, and at least 10 in every score r
 
 The table lists every class with its status, the threshold the model has now, the threshold chosen by the review, and the estimated precision and share of predictions kept at the chosen threshold.
 
-Set the **target precision** (0.9 by default). For each class the app chooses the lowest threshold at which the estimated precision reaches the target. You can require the lower bound of the interval to reach the target instead, which is stricter.
+Set the **target precision** (0.9 by default). For each class the app chooses the lowest threshold such that the estimated precision reaches the target there and at every higher threshold. If the precision dips below the target somewhere along the curve, thresholds below the dip are not used, even where the precision recovers. Thresholds that would keep fewer than 10 predictions of the class are left out of this: a handful of images at the very top of the score range neither becomes the threshold nor rules out the ones below. You can require the lower bound of the interval to reach the target instead, which is stricter.
 
 | Status | Meaning | Threshold written |
 |---|---|---|
@@ -137,7 +153,7 @@ Set the **target precision** (0.9 by default). For each class the app chooses th
 | Set manually | You entered a threshold | Your value |
 | Not reviewed / Too few verdicts | Not enough evidence yet | The model's current threshold |
 | Too few predictions | Fewer than 50 predictions of the class in the review | The model's current threshold |
-| Target not reachable | Even the highest threshold misses the target | The model's current threshold |
+| Target not reachable | The highest threshold that keeps at least 10 predictions misses the target | The model's current threshold |
 
 Select a row to see the class's curve: precision above each candidate threshold with its interval, and the share of predictions kept. A manual threshold can be set or cleared below the plot.
 
@@ -180,7 +196,7 @@ These edges are also the only thresholds the review can choose, so every estimat
 
 Within each bin a random sample is reviewed. The precision above an edge is the average of the bin precisions, weighted by how many predictions each bin holds (not by how many were reviewed). The share kept is exact, because the number of predictions in each bin is known.
 
-The interval is simulated. The reviewed images of a bin are known; the precision of the rest of the bin is drawn from a Beta distribution fitted to the verdicts, and the bins are combined by size. A bin reviewed in full adds no uncertainty.
+The interval is simulated. The reviewed images of a bin are known; the precision of the rest of the bin is drawn from a Beta distribution fitted to the verdicts, the number of correct images among the rest is drawn with that precision, and the bins are added up. A bin reviewed in full adds no uncertainty.
 
 `estimate_precision_curve()` and `choose_class_threshold()` are the functions behind the Results page and can be used directly:
 

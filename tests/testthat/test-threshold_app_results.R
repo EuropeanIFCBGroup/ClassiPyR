@@ -273,6 +273,32 @@ test_that("thr_export_review writes the three files for every class", {
   expect_match(result$hint, result$json, fixed = TRUE)
 })
 
+test_that("results, curve and export of a frozen review need no index", {
+  for (how in c("deleted", "archived")) {
+    space <- thr_test_app_reviewed_space()
+    out <- file.path(space$root, "export")
+    dir.create(out)
+    with_index <- thr_test_app_resolve(space)
+    curve <- thr_class_curve(space$db_path, space$model_id, thr_test_app_class)
+
+    thr_test_lose_index(space, how)
+
+    expect_equal(thr_test_app_resolve(space), with_index, info = how)
+    expect_equal(thr_class_curve(space$db_path, space$model_id,
+                                 thr_test_app_class), curve, info = how)
+    result <- thr_export_review(space$db_path, space$model_id, target = 0.9,
+                                criterion = "estimate", out_folder = out,
+                                file_name = "fake_A_holdout_thresholds.json")
+    expect_true(all(file.exists(c(result$json, result$csv, result$report))),
+                info = how)
+    expect_equal(result$resolved, with_index, info = how)
+    if (how == "deleted") {
+      expect_false(file.exists(space$index_path))
+    }
+    unlink(space$root, recursive = TRUE)
+  }
+})
+
 test_that("thr_export_review writes nothing when one of the files exists", {
   space <- thr_test_app_reviewed_space()
   on.exit(unlink(space$root, recursive = TRUE), add = TRUE)

@@ -18,14 +18,19 @@ estimate_precision_curve(
 bin and the columns \code{bin} (1 to \code{length(edges)}), \code{n_population}
 (predictions in the bin), \code{n_verdicts} (reviewed predictions) and
 \code{n_correct} (reviewed predictions judged correct). Bins that are absent
-or have \code{n_population} 0 are empty strata. Other columns are ignored.}
+or have \code{n_population} 0 are empty strata. An optional column
+\code{n_unavailable} gives the predictions of the bin that can never be
+reviewed because their image could not be shown; it is taken as 0 when
+absent, and \code{n_verdicts + n_unavailable} cannot exceed \code{n_population}.
+Other columns are ignored.}
 
 \item{edges}{Lower edges of the score bins, increasing and starting at 0.
 Bin \code{b} is \verb{[edges[b], edges[b + 1])} and the last bin includes 1. These
 are also the candidate thresholds.}
 
 \item{min_stratum_n}{Verdicts a stratum needs before the edges at or below
-it count as supported (the whole stratum, when it is smaller).}
+it count as supported (every prediction of the stratum that can be
+reviewed, when those are fewer).}
 
 \item{n_sim}{Number of simulation draws for the interval.}
 
@@ -44,7 +49,8 @@ A data frame with one row per edge and the columns:
 \item{kept_share}{Their share of all predictions of the class (exact;
 \code{NA} when the class has no predictions).}
 \item{n_verdicts}{Verdicts in the bins at or above the edge.}
-\item{precision}{Estimated precision at or above the edge, or \code{NA}.}
+\item{precision}{Estimated precision at or above the edge, or \code{NA}.
+Strata in which nothing can be reviewed are left out of it.}
 \item{lower, upper}{Bounds of the interval, or \code{NA}.}
 \item{supported}{Whether the evidence at or above the edge is enough
 to act on.}
@@ -67,20 +73,35 @@ of verdicts, so over-sampling a small bin does not bias the estimate:
 over the non-empty strata \eqn{h} at or above the edge, with \eqn{N_h}
 predictions, \eqn{n_h} verdicts and \eqn{y_h} correct verdicts.
 
+A prediction whose image could not be shown (\code{n_unavailable}) can never be
+reviewed. In a stratum where some images are unavailable, the verdicts on
+the others stand in for the whole stratum, which keeps its full weight
+\eqn{N_h}. A stratum in which \strong{no} image can be reviewed carries no
+information and can never get any, so it is left out of the estimate and
+its interval altogether, numerator and denominator, instead of blocking
+the curve: the precision at an edge then describes the strata that could
+be reviewed. \code{n_population_kept} and \code{kept_share} still count every
+prediction.
+
 The interval is simulated. The reviewed predictions of a stratum are known;
 the precision of its unreviewed remainder is drawn from
-\code{Beta(y_h + 0.5, n_h - y_h + 0.5)}, and the strata are combined by their
-populations. The interval therefore narrows as more of a stratum is
-reviewed, and a stratum reviewed in full (\code{n_verdicts == n_population})
-contributes no uncertainty. The bounds are widened where needed to include
-the point estimate, which happens when every verdict of a sampled stratum
-agrees.
+\code{Beta(y_h + 0.5, n_h - y_h + 0.5)}, the number of correct predictions among
+the \eqn{N_h - n_h} unreviewed ones is drawn from a binomial with that
+precision, and the strata are added up. The interval therefore covers both
+the uncertainty about the precision of a stratum and the chance variation
+in a finite remainder. It narrows as more of a stratum is reviewed, and a
+stratum reviewed in full (\code{n_verdicts == n_population}) contributes no
+uncertainty. The bounds are widened where needed to include the point
+estimate, which happens when every verdict of a sampled stratum agrees.
 
-An edge has no estimate (\code{NA}) as soon as one non-empty stratum at or above
-it has no verdicts, or when it keeps no predictions at all. It is
-\code{supported} when every non-empty stratum at or above it has at least
-\code{min(n_population, min_stratum_n)} verdicts; an edge that keeps nothing is
-trivially supported.
+An edge has no estimate (\code{NA}) as soon as one stratum at or above it has
+images that can be reviewed but no verdicts, or when it keeps no prediction
+that can be reviewed. It is \code{supported} when every stratum at or above it
+has at least \code{min(n_population - n_unavailable, min_stratum_n)} verdicts,
+that is \code{min_stratum_n} of them or all that can be given. An edge that
+keeps nothing is trivially supported; an edge that keeps only predictions
+that cannot be reviewed is not supported, but does not hold back the edges
+below it.
 }
 \examples{
 # Three score bins: [0, 0.5), [0.5, 0.9) and [0.9, 1]

@@ -183,3 +183,10 @@ thr_test_app_source_server <- function() {
 thr_test_app_html <- function(tag) {
   paste(as.character(tag), collapse = "\n")
 }
+
+# What a browser sends on "Confirm page"
+thr_test_app_browser <- function(token, loaded, wrong = integer(),
+                                 failed = integer()) {
+  list(token = token, loaded = as.list(loaded), failed = as.list(failed),
+       wrong = as.list(wrong), nonce = stats::runif(1))
+}

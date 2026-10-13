@@ -32,7 +32,45 @@ test_that("thr_init_index_schema creates the tables and is idempotent", {
       "class_labels_json")
   )
   indexes <- DBI::dbGetQuery(con, "SELECT name FROM sqlite_master WHERE type = 'index'")
-  expect_true(all(c("rois_class_score", "files_model") %in% indexes$name))
+  expect_true(all(c("rois_class_score", "files_model", "files_sample") %in%
+                    indexes$name))
+})
+
+test_that("the duplicate lookup of a build is answered from an index", {
+  ws <- thr_test_workspace()
+  on.exit(unlink(ws$root, recursive = TRUE), add = TRUE)
+  thr_test_write_fake(ws$h5_folder, thr_test_samples[1])
+  build_threshold_index(ws$h5_folder, ws$index_path, reader = thr_test_fake_reader())
+
+  # The statement runs once per sample of every batch: a table scan there
+  # made a first build of 8000 files five times slower
+  plan <- thr_test_query(ws$index_path,
+                         paste("EXPLAIN QUERY PLAN", THR_DUPLICATE_LOOKUP_SQL),
+                         params = list(thr_test_samples[1]))
+  expect_match(plan$detail, "USING INDEX files_sample", fixed = TRUE)
+  expect_false(any(grepl("SCAN", plan$detail, fixed = TRUE)))
+})
+
+test_that("an index file written without the sample index gets it at the next build", {
+  ws <- thr_test_workspace()
+  on.exit(unlink(ws$root, recursive = TRUE), add = TRUE)
+  for (s in thr_test_samples[1:2]) thr_test_write_fake(ws$h5_folder, s)
+  build_threshold_index(ws$h5_folder, ws$index_path, reader = thr_test_fake_reader())
+  index_names <- function() {
+    thr_test_query(ws$index_path,
+                   "SELECT name FROM sqlite_master WHERE type = 'index'")$name
+  }
+  # What a file built by the first version of the index looks like
+  thr_test_execute(ws$index_path, "DROP INDEX IF EXISTS files_sample")
+  expect_false("files_sample" %in% index_names())
+
+  counter <- thr_test_counting_reader()
+  build_threshold_index(ws$h5_folder, ws$index_path, reader = counter$reader)
+
+  expect_true("files_sample" %in% index_names())
+  # Added in place: the cache is not thrown away for it
+  expect_length(counter$paths(), 0)
+  expect_identical(thr_test_files_table(ws$index_path)$status, c("ok", "ok"))
 })
 
 # --- scanning ----------------------------------------------------------------
@@ -102,6 +140,31 @@ test_that("thr_stale_files separates new, changed and missing files", {
   expect_identical(basename(stale$missing), basename(paths[[3]]))
   expect_named(stale$new, c("h5_path", "sample_name", "size", "mtime"))
   expect_named(stale$changed, c("h5_path", "sample_name", "size", "mtime"))
+})
+
+test_that("thr_stale_files can be limited to the files of one folder", {
+  ws <- thr_test_workspace()
+  on.exit(unlink(ws$root, recursive = TRUE), add = TRUE)
+  inside <- file.path(ws$h5_folder, "2024")
+  outside <- file.path(ws$h5_folder, "2023")
+  in_gone <- thr_test_write_fake(inside, thr_test_samples[1])
+  thr_test_write_fake(inside, thr_test_samples[2])
+  out_gone <- thr_test_write_fake(outside, thr_test_samples[3])
+  build_threshold_index(ws$h5_folder, ws$index_path, reader = thr_test_fake_reader())
+  unlink(c(in_gone, out_gone))
+  con <- DBI::dbConnect(RSQLite::SQLite(), ws$index_path)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  scanned <- thr_scan_h5_folder(inside)
+
+  everywhere <- thr_stale_files(con, scanned)
+  expect_length(everywhere$missing, 2)
+
+  # A file that went missing in another folder is that folder's business
+  here <- thr_stale_files(con, scanned, folder = thr_normalise_folder(inside))
+  expect_identical(basename(here$missing),
+                   paste0(thr_test_samples[1], "_class.h5"))
+  expect_equal(nrow(here$new), 0)
+  expect_equal(nrow(here$changed), 0)
 })
 
 test_that("thr_stale_files treats everything as new in an empty index", {

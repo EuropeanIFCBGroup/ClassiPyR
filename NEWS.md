@@ -7,6 +7,7 @@
   - Samples the classifier was trained on can be excluded, from a text file or straight from the annotations database, so thresholds are fitted on images the model has not seen.
   - Verdicts are kept per model: class-score files from different checkpoints are never pooled. Files scored before ifcb-classify stopped applying training augmentation at inference are refused, since their scores no longer match current inference.
   - A class without enough verdicts keeps the model's current threshold, and the export records where every value came from.
+  - A review survives its data being away: images whose raw data cannot be found stay pending and come back once it is available again, and a frozen review can be opened, shown and exported without the class-score files or their index.
 - New exported functions, all experimental: `build_threshold_index()` (builds or updates the cache of class-score files the app reads, and can be run from a script for large folders), `estimate_precision_curve()` and `choose_class_threshold()` (the estimate and the rule behind the app's results), and `write_thresholds_json()`, `write_thresholds_csv()` and `write_thresholds_report_csv()` (write a thresholds file that ifcb-classify reads back exactly, also usable for thresholds set by hand).
 
 # ClassiPyR 0.3.0

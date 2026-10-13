@@ -43,11 +43,32 @@ thr_check_target <- function(target) {
   invisible(NULL)
 }
 
+#' Count the predictions of a class that can be reviewed
+#'
+#' @param strata_counts Data frame of one class with the column
+#'   \code{n_population} and optionally \code{n_unavailable}, the predictions
+#'   whose image could not be shown (taken as 0 when absent).
+#' @return The number of predictions that have or can still get a verdict.
+#' @noRd
+thr_n_reviewable <- function(strata_counts) {
+  n_unavailable <- if ("n_unavailable" %in% names(strata_counts)) {
+    sum(strata_counts$n_unavailable)
+  } else {
+    0
+  }
+  sum(strata_counts$n_population) - n_unavailable
+}
+
 #' Classify how much review evidence a class has
+#'
+#' A class needs \code{min_class_n} verdicts, or a verdict on every prediction
+#' that can be reviewed when those are fewer: an image that could not be shown
+#' is never drawn again, so it must not keep the class waiting.
 #'
 #' @param strata_counts Data frame of one class with the columns
 #'   \code{n_population} and \code{n_verdicts} (zero rows for a class the
-#'   model never predicted).
+#'   model never predicted), and optionally \code{n_unavailable} (taken as 0
+#'   when absent).
 #' @param min_class_n Predictions and verdicts a class needs before a
 #'   threshold is fitted.
 #' @return One of \code{"too_few_predictions"} (fewer than \code{min_class_n}
@@ -70,7 +91,7 @@ thr_evidence_status <- function(strata_counts,
   if (n_verdicts == 0) {
     return("not_reviewed")
   }
-  if (n_verdicts < min_class_n) {
+  if (n_verdicts < min(min_class_n, thr_n_reviewable(strata_counts))) {
     return("under_reviewed")
   }
   "sufficient"
@@ -177,6 +198,28 @@ thr_fitted_reason <- function(curve, metric, candidates, meets, first, target,
   head
 }
 
+#' Edges of a precision curve that a threshold can be chosen from
+#'
+#' An edge has to be supported and keep predictions. One that keeps fewer
+#' than \code{min_kept} is left out as well, so that a handful of predictions
+#' at the very top of the score range neither blocks every threshold below
+#' them nor becomes the threshold. When no edge keeps that many, the class is
+#' small and all of its supported edges are used.
+#'
+#' @param curve Checked precision curve.
+#' @param min_kept Predictions an edge has to keep.
+#' @return Row numbers of the candidate edges, in increasing order.
+#' @noRd
+thr_choice_candidates <- function(curve, min_kept) {
+  if (!is.numeric(min_kept) || length(min_kept) != 1 || is.na(min_kept) ||
+      min_kept < 1) {
+    stop("`min_kept` must be a single number of 1 or more.", call. = FALSE)
+  }
+  assessable <- curve$supported & curve$n_population_kept > 0
+  weighty <- assessable & curve$n_population_kept >= min_kept
+  which(if (any(weighty)) weighty else assessable)
+}
+
 #' Choose a threshold for one class from its precision curve
 #'
 #' @description
@@ -186,12 +229,20 @@ thr_fitted_reason <- function(curve, metric, candidates, meets, first, target,
 #' only the thresholds the review evidence supports.
 #'
 #' @details
-#' Only edges that are `supported` and keep at least one prediction are
-#' considered; supported edges that keep nothing are skipped. The chosen
-#' threshold is the lowest of these such that it **and every higher one**
-#' meets the target. A dip below the target therefore blocks all thresholds
-#' below it, even ones where the precision recovers, because a threshold has
-#' to be safe for everything it lets through.
+#' Only edges that are `supported` and keep at least `min_kept` predictions
+#' are considered. The precision at an edge that keeps only a handful of
+#' predictions rests on those few images, so such an edge is neither chosen
+#' nor allowed to rule out the thresholds below it; when no edge of the class
+#' keeps `min_kept` predictions, every supported edge that keeps any is
+#' considered instead.
+#'
+#' The chosen threshold is the lowest of these such that it **and every
+#' higher one** meets the target. A dip below the target therefore blocks all
+#' thresholds below it, even ones where the precision recovers. The precision
+#' at an edge already covers everything that edge keeps, so the lower
+#' threshold would meet the target too; it is passed over as a precaution,
+#' because a curve that falls and rises again as the score increases is a
+#' sign that the scores of the class do not order its predictions well.
 #'
 #' The result is one of:
 #'
@@ -213,6 +264,8 @@ thr_fitted_reason <- function(curve, metric, candidates, meets, first, target,
 #' @param criterion What has to meet the target: `"estimate"`, the estimated
 #'   precision (the default), or `"lower"`, the lower bound of its interval,
 #'   which is stricter.
+#' @param min_kept Predictions an edge has to keep to be considered. Use 1
+#'   to consider every supported edge that keeps a prediction.
 #' @return A list with:
 #'   \describe{
 #'     \item{threshold}{The chosen threshold, or `NA` when none was chosen.}
@@ -243,7 +296,8 @@ thr_fitted_reason <- function(curve, metric, candidates, meets, first, target,
 #' @md
 choose_class_threshold <- function(curve,
                                    target = THR_DEFAULT_TARGET_PRECISION,
-                                   criterion = c("estimate", "lower")) {
+                                   criterion = c("estimate", "lower"),
+                                   min_kept = THR_MIN_STRATUM_VERDICTS) {
   criterion <- match.arg(criterion)
   thr_check_target(target)
   curve <- thr_check_curve(curve)
@@ -254,7 +308,7 @@ choose_class_threshold <- function(curve,
     "the lower bound of precision"
   }
 
-  candidates <- which(curve$supported & curve$n_population_kept > 0)
+  candidates <- thr_choice_candidates(curve, min_kept)
   if (length(candidates) == 0) {
     return(thr_choice_result("under_reviewed", thr_unassessed_reason(curve)))
   }
@@ -280,6 +334,14 @@ choose_class_threshold <- function(curve,
 
 #' Explain why no threshold of a curve can be assessed
 #'
+#' Asking for more review is sound for a curve of
+#' \code{\link{estimate_precision_curve}}: a score bin is only short of
+#' verdicts while it holds images that can still be reviewed, and a bin in
+#' which nothing can be reviewed does not hold back the edges below it. The
+#' one exception is a class in which no image at all can be reviewed, which
+#' the curve cannot tell from a class nobody has reviewed;
+#' \code{\link{thr_fit_class}} has the counts and words that case itself.
+#'
 #' @param curve Checked precision curve.
 #' @return A single string.
 #' @noRd
@@ -292,9 +354,49 @@ thr_unassessed_reason <- function(curve) {
         "images of this class.")
 }
 
+#' Explain why a class has too little evidence to be fitted
+#'
+#' @param evidence Status from \code{\link{thr_evidence_status}}, other than
+#'   \code{"sufficient"}.
+#' @param counts Stratum counts of the class.
+#' @param min_class_n Predictions and verdicts a class needs to be fitted.
+#' @return A single string. It asks for more review only when images are
+#'   left that can be reviewed.
+#' @noRd
+thr_evidence_reason <- function(evidence, counts, min_class_n) {
+  n_predicted <- sum(counts$n_population)
+  n_reviewable <- thr_n_reviewable(counts)
+  if (evidence == "too_few_predictions") {
+    if (n_predicted == 0) {
+      return("No predictions of this class in the review set.")
+    }
+    return(sprintf(paste("Only %d predictions of this class in the review",
+                         "set; at least %d are needed to fit a threshold."),
+                   n_predicted, min_class_n))
+  }
+  if (evidence == "not_reviewed") {
+    if (n_reviewable > 0) {
+      return("No images of this class have been reviewed yet.")
+    }
+    return(sprintf(paste("None of the %d predictions of this class can be",
+                         "reviewed, because their images could not be shown."),
+                   n_predicted))
+  }
+  if (n_reviewable >= min_class_n) {
+    return(sprintf(
+      "%d verdicts so far; at least %d are needed before a threshold is fitted.",
+      sum(counts$n_verdicts), min_class_n
+    ))
+  }
+  sprintf(paste("%d verdicts so far; all %d predictions whose image can be",
+                "shown need one before a threshold is fitted."),
+          sum(counts$n_verdicts), n_reviewable)
+}
+
 #' Fit one class: evidence check, then threshold choice
 #'
-#' @param counts Stratum counts of the class.
+#' @param counts Stratum counts of the class, with or without the column
+#'   \code{n_unavailable}.
 #' @param curve Its precision curve.
 #' @inheritParams thr_resolve_thresholds
 #' @return List with \code{status}, \code{reason} and \code{threshold}
@@ -306,24 +408,9 @@ thr_fit_class <- function(counts, curve, target, criterion, min_class_n) {
     choice <- choose_class_threshold(curve, target, criterion)
     return(choice[c("status", "reason", "threshold")])
   }
-  n_predicted <- sum(counts$n_population)
-  n_verdicts <- sum(counts$n_verdicts)
-  reason <- switch(
-    evidence,
-    too_few_predictions = if (n_predicted == 0) {
-      "No predictions of this class in the review set."
-    } else {
-      sprintf(paste("Only %d predictions of this class in the review set;",
-                    "at least %d are needed to fit a threshold."),
-              n_predicted, min_class_n)
-    },
-    not_reviewed = "No images of this class have been reviewed yet.",
-    under_reviewed = sprintf(
-      "%d verdicts so far; at least %d are needed before a threshold is fitted.",
-      n_verdicts, min_class_n
-    )
-  )
-  list(status = evidence, reason = reason, threshold = NA_real_)
+  list(status = evidence,
+       reason = thr_evidence_reason(evidence, counts, min_class_n),
+       threshold = NA_real_)
 }
 
 #' Decide the final threshold of one class
@@ -516,7 +603,9 @@ thr_align_overrides <- function(overrides, class_labels) {
 #'
 #' @param strata_counts Data frame for all classes with the columns
 #'   \code{class_name}, \code{bin}, \code{n_population}, \code{n_verdicts}
-#'   and \code{n_correct}. Classes without rows have no predictions.
+#'   and \code{n_correct}, and optionally \code{n_unavailable} (predictions
+#'   whose image could not be shown, which can never be reviewed; taken as 0
+#'   when absent). Classes without rows have no predictions.
 #' @param class_labels The model's class labels, in model order.
 #' @param fallback Numeric vector aligned with \code{class_labels}: the
 #'   model's current thresholds, \code{NA} where it has none.

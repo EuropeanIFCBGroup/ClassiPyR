@@ -53,9 +53,11 @@ setup_thr_folders_server <- function(input, output, session, state) {
   thr_wire_folder_browser(input, session, "thr_browse_roi_folder",
                           "thr_roi_folder", roots)
 
-  apply_settings <- function(review_dir, h5_folder, roi_folder, annotator) {
+  apply_settings <- function(review_dir, h5_folder, roi_folder, annotator,
+                             save = TRUE) {
     applied <- thr_app_try(
-      thr_apply_settings(review_dir, h5_folder, roi_folder, annotator)
+      thr_apply_settings(review_dir, h5_folder, roi_folder, annotator,
+                         save = save)
     )
     if (is.null(applied)) {
       return(invisible(FALSE))
@@ -71,22 +73,23 @@ setup_thr_folders_server <- function(input, output, session, state) {
 
   # Restore what was saved last time. Only the threshold app's own settings
   # are read here; the review folder is never guessed.
-  saved <- thr_load_settings()
-  restore <- function(key) thr_clean_path_input(saved[[key]]) %||% ""
-  updateTextInput(session, "thr_review_dir", value = restore("review_dir"))
-  updateTextInput(session, "thr_h5_folder", value = restore("h5_folder"))
-  updateTextInput(session, "thr_roi_folder", value = restore("roi_folder"))
-  updateTextInput(session, "thr_annotator", value = restore("annotator"))
-  if (nzchar(restore("review_dir")) && dir.exists(restore("review_dir"))) {
-    # A data folder that has gone since last time must not block the start
-    existing <- function(key) if (dir.exists(restore(key))) restore(key) else ""
-    apply_settings(restore("review_dir"), existing("h5_folder"),
-                   existing("roi_folder"), restore("annotator"))
+  saved <- thr_restorable_settings(thr_load_settings())
+  for (key in names(saved$fields)) {
+    updateTextInput(session, paste0("thr_", key), value = saved$fields[[key]])
+  }
+  if (saved$apply) {
+    # A data folder that has gone since last time must not block the start.
+    # It is left out of use, not out of the settings: nothing is saved here,
+    # so a disk that is only unmounted today is found again next time.
+    apply_settings(saved$fields$review_dir, saved$h5_folder, saved$roi_folder,
+                   saved$fields$annotator, save = FALSE)
+    state$settings_notice <- saved$notices
   }
 
   observeEvent(input$thr_apply_settings, {
     if (apply_settings(input$thr_review_dir, input$thr_h5_folder,
                        input$thr_roi_folder, input$thr_annotator)) {
+      state$settings_notice <- NULL
       showNotification("Folders applied and saved.", type = "message")
     }
   })
@@ -95,13 +98,14 @@ setup_thr_folders_server <- function(input, output, session, state) {
     if (is.null(state$review_dir)) {
       return("No review folder is in use yet. Choose one and press Apply.")
     }
-    paste0("Review folder in use: ", state$review_dir)
+    paste(c(paste0("Review folder in use: ", state$review_dir, "."),
+            state$settings_notice), collapse = " ")
   })
 }
 
 # ---- Index -------------------------------------------------------------------
 
-# Returns the reactive holding the indexed models
+# Returns the reactive holding the models of the review folder
 setup_thr_index_server <- function(input, output, session, state, reader) {
   observeEvent(input$thr_build_index, {
     if (is.null(state$review_dir) || is.null(state$h5_folder)) {
@@ -128,10 +132,21 @@ setup_thr_index_server <- function(input, output, session, state, reader) {
     }
   })
 
-  models <- reactive({
+  indexed <- reactive({
     req(state$review_dir)
     state$index_version
     thr_app_try(thr_index_models(thr_state_index_path(state)))
+  })
+
+  # The models that can be picked: those of the index and those whose review
+  # is frozen. The index is a cache, and a frozen review must stay reachable
+  # for its results and its export when the cache is gone.
+  models <- reactive({
+    req(state$review_dir)
+    state$frame_version
+    thr_review_models(
+      indexed(), thr_app_try(thr_frozen_models(thr_state_db_path(state)))
+    )
   })
 
   failures <- reactive({
@@ -145,20 +160,20 @@ setup_thr_index_server <- function(input, output, session, state, reader) {
     if (!is.null(state$index_message)) {
       return(state$index_message)
     }
-    indexed <- models()
-    if (is.null(indexed) || nrow(indexed) == 0) {
+    held <- indexed()
+    if (is.null(held) || nrow(held) == 0) {
       return("No usable class-score files are indexed yet. Build the index.")
     }
-    sprintf("The index holds %d usable class-score file(s) of %d model(s).",
-            sum(indexed$n_files), nrow(indexed))
+    # A sample that is usable in two indexed folders is counted once
+    sprintf(paste("The index holds usable class-score files for %d sample(s)",
+                  "of %d model(s)."), sum(held$n_files), nrow(held))
   })
 
   # One row per model: models are listed separately and never pooled
   output$thr_models_table <- renderTable({
-    indexed <- req(models())
-    req(nrow(indexed) > 0)
-    state$frame_version
-    thr_app_try(thr_models_table(indexed, thr_state_db_path(state)))
+    listed <- req(models())
+    req(nrow(listed) > 0)
+    thr_app_try(thr_models_table(listed))
   })
 
   output$thr_failures_ui <- renderUI({
@@ -189,8 +204,8 @@ setup_thr_index_server <- function(input, output, session, state, reader) {
 
 setup_thr_model_server <- function(input, output, session, state, models) {
   observe({
-    indexed <- models()
-    choices <- if (is.null(indexed)) character() else thr_model_choices(indexed)
+    listed <- models()
+    choices <- if (is.null(listed)) character() else thr_model_choices(listed)
     current <- isolate(input$thr_model)
     updateSelectInput(
       session, "thr_model", choices = choices,
@@ -199,10 +214,10 @@ setup_thr_model_server <- function(input, output, session, state, models) {
   })
 
   observe({
-    indexed <- models()
+    listed <- models()
     chosen <- input$thr_model
-    known <- !is.null(indexed) && length(chosen) == 1 &&
-      chosen %in% indexed$model_id
+    known <- !is.null(listed) && length(chosen) == 1 &&
+      chosen %in% listed$model_id
     state$model_id <- if (known) chosen else NULL
   })
 
@@ -279,15 +294,20 @@ setup_thr_preflight_server <- function(input, output, session, state) {
 
   observeEvent(input$thr_preflight, {
     req(state$review_dir, state$model_id)
-    state$preflight <- thr_app_try(thr_setup_preflight(
-      thr_state_index_path(state), state$model_id,
-      h5_folder = state$h5_folder %||% NA_character_,
-      roi_folder = state$roi_folder %||% NA_character_,
-      exclusion_file = input$thr_exclusion_file$datapath,
-      annotations_folder = state$annotations_folder,
-      fallback_mode = input$thr_fallback_mode %||% "h5",
-      fallback_json = input$thr_fallback_json
-    ))
+    state$preflight <- thr_app_try(
+      # The class-score folder is listed to compare it with the index
+      withProgress(message = "Checking the class-score folder", value = 0.5, {
+        thr_setup_preflight(
+          thr_state_index_path(state), state$model_id,
+          h5_folder = state$h5_folder %||% NA_character_,
+          roi_folder = state$roi_folder %||% NA_character_,
+          exclusion_file = input$thr_exclusion_file$datapath,
+          annotations_folder = state$annotations_folder,
+          fallback_mode = input$thr_fallback_mode %||% "h5",
+          fallback_json = input$thr_fallback_json
+        )
+      })
+    )
   })
 
   output$thr_preflight_ui <- renderUI({
@@ -355,7 +375,19 @@ setup_thr_freeze_server <- function(input, output, session, state) {
   observeEvent(input$thr_freeze_confirm, {
     removeModal()
     preflight <- state$preflight
-    req(state$review_dir, state$model_id, isTRUE(preflight$can_freeze))
+    # A frame without a folder would cover every folder ever indexed
+    req(state$review_dir, state$model_id, state$h5_folder,
+        isTRUE(preflight$can_freeze))
+    # The dialog may have been open for a while, and a freeze cannot be
+    # undone: the folder is compared with the index once more
+    current <- thr_app_try({
+      thr_check_index_current(thr_state_index_path(state), state$h5_folder)
+      TRUE
+    }, default = FALSE)
+    if (!current) {
+      state$preflight <- NULL
+      return()
+    }
     frozen <- thr_app_try(do.call(thr_freeze_frame, c(
       list(db_path = thr_state_db_path(state),
            index_path = thr_state_index_path(state),

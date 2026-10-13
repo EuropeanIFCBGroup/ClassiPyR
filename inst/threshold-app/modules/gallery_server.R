@@ -13,7 +13,9 @@ setup_thr_gallery_server <- function(input, output, session, state) {
   # The cards are keyed by draw id and carry the page token; which of them
   # are marked wrong is known to the browser only, until the page is confirmed
   output$thr_gallery <- renderUI({
-    thr_gallery_ui(state$page, resource_name, state$page_token)
+    thr_gallery_ui(state$page, resource_name, state$page_token,
+                   notice = state$page_notice,
+                   remaining = state$page_remaining)
   })
 
   output$thr_page_caption <- renderText({
@@ -24,10 +26,13 @@ setup_thr_gallery_server <- function(input, output, session, state) {
     session$sendCustomMessage("thrClearMarks", list())
   })
 
-  # Nothing to confirm without images on the page
+  # Nothing to confirm on a page without a draw a confirmation would settle:
+  # no page, an empty one, or one whose raw data was not found. The gallery
+  # script applies the same rule when it enables the button again.
   observe({
-    has_images <- !is.null(state$page) && nrow(state$page) > 0
-    shinyjs::toggleState("thr_confirm_btn", condition = has_images)
+    has_images <- !is.null(state$page) && any(state$page$extracted)
+    shinyjs::toggleState("thr_confirm_btn",
+                         condition = thr_page_can_confirm(state$page))
     shinyjs::toggleState("thr_clear_marks", condition = has_images)
   })
 
