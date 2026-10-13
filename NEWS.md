@@ -1,5 +1,14 @@
 # ClassiPyR (development version)
 
+## New features
+
+- **Threshold review app (experimental)**: `run_threshold_app()` launches a second, separate app for setting per-class decision thresholds from human review of hold-out samples. A reviewer picks a *predicted* class, sees a sample of that class's images drawn across many samples and spread evenly over score ranges, marks the wrong ones and confirms the page. From those verdicts the app estimates the precision above each candidate threshold, with an uncertainty interval, and exports per-class thresholds as a JSON file that the [ifcb-classify](https://github.com/nodc-sweden/ifcb-pytorch-classify) pipeline loads with `--thresholds`, plus a plain `class,threshold` CSV and a per-class report. See `vignette("threshold-review")`.
+  - It reads class-score `.h5` files and the raw data folder, keeps its verdicts in its own SQLite file in a review folder you choose, and does not touch the annotations database or the main app's settings.
+  - Samples the classifier was trained on can be excluded, from a text file or straight from the annotations database, so thresholds are fitted on images the model has not seen.
+  - Verdicts are kept per model: class-score files from different checkpoints are never pooled. Files scored before ifcb-classify stopped applying training augmentation at inference are refused, since their scores no longer match current inference.
+  - A class without enough verdicts keeps the model's current threshold, and the export records where every value came from.
+- New exported functions, all experimental: `build_threshold_index()` (builds or updates the cache of class-score files the app reads, and can be run from a script for large folders), `estimate_precision_curve()` and `choose_class_threshold()` (the estimate and the rule behind the app's results), and `write_thresholds_json()`, `write_thresholds_csv()` and `write_thresholds_report_csv()` (write a thresholds file that ifcb-classify reads back exactly, also usable for thresholds set by hand).
+
 # ClassiPyR 0.3.0
 
 - ClassiPyR now requires R >= 4.4.0 (for base R's `%||%` operator, which the app already relied on).

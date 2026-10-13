@@ -1,0 +1,145 @@
+/* Styles of the ClassiPyR threshold review app */
+
+/* The review toolbar stays in view while a long page is scrolled */
+.thr-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 5px;
+}
+
+.thr-toolbar .thr-mark-count {
+  margin-left: auto;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.thr-instruction {
+  margin-bottom: 10px;
+}
+
+/* Drag-select can start anywhere in this area */
+.thr-drag-area {
+  min-height: 200px;
+  padding: 10px;
+  margin: -10px;
+  cursor: crosshair;
+  user-select: none;
+}
+
+.thr-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+/* Gallery cards. Border + padding always sum to 8px so that marking a card
+   never changes its outer size: a wider border would push the last card of a
+   row onto the next line and shift every image after it. */
+.thr-card {
+  display: inline-block;
+  margin: 5px;
+  padding: 7px;
+  max-width: 100%;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  background-color: white;
+  /* Not markable until its image has loaded */
+  cursor: default;
+}
+
+.thr-card img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  /* Reserves room before the image arrives, so lazy loading has something
+     to scroll into view */
+  min-width: 40px;
+  min-height: 40px;
+}
+
+.thr-card.loaded {
+  cursor: pointer;
+}
+
+.thr-card.wrong {
+  padding: 5px;
+  border: 3px solid #dc3545;
+  background-color: #fdecea;
+}
+
+/* A draw without an image on the server, and an image the browser could not
+   load: greyed, and not markable */
+.thr-card.unavailable,
+.thr-card.failed {
+  background-color: #f0f0f0;
+  color: #777;
+  cursor: not-allowed;
+}
+
+.thr-card.failed img {
+  display: none;
+}
+
+.thr-placeholder {
+  display: none;
+  width: 110px;
+  height: 80px;
+  line-height: 80px;
+  text-align: center;
+  font-size: 11px;
+  overflow: hidden;
+  background: #e2e2e2;
+  border-radius: 3px;
+}
+
+.thr-card.unavailable .thr-placeholder,
+.thr-card.failed .thr-placeholder {
+  display: block;
+}
+
+.thr-caption {
+  margin-top: 3px;
+  font-size: 10px;
+  text-align: center;
+  word-break: break-all;
+  max-width: 220px;
+}
+
+.thr-caption .thr-score {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Rectangle drawn while drag-selecting */
+#thr-selection-box {
+  position: fixed;
+  display: none;
+  z-index: 1000;
+  pointer-events: none;
+  border: 2px dashed #dc3545;
+  background: rgba(220, 53, 69, 0.1);
+}
+
+.thr-facts td {
+  padding: 2px 12px 2px 0;
+  vertical-align: top;
+  word-break: break-all;
+}
+
+.thr-facts td:first-child {
+  white-space: nowrap;
+  color: #555;
+}
+
+.thr-path {
+  word-break: break-all;
+}

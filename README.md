@@ -25,6 +25,7 @@ A Shiny application for manual (human) image classification and validation of Im
 - **Efficient Workflow**: Drag-select, batch relabeling, class filtering
 - **MATLAB Compatible**: Optional `.mat` export for [ifcb-analysis](https://github.com/hsosik/ifcb-analysis) toolbox
 - **CNN Training Ready**: Organized PNG output by class
+- **Threshold Review** (experimental): A separate app, `run_threshold_app()`, for setting per-class decision thresholds from human review of hold-out samples
 
 ## Installation
 
@@ -57,6 +58,7 @@ No Python setup is needed: all file formats, including MATLAB `.mat` files for [
 - [Getting Started](https://europeanifcbgroup.github.io/ClassiPyR/articles/getting-started.html) - First-time setup
 - [User Guide](https://europeanifcbgroup.github.io/ClassiPyR/articles/user-guide.html) - Complete feature reference
 - [Class List Management](https://europeanifcbgroup.github.io/ClassiPyR/articles/class-management.html) - Managing classes for ifcb-analysis
+- [Threshold Review](https://europeanifcbgroup.github.io/ClassiPyR/articles/threshold-review.html) - Setting classifier thresholds from hold-out samples (experimental)
 - [FAQ & Troubleshooting](https://europeanifcbgroup.github.io/ClassiPyR/articles/faq.html) - Common issues
 
 ## Citation

@@ -1,0 +1,223 @@
+---
+title: "Threshold Review"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Threshold Review}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+> **Experimental.** The threshold review app is new and may change between versions.
+
+`run_threshold_app()` starts a second app that ships with `ClassiPyR`. It has one job: to set per-class decision thresholds for a CNN classifier from human review of samples the classifier was not trained on.
+
+---
+
+## Why a separate review
+
+A classifier gives every image a score for its winning class. A per-class threshold decides how high that score must be before the label is accepted; below it the image is left `unclassified`.
+
+Thresholds fitted during training are fitted on a random split of the training images. Those images come from the same samples as the training data and were picked by annotators, so the classifier does better on them than it does on new samples, and the fitted thresholds end up too lenient.
+
+The remedy is to check the classifier on samples it has not seen:
+
+- The review works **per predicted class, across many samples**. A threshold only ever acts on the winning class, so for each image it is enough to know the predicted class, its score, and whether the prediction was right.
+- A verdict is **correct or wrong**. There is no relabelling and no class list to manage.
+- Images are **sampled evenly across score ranges**. Most scores sit close to 1, so reviewing a plain random sample would say almost nothing about the range where the threshold belongs.
+
+The app does not measure recall. It tells you how precise a class is above each candidate threshold and what share of its predictions each threshold keeps, which is what a threshold decision needs.
+
+---
+
+## Before you start
+
+You need:
+
+1. **Class-score files** (`*_class.h5`) for the samples you want to review, written by [ifcb-classify](https://github.com/nodc-sweden/ifcb-pytorch-classify) with the model you want thresholds for. The files must come from a version that records what produced them (the transform applied and the checkpoint hash). Older files were scored with the training augmentation switched on and are refused; re-run inference on those samples.
+2. **The raw data** (`.roi`, `.adc`, `.hdr`) for the same samples, so the images can be shown.
+3. **A list of the samples the model was trained on**, so they can be left out. This can be a text file with one sample name per line, or the annotations database of the main app if the training set was built from it.
+4. **A review folder**: an empty folder on a local disk where the verdicts are stored. Use one folder per review. It is separate from the annotations database of the main app, which the threshold app never writes to.
+
+The `hdf5r` package must be installed:
+
+```{r, eval = FALSE}
+install.packages("hdf5r")
+```
+
+---
+
+## Start the app
+
+```{r, eval = FALSE}
+library(ClassiPyR)
+run_threshold_app()
+```
+
+The app has four pages: **Setup**, **Review**, **Results** and **Export**.
+
+---
+
+## Setup
+
+### Folders
+
+Fill in the review folder, the class-score folder and the raw data folder, add your name, and press **Apply**. The folders are remembered for next time.
+
+### Class-score index
+
+**Build / update index** reads every class-score file once and stores, for each image, its predicted class and top score. Later runs only read files that are new or have changed.
+
+For a large archive the first build takes a while. It can also be run from a script, for example overnight:
+
+```{r, eval = FALSE}
+build_threshold_index(
+  h5_folder  = "/data/ifcb/class_scores",
+  index_path = "/data/ifcb/threshold_review/threshold_index.sqlite"
+)
+```
+
+The index file must be named `threshold_index.sqlite` and sit in the review folder.
+
+After the build the page lists the models found. Class-score files from different checkpoints are listed as different models and are never mixed. Files that cannot be used are listed with the reason.
+
+### Start review
+
+Pick the model, then:
+
+1. **Training samples to exclude.** Upload the text file, or read the annotated samples from the main app's `annotations.sqlite`, or both. Leaving training samples in makes the estimated precision too high.
+2. **Samples without raw data** are counted and left out automatically.
+3. **Fallback thresholds.** A class that the review cannot fit keeps the threshold the model has now. Point the app at the model's `*_thresholds_and_metrics.json` from training, or use the values stored in the class-score files.
+4. Press **Check** to see what the review would cover, then **Freeze and start**.
+
+Freezing fixes the set of samples, the exclusions and the score ranges for this model. This is what makes the later estimates valid, so it cannot be changed afterwards:
+
+- Class-score files added later are **not** added to the review. The page tells you when there are any.
+- Files that are moved or rewritten after the freeze are no longer drawn from. Verdicts already given stay valid.
+
+To review a different set of samples, start again with a new review folder.
+
+---
+
+## Review
+
+Pick a predicted class and press **Load page**. The class list shows how many verdicts each class has out of its predictions.
+
+The page shows images the model labelled as that class, drawn from across the samples and sorted by score.
+
+- **Click every image that is not the class.** Mark doubtful images wrong.
+- **Drag** from the space between images to mark several at once.
+- Press **Confirm page**. Unmarked images are recorded as correct.
+
+Only images you have actually had on screen are recorded. Images further down the page that you have not scrolled to, and images that did not load, are left out and come back on a later page. The counter above the gallery shows how many images of the page you have viewed.
+
+**Undo last page** takes back the verdicts of the last confirmed page.
+
+Each new page fills up the score ranges with the fewest verdicts first. *Verdicts per score bin for this class* shows how far each range has come. Small ranges are reviewed in full.
+
+As a guide, a class needs at least 50 verdicts, and at least 10 in every score range above the threshold, before a threshold is fitted. Reviewing every class of a large model is a lot of images, so start with the classes you know to be unreliable.
+
+---
+
+## Results
+
+The table lists every class with its status, the threshold the model has now, the threshold chosen by the review, and the estimated precision and share of predictions kept at the chosen threshold.
+
+Set the **target precision** (0.9 by default). For each class the app chooses the lowest threshold at which the estimated precision reaches the target. You can require the lower bound of the interval to reach the target instead, which is stricter.
+
+| Status | Meaning | Threshold written |
+|---|---|---|
+| Fitted | Enough verdicts, and a threshold meets the target | The fitted threshold |
+| Set manually | You entered a threshold | Your value |
+| Not reviewed / Too few verdicts | Not enough evidence yet | The model's current threshold |
+| Too few predictions | Fewer than 50 predictions of the class in the review | The model's current threshold |
+| Target not reachable | Even the highest threshold misses the target | The model's current threshold |
+
+Select a row to see the class's curve: precision above each candidate threshold with its interval, and the share of predictions kept. A manual threshold can be set or cleared below the plot.
+
+The interval covers sampling error within the reviewed score ranges. It says nothing about samples outside the review, about classes or ranges that were not reviewed, or about mistakes in the verdicts.
+
+---
+
+## Export
+
+**Export** writes three files:
+
+- `<model>_holdout_thresholds.json`: the thresholds for ifcb-classify. It contains every class and records, per class, where the value came from.
+- `<model>_holdout_thresholds.csv`: a plain `class,threshold` table.
+- `<model>_holdout_thresholds_report.csv`: one row per class with the counts and estimates behind each value.
+
+Use the JSON file in ifcb-classify:
+
+```bash
+python -m ifcb_classify infer --config configs/infer_default.yaml \
+    --thresholds /path/to/<model>_holdout_thresholds.json
+```
+
+or set `thresholds_path` in the inference config.
+
+Keep the export out of the checkpoint's own folder, or at least keep its name. ifcb-classify picks up `thresholds.json` and `*_thresholds_and_metrics.json` next to a checkpoint automatically, and the app refuses to write under those names so that it cannot silently replace the thresholds from training.
+
+The thresholds take effect in class-score files written from then on. Files written earlier keep the labels they were given, so re-run inference (with `--overwrite`) on samples whose labels should follow the new thresholds.
+
+---
+
+## How the estimate works
+
+For each class, the predictions are divided into score ranges (bins) with fixed edges:
+
+```{r, eval = FALSE}
+0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 0.8, 0.9, 0.95, 0.98, 0.99, 0.995, 0.999, 0.9999
+```
+
+These edges are also the only thresholds the review can choose, so every estimate is built from whole bins.
+
+Within each bin a random sample is reviewed. The precision above an edge is the average of the bin precisions, weighted by how many predictions each bin holds (not by how many were reviewed). The share kept is exact, because the number of predictions in each bin is known.
+
+The interval is simulated. The reviewed images of a bin are known; the precision of the rest of the bin is drawn from a Beta distribution fitted to the verdicts, and the bins are combined by size. A bin reviewed in full adds no uncertainty.
+
+`estimate_precision_curve()` and `choose_class_threshold()` are the functions behind the Results page and can be used directly:
+
+```{r}
+library(ClassiPyR)
+
+# Verdicts for one class: 3 score bins with 400, 250 and 900 predictions
+counts <- data.frame(
+  bin          = 1:3,
+  n_population = c(400, 250, 900),
+  n_verdicts   = c(40, 40, 40),
+  n_correct    = c(22, 33, 39)
+)
+
+curve <- estimate_precision_curve(counts, edges = c(0, 0.5, 0.9), seed = 1)
+curve[, c("threshold", "kept_share", "precision", "lower", "upper")]
+
+choose_class_threshold(curve, target = 0.9)$threshold
+```
+
+---
+
+## Writing thresholds by hand
+
+`write_thresholds_json()` can also write thresholds you have decided yourself. It writes the file so that ifcb-classify reads back exactly the values given, and refuses anything ifcb-classify would misread, such as a class without a threshold.
+
+```{r, eval = FALSE}
+export <- list(
+  model_name = "my_model",
+  validation_transform = "dataset_squarepad",
+  class_metrics = list(
+    Skeletonema_spp = list(class_name = "Skeletonema_spp", threshold = 0.9),
+    Debris          = list(class_name = "Debris", threshold = 0.5)
+  )
+)
+
+write_thresholds_json(export, "my_model_manual_thresholds.json")
+```
+
+Every class of the model must be listed. A class that is missing from a thresholds file gets no threshold at all in ifcb-classify.

@@ -31,6 +31,8 @@ navbar:
         href: articles/user-guide.html
       - text: Class List Management
         href: articles/class-management.html
+      - text: Threshold Review
+        href: articles/threshold-review.html
       - text: '---'
       - text: FAQ & Troubleshooting
         href: articles/faq.html
@@ -89,6 +91,17 @@ reference:
   - load_global_class_list_db
   - load_class_annotations_db
   - save_class_review_changes_db
+- title: Threshold Review
+  desc: Experimental. Review classifier predictions on hold-out samples and fit
+    per-class decision thresholds
+  contents:
+  - run_threshold_app
+  - build_threshold_index
+  - estimate_precision_curve
+  - choose_class_threshold
+  - write_thresholds_json
+  - write_thresholds_csv
+  - write_thresholds_report_csv
 - title: WoRMS Taxonomy
   desc: Functions for matching class names to WoRMS AphiaID values
   contents:
