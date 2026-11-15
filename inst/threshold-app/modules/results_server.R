@@ -10,7 +10,7 @@ setup_thr_results_server <- function(input, output, session, state) {
     req(isTRUE(state$frozen))
     state$data_version
     target <- input$thr_target
-    validate(need(
+    shiny::validate(shiny::need(
       is.numeric(target) && length(target) == 1 && !is.na(target) &&
         target > 0 && target <= 1,
       "Enter a target precision above 0 and at most 1."
