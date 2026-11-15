@@ -1,6 +1,6 @@
 # Sample saving functions for ClassiPyR
 
-#' @importFrom iRfcb ifcb_annotate_samples
+#' @importFrom iRfcb ifcb_annotate_samples ifcb_create_class2use
 NULL
 
 #' Save sample annotations
@@ -34,8 +34,13 @@ NULL
 #'   statistics CSV files are written to a \code{validation_statistics/}
 #'   subfolder inside \code{output_folder}. Set to \code{FALSE} to skip this
 #'   export, e.g. when annotating from scratch.
+#' @param force Logical. By default (\code{FALSE}) a sample without any
+#'   relabeled image is not saved, so that merely browsing samples does not
+#'   mark them as annotated. Set to \code{TRUE} to save the classifications as
+#'   they are, e.g. to record that every auto-classification of a sample was
+#'   reviewed and found correct.
 #' @return TRUE on success, FALSE when there is nothing to save (empty changes
-#'   log) or required inputs are missing. Errors raised while writing any
+#'   log and \code{force = FALSE}) or required inputs are missing. Errors raised while writing any
 #'   backend propagate to the caller, so callers can distinguish a failed save
 #'   from an empty one.
 #' @export
@@ -69,7 +74,8 @@ save_sample_annotations <- function(sample_name,
                                      adc_folder = NULL,
                                      save_format = "sqlite",
                                      db_folder = get_default_db_dir(),
-                                     export_statistics = TRUE) {
+                                     export_statistics = TRUE,
+                                     force = FALSE) {
 
   if (is.null(sample_name) || is.null(classifications)) {
     return(FALSE)
@@ -80,8 +86,9 @@ save_sample_annotations <- function(sample_name,
     return(FALSE)
   }
 
-  # Only save if there are changes
-  if (nrow(changes_log) == 0) {
+  # Only save if there are changes, unless the caller asks for the sample to
+  # be saved as it is
+  if (nrow(changes_log) == 0 && !isTRUE(force)) {
     return(FALSE)
   }
 
@@ -93,17 +100,23 @@ save_sample_annotations <- function(sample_name,
     dir.create(png_output_folder, recursive = TRUE)
   }
 
-  # Copy images to class subfolders
-  temp_annotate_folder <- tempfile(pattern = "ifcb_annotate_")
-  dir.create(temp_annotate_folder, recursive = TRUE)
-  on.exit(unlink(temp_annotate_folder, recursive = TRUE), add = TRUE)
+  # Copy images to class subfolders. The temporary copy is the input of
+  # ifcb_annotate_samples(), so it is only made for a MAT save.
+  write_mat <- save_format %in% c("mat", "both")
+  temp_annotate_folder <- NULL
+  if (write_mat) {
+    temp_annotate_folder <- tempfile(pattern = "ifcb_annotate_")
+    dir.create(temp_annotate_folder, recursive = TRUE)
+    on.exit(unlink(temp_annotate_folder, recursive = TRUE), add = TRUE)
+  }
 
   copy_images_to_class_folders(
     classifications = classifications,
     src_folder = file.path(temp_png_folder, sample_name),
-    temp_folder = temp_annotate_folder,
+    temp_folder = if (write_mat) file.path(temp_annotate_folder, "png"),
     output_folder = png_output_folder
   )
+  remove_relabeled_class_images(classifications, changes_log, png_output_folder)
 
   # Save to SQLite
   if (save_format %in% c("sqlite", "both")) {
@@ -117,17 +130,34 @@ save_sample_annotations <- function(sample_name,
   }
 
   # Save to .mat
-  if (save_format %in% c("mat", "both")) {
+  if (write_mat) {
     # Find ADC folder: use provided path, or fall back to get_sample_paths()
     if (is.null(adc_folder)) {
       paths <- get_sample_paths(sample_name, roi_folder)
       adc_folder <- paths$adc_folder
     }
 
+    # The class indices written to the file must come from the class list the
+    # annotations were made with. A class2use file on disk can be older than
+    # that list (classes added or renamed in the app), and every class it
+    # lacks would be written as unclassified, so the list itself is used
+    # whenever it is supplied.
+    class2use_file <- class2use_path
+    if (!is.null(class2use)) {
+      class2use_file <- file.path(temp_annotate_folder, "class2use.mat")
+      ifcb_create_class2use(class2use, class2use_file)
+      on.exit(unlink(class2use_file), add = TRUE)
+    }
+    png_annotate_folder <- file.path(temp_annotate_folder, "png")
+    if (!dir.exists(png_annotate_folder)) {
+      stop("No images found for sample ", sample_name,
+           "; cannot write the .mat file")
+    }
+
     ifcb_annotate_samples(
-      png_folder = temp_annotate_folder,
+      png_folder = png_annotate_folder,
       adc_folder = adc_folder,
-      class2use_file = class2use_path,
+      class2use_file = class2use_file,
       output_folder = output_folder,
       sample_names = sample_name,
       remove_trailing_numbers = FALSE
@@ -159,8 +189,10 @@ save_sample_annotations <- function(sample_name,
 #'
 #' @param classifications Classifications data frame with file_name and class_name columns
 #' @param src_folder Source folder containing PNG images
-#' @param temp_folder Temporary folder for ifcb_annotate_samples
-#' @param output_folder Permanent output folder for class-organized images
+#' @param temp_folder Temporary folder for ifcb_annotate_samples, or
+#'   \code{NULL} to skip that copy.
+#' @param output_folder Permanent output folder for class-organized images. An
+#'   image that is already there with the same size is not copied again.
 #' @return NULL (called for side effects)
 #' @export
 #' @examples
@@ -177,28 +209,70 @@ save_sample_annotations <- function(sample_name,
 #' )
 #' }
 copy_images_to_class_folders <- function(classifications, src_folder, temp_folder, output_folder) {
-  for (i in seq_len(nrow(classifications))) {
-    img_file <- classifications$file_name[i]
-    class_name <- classifications$class_name[i]
+  src <- file.path(src_folder, classifications$file_name)
+  available <- file.exists(src)
+  if (!any(available)) {
+    return(invisible(NULL))
+  }
+  src <- src[available]
+  file_name <- classifications$file_name[available]
+  class_name <- classifications$class_name[available]
 
-    src_path <- file.path(src_folder, img_file)
-
-    if (file.exists(src_path)) {
-      # Temp folder for ifcb_annotate_samples
-      temp_class_folder <- file.path(temp_folder, class_name)
-      if (!dir.exists(temp_class_folder)) {
-        dir.create(temp_class_folder, recursive = TRUE)
-      }
-      file.copy(src_path, file.path(temp_class_folder, img_file), overwrite = TRUE)
-
-      # Permanent output folder organized by class
-      output_class_folder <- file.path(output_folder, class_name)
-      if (!dir.exists(output_class_folder)) {
-        dir.create(output_class_folder, recursive = TRUE)
-      }
-      file.copy(src_path, file.path(output_class_folder, img_file), overwrite = TRUE)
+  copy_to <- function(base_folder, skip_identical) {
+    class_folders <- file.path(base_folder, class_name)
+    for (folder in unique(class_folders)) {
+      dir.create(folder, recursive = TRUE, showWarnings = FALSE)
+    }
+    dest <- file.path(class_folders, file_name)
+    todo <- rep(TRUE, length(dest))
+    if (skip_identical) {
+      dest_size <- file.size(dest)
+      todo <- is.na(dest_size) | dest_size != file.size(src)
+    }
+    if (any(todo)) {
+      file.copy(src[todo], dest[todo], overwrite = TRUE)
     }
   }
+
+  # Temp folder for ifcb_annotate_samples
+  if (!is.null(temp_folder)) copy_to(temp_folder, skip_identical = FALSE)
+  # Permanent output folder organized by class
+  if (!is.null(output_folder)) copy_to(output_folder, skip_identical = TRUE)
+
+  invisible(NULL)
+}
+
+# Remove the copies of relabeled images left in their previous class folders
+#
+# Saving copies every image into the folder of its current class. An image
+# that was saved under one class and relabeled later would otherwise stay in
+# the old class folder as well, leaving the PNG output with the same image
+# under two classes.
+#
+# @param classifications Current classifications (file_name, class_name).
+# @param changes_log Changes log (image, original_class, new_class).
+# @param output_folder Class-organized PNG output folder.
+# @return Character vector of the removed files, invisibly.
+# @noRd
+remove_relabeled_class_images <- function(classifications, changes_log,
+                                          output_folder) {
+  if (is.null(changes_log) || nrow(changes_log) == 0 ||
+      is.null(output_folder) || !dir.exists(output_folder)) {
+    return(invisible(character()))
+  }
+  previous_class <- as.character(changes_log$original_class)
+  image <- as.character(changes_log$image)
+  current_class <- classifications$class_name[match(image, classifications$file_name)]
+
+  # A class name is used as a single folder name; anything else is left alone
+  plain <- !is.na(previous_class) & nzchar(previous_class) &
+    !grepl(PATH_SEPARATOR_CHARS, previous_class) & !grepl("\\.\\.", previous_class) &
+    !grepl(PATH_SEPARATOR_CHARS, image)
+  stale <- plain & !is.na(current_class) & previous_class != current_class
+  paths <- unique(file.path(output_folder, previous_class[stale], image[stale]))
+  paths <- paths[file.exists(paths)]
+  unlink(paths)
+  invisible(paths)
 }
 
 #' Save validation statistics to CSV files

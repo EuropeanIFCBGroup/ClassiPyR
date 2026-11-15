@@ -525,3 +525,203 @@ test_that("save_sample_annotations propagates backend errors", {
     export_statistics = FALSE
   ))
 })
+
+# ---------------------------------------------------------------------------
+# Relabeled images, forced saves and the class list of MAT saves
+# ---------------------------------------------------------------------------
+
+# A temporary folder that is removed when the calling test ends
+local_test_dir <- function(env = parent.frame()) {
+  base <- tempfile("classipyr_test_")
+  dir.create(base)
+  do.call(on.exit,
+          list(substitute(unlink(b, recursive = TRUE), list(b = base)),
+               add = TRUE),
+          envir = env)
+  base
+}
+
+# A sample folder of three small PNG files and what describes it
+local_png_sample <- function(sample_name = "D20230101T120000_IFCB134",
+                             env = parent.frame()) {
+  base <- local_test_dir(env)
+  src <- file.path(base, "png")
+  dir.create(file.path(src, sample_name), recursive = TRUE)
+  files <- sprintf("%s_%05d.png", sample_name, 1:3)
+  for (f in files) writeBin(as.raw(1:10), file.path(src, sample_name, f))
+  list(base = base, src = src, sample_name = sample_name, files = files)
+}
+
+test_that("copy_images_to_class_folders skips the temp copy when not asked for", {
+  s <- local_png_sample()
+  out <- file.path(s$base, "out")
+  classifications <- data.frame(file_name = s$files,
+                                class_name = c("A", "B", "A"),
+                                stringsAsFactors = FALSE)
+
+  copy_images_to_class_folders(classifications, file.path(s$src, s$sample_name),
+                               temp_folder = NULL, output_folder = out)
+
+  expect_setequal(list.files(out, recursive = TRUE),
+                  file.path(c("A", "B", "A"), s$files))
+})
+
+test_that("saving removes a relabeled image from its previous class folder", {
+  s <- local_png_sample()
+  out <- file.path(s$base, "out")
+  save_sample <- function(classes, changes_log) {
+    classifications <- data.frame(file_name = s$files, class_name = classes,
+                                  score = NA_real_, stringsAsFactors = FALSE)
+    save_sample_annotations(
+      sample_name = s$sample_name,
+      classifications = classifications,
+      original_classifications = classifications,
+      changes_log = changes_log,
+      temp_png_folder = s$src,
+      output_folder = file.path(s$base, "manual"),
+      png_output_folder = out,
+      roi_folder = s$base,
+      class2use_path = NULL,
+      class2use = c("unclassified", "A", "B"),
+      save_format = "sqlite",
+      db_folder = file.path(s$base, "db"),
+      export_statistics = FALSE
+    )
+  }
+
+  first <- data.frame(image = s$files, original_class = "unclassified",
+                      new_class = "A", stringsAsFactors = FALSE)
+  expect_true(save_sample(c("A", "A", "A"), first))
+  expect_setequal(list.files(file.path(out, "A")), s$files)
+
+  # The second image moves from A to B in a later session
+  second <- data.frame(image = s$files[2], original_class = "A",
+                       new_class = "B", stringsAsFactors = FALSE)
+  expect_true(save_sample(c("A", "B", "A"), second))
+
+  expect_setequal(list.files(file.path(out, "A")), s$files[c(1, 3)])
+  expect_equal(list.files(file.path(out, "B")), s$files[2])
+})
+
+test_that("remove_relabeled_class_images leaves current and odd folders alone", {
+  s <- local_png_sample()
+  out <- file.path(s$base, "out")
+  dir.create(file.path(out, "A"), recursive = TRUE)
+  dir.create(file.path(out, "B"))
+  file.create(file.path(out, c("A", "B"), s$files[1]))
+
+  classifications <- data.frame(file_name = s$files[1], class_name = "A",
+                                stringsAsFactors = FALSE)
+  # A -> B -> A: the image is back in A, only the B copy is stale
+  changes_log <- data.frame(
+    image = s$files[1],
+    original_class = c("A", "B", "../A"),
+    new_class = c("B", "A", "A"),
+    stringsAsFactors = FALSE
+  )
+  removed <- remove_relabeled_class_images(classifications, changes_log, out)
+
+  expect_equal(basename(dirname(removed)), "B")
+  expect_true(file.exists(file.path(out, "A", s$files[1])))
+  expect_false(file.exists(file.path(out, "B", s$files[1])))
+})
+
+test_that("save_sample_annotations saves an unchanged sample only when forced", {
+  s <- local_png_sample()
+  classifications <- data.frame(file_name = s$files, class_name = "A",
+                                score = 0.9, stringsAsFactors = FALSE)
+  save_sample <- function(force) {
+    save_sample_annotations(
+      sample_name = s$sample_name,
+      classifications = classifications,
+      original_classifications = classifications,
+      changes_log = create_empty_changes_log(),
+      temp_png_folder = s$src,
+      output_folder = file.path(s$base, "manual"),
+      png_output_folder = file.path(s$base, "out"),
+      roi_folder = s$base,
+      class2use_path = NULL,
+      class2use = c("unclassified", "A"),
+      save_format = "sqlite",
+      db_folder = file.path(s$base, "db"),
+      export_statistics = FALSE,
+      force = force
+    )
+  }
+
+  expect_false(save_sample(force = FALSE))
+  expect_false(file.exists(get_db_path(file.path(s$base, "db"))))
+
+  expect_true(save_sample(force = TRUE))
+  expect_equal(list_annotated_samples_db(get_db_path(file.path(s$base, "db"))),
+               s$sample_name)
+})
+
+test_that("a MAT save uses the class list in use, not an outdated class2use file", {
+  sample_name <- "D20220522T000439_IFCB134"
+  png_folder <- testthat::test_path("test_data", "png")
+  roi_folder <- testthat::test_path("test_data", "raw")
+  class2use_path <- testthat::test_path("test_data", "class2use.mat")
+  skip_if_not(dir.exists(file.path(png_folder, sample_name)), "Test PNG folder not found")
+  skip_if_not(file.exists(class2use_path), "Test class2use file not found")
+
+  png_files <- list.files(file.path(png_folder, sample_name), pattern = "\\.png$")
+  roi_numbers <- as.integer(sub(".*_(\\d+)\\.png$", "\\1", png_files))
+
+  # A class added in the app after the class2use file was written
+  file_classes <- as.character(iRfcb::ifcb_get_mat_variable(class2use_path))
+  class2use <- c(file_classes, "Brand_new_class")
+  classifications <- data.frame(
+    file_name = png_files,
+    class_name = "Brand_new_class",
+    score = NA_real_,
+    stringsAsFactors = FALSE
+  )
+  changes_log <- data.frame(image = png_files, original_class = "unclassified",
+                            new_class = "Brand_new_class",
+                            stringsAsFactors = FALSE)
+  base <- local_test_dir()
+
+  expect_true(save_sample_annotations(
+    sample_name = sample_name,
+    classifications = classifications,
+    original_classifications = classifications,
+    changes_log = changes_log,
+    temp_png_folder = png_folder,
+    output_folder = file.path(base, "manual"),
+    png_output_folder = file.path(base, "out"),
+    roi_folder = roi_folder,
+    class2use_path = class2use_path,
+    class2use = class2use,
+    save_format = "mat",
+    db_folder = file.path(base, "db"),
+    export_statistics = FALSE
+  ))
+
+  mat_file <- file.path(base, "manual", paste0(sample_name, ".mat"))
+  classlist <- iRfcb::ifcb_get_mat_variable(mat_file, variable_name = "classlist")
+  mat_classes <- as.character(iRfcb::ifcb_get_mat_variable(
+    mat_file, variable_name = "class2use_manual"
+  ))
+
+  expect_equal(mat_classes, class2use)
+  expect_equal(unique(classlist[roi_numbers, 2]), length(class2use))
+
+  # The same works without any class2use file
+  expect_true(save_sample_annotations(
+    sample_name = sample_name,
+    classifications = classifications,
+    original_classifications = classifications,
+    changes_log = changes_log,
+    temp_png_folder = png_folder,
+    output_folder = file.path(base, "manual2"),
+    png_output_folder = file.path(base, "out"),
+    roi_folder = roi_folder,
+    class2use_path = NULL,
+    class2use = class2use,
+    save_format = "mat",
+    db_folder = file.path(base, "db"),
+    export_statistics = FALSE
+  ))
+  expect_true(file.exists(file.path(base, "manual2", paste0(sample_name, ".mat"))))
+})

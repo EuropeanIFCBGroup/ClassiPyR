@@ -19,7 +19,8 @@ save_sample_annotations(
   adc_folder = NULL,
   save_format = "sqlite",
   db_folder = get_default_db_dir(),
-  export_statistics = TRUE
+  export_statistics = TRUE,
+  force = FALSE
 )
 }
 \arguments{
@@ -61,10 +62,16 @@ not a network drive.}
 statistics CSV files are written to a \code{validation_statistics/}
 subfolder inside \code{output_folder}. Set to \code{FALSE} to skip this
 export, e.g. when annotating from scratch.}
+
+\item{force}{Logical. By default (\code{FALSE}) a sample without any
+relabeled image is not saved, so that merely browsing samples does not
+mark them as annotated. Set to \code{TRUE} to save the classifications as
+they are, e.g. to record that every auto-classification of a sample was
+reviewed and found correct.}
 }
 \value{
 TRUE on success, FALSE when there is nothing to save (empty changes
-  log) or required inputs are missing. Errors raised while writing any
+  log and \code{force = FALSE}) or required inputs are missing. Errors raised while writing any
   backend propagate to the caller, so callers can distinguish a failed save
   from an empty one.
 }

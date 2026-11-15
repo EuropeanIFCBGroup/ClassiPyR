@@ -16,9 +16,11 @@ copy_images_to_class_folders(
 
 \item{src_folder}{Source folder containing PNG images}
 
-\item{temp_folder}{Temporary folder for ifcb_annotate_samples}
+\item{temp_folder}{Temporary folder for ifcb_annotate_samples, or
+\code{NULL} to skip that copy.}
 
-\item{output_folder}{Permanent output folder for class-organized images}
+\item{output_folder}{Permanent output folder for class-organized images. An
+image that is already there with the same size is not copied again.}
 }
 \value{
 NULL (called for side effects)
