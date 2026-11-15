@@ -4,7 +4,7 @@
 \alias{export_db_to_mat}
 \title{Export annotations from SQLite to a .mat file}
 \usage{
-export_db_to_mat(db_path, sample_name, output_folder)
+export_db_to_mat(db_path, sample_name, output_folder, adc_path = NULL)
 }
 \arguments{
 \item{db_path}{Path to the SQLite database file}
@@ -12,6 +12,11 @@ export_db_to_mat(db_path, sample_name, output_folder)
 \item{sample_name}{Sample name}
 
 \item{output_folder}{Folder where the .mat file will be written}
+
+\item{adc_path}{Optional path to the sample's \code{.adc} file. When
+supplied, the number of rows in the file is taken from it, so trailing
+triggers without an image are included. Without it the file ends at the
+highest annotated ROI number.}
 }
 \value{
 TRUE on success, FALSE on failure
@@ -19,6 +24,13 @@ TRUE on success, FALSE on failure
 \description{
 Reads annotations for a single sample from the database and writes a
 MATLAB-compatible annotation file using \code{iRfcb::ifcb_create_manual_file}.
+}
+\details{
+The \code{classlist} of the file has one row per ROI of the sample, in ROI
+order, as \code{ifcb-analysis} expects. Each annotation is written to the
+row of its own ROI number. ROIs that have no annotation in the database
+(typically triggers without an image, which the app never shows) are
+written as \code{NaN}, the same value an unreviewed ROI has.
 }
 \examples{
 \dontrun{

@@ -657,9 +657,19 @@ import_mat_to_db <- function(mat_path, db_path, sample_name,
 #' Reads annotations for a single sample from the database and writes a
 #' MATLAB-compatible annotation file using \code{iRfcb::ifcb_create_manual_file}.
 #'
+#' The \code{classlist} of the file has one row per ROI of the sample, in ROI
+#' order, as \code{ifcb-analysis} expects. Each annotation is written to the
+#' row of its own ROI number. ROIs that have no annotation in the database
+#' (typically triggers without an image, which the app never shows) are
+#' written as \code{NaN}, the same value an unreviewed ROI has.
+#'
 #' @param db_path Path to the SQLite database file
 #' @param sample_name Sample name
 #' @param output_folder Folder where the .mat file will be written
+#' @param adc_path Optional path to the sample's \code{.adc} file. When
+#'   supplied, the number of rows in the file is taken from it, so trailing
+#'   triggers without an image are included. Without it the file ends at the
+#'   highest annotated ROI number.
 #' @return TRUE on success, FALSE on failure
 #' @export
 #' @examples
@@ -667,7 +677,8 @@ import_mat_to_db <- function(mat_path, db_path, sample_name,
 #' db_path <- get_db_path("/data/manual")
 #' export_db_to_mat(db_path, "D20230101T120000_IFCB134", "/data/manual")
 #' }
-export_db_to_mat <- function(db_path, sample_name, output_folder) {
+export_db_to_mat <- function(db_path, sample_name, output_folder,
+                             adc_path = NULL) {
   if (!file.exists(db_path)) {
     warning("Database not found: ", db_path)
     return(FALSE)
@@ -681,6 +692,7 @@ export_db_to_mat <- function(db_path, sample_name, output_folder) {
     "SELECT roi_number, class_name, is_manual FROM annotations WHERE sample_name = ? ORDER BY roi_number",
     params = list(sample_name)
   )
+  rows <- rows[!is.na(rows$roi_number) & rows$roi_number >= 1, , drop = FALSE]
 
   if (nrow(rows) == 0) {
     warning("No annotations found for sample: ", sample_name)
@@ -700,20 +712,34 @@ export_db_to_mat <- function(db_path, sample_name, output_folder) {
 
   class2use <- class_list$class_name
 
-  # Build classlist numeric vector: map class names to indices
-  # Use NaN for unreviewed ROIs (is_manual == 0) to preserve the distinction
-  classlist_indices <- match(rows$class_name, class2use)
+  # Map class names to indices. Use NaN for unreviewed ROIs (is_manual == 0)
+  # to preserve the distinction.
+  class_indices <- match(rows$class_name, class2use)
   # Any unmatched classes default to 1 (typically "unclassified")
-  classlist_indices[is.na(classlist_indices)] <- 1L
-  classlist_indices <- as.numeric(classlist_indices)
-  classlist_indices[rows$is_manual == 0L] <- NaN
+  class_indices[is.na(class_indices)] <- 1L
+  class_indices <- as.numeric(class_indices)
+  class_indices[rows$is_manual == 0L] <- NaN
+
+  # One classlist row per ROI of the sample. The database only holds the ROIs
+  # that have an image, so an annotation must go to the row of its own ROI
+  # number: writing the annotations one after the other would shift every
+  # class after the first trigger without an image onto the wrong ROI.
+  roi_length <- max(rows$roi_number)
+  if (!is.null(adc_path) && length(adc_path) == 1 && !is.na(adc_path) &&
+      file.exists(adc_path)) {
+    n_adc <- tryCatch(nrow(read_roi_dimensions(adc_path)),
+                      error = function(e) NA_integer_)
+    if (!is.na(n_adc) && n_adc > roi_length) roi_length <- n_adc
+  }
+  classlist_indices <- rep(NaN, roi_length)
+  classlist_indices[rows$roi_number] <- class_indices
 
   output_file <- file.path(output_folder, paste0(sample_name, ".mat"))
 
   tryCatch({
     dir.create(output_folder, recursive = TRUE, showWarnings = FALSE)
     ifcb_create_manual_file(
-      roi_length = nrow(rows),
+      roi_length = roi_length,
       class2use = class2use,
       output_file = output_file,
       classlist = classlist_indices
@@ -786,6 +812,12 @@ import_all_mat_to_db <- function(mat_folder, db_path,
 #' @param samples Optional character vector of sample names to export. When
 #'   \code{NULL} (the default), all annotated samples in the database are
 #'   exported.
+#' @param roi_path_map Optional named list mapping sample names to \code{.roi}
+#'   file paths (as in \code{\link{export_all_db_to_png}}). When supplied, the
+#'   \code{.adc} file next to each \code{.roi} file gives the exact number of
+#'   ROIs of the sample; see \code{\link{export_db_to_mat}}.
+#' @param progress Optional callback \code{function(done, total)} called after
+#'   each sample, e.g. to drive a Shiny progress bar.
 #' @return Named list with counts: \code{success}, \code{failed}
 #' @export
 #' @examples
@@ -794,7 +826,8 @@ import_all_mat_to_db <- function(mat_folder, db_path,
 #' result <- export_all_db_to_mat(db_path, "/data/manual")
 #' cat(result$success, "exported,", result$failed, "failed\n")
 #' }
-export_all_db_to_mat <- function(db_path, output_folder, samples = NULL) {
+export_all_db_to_mat <- function(db_path, output_folder, samples = NULL,
+                                 roi_path_map = NULL, progress = NULL) {
   if (is.null(samples)) {
     samples <- list_annotated_samples_db(db_path)
   }
@@ -805,16 +838,60 @@ export_all_db_to_mat <- function(db_path, output_folder, samples = NULL) {
     return(counts)
   }
 
-  for (sample_name in samples) {
-    ok <- export_db_to_mat(db_path, sample_name, output_folder)
+  for (i in seq_along(samples)) {
+    sample_name <- samples[i]
+    roi_path <- roi_path_map[[sample_name]]
+    adc_path <- if (!is.null(roi_path)) sub("\\.roi$", ".adc", roi_path)
+
+    ok <- export_db_to_mat(db_path, sample_name, output_folder,
+                           adc_path = adc_path)
     if (isTRUE(ok)) {
       counts$success <- counts$success + 1L
     } else {
       counts$failed <- counts$failed + 1L
     }
+    report_bulk_progress(progress, i, length(samples))
   }
 
   counts
+}
+
+# Report the progress of a bulk import/export without letting a failing
+# callback stop the work
+#
+# @param progress NULL or a function(done, total).
+# @param done Number of samples handled so far.
+# @param total Number of samples to handle.
+# @noRd
+report_bulk_progress <- function(progress, done, total) {
+  if (is.function(progress)) {
+    tryCatch(progress(done, total), error = function(e) NULL)
+  }
+  invisible(NULL)
+}
+
+# Does a sample have annotations in the database?
+#
+# Answers for one sample from the primary key, instead of listing every
+# annotated sample of the database to look one up in it.
+#
+# @param db_path Path to the SQLite database file.
+# @param sample_name Sample name.
+# @return TRUE or FALSE.
+# @noRd
+sample_has_annotations_db <- function(db_path, sample_name) {
+  if (!file.exists(db_path)) {
+    return(FALSE)
+  }
+  con <- dbConnect(SQLite(), db_path)
+  on.exit(dbDisconnect(con), add = TRUE)
+  tryCatch({
+    hit <- dbGetQuery(
+      con, "SELECT 1 FROM annotations WHERE sample_name = ? LIMIT 1",
+      params = list(sample_name)
+    )
+    nrow(hit) > 0
+  }, error = function(e) FALSE)
 }
 
 #' Export annotated images from SQLite to class-organized PNG folders

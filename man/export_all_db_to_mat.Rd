@@ -4,7 +4,13 @@
 \alias{export_all_db_to_mat}
 \title{Bulk export all annotated samples from SQLite to .mat files}
 \usage{
-export_all_db_to_mat(db_path, output_folder, samples = NULL)
+export_all_db_to_mat(
+  db_path,
+  output_folder,
+  samples = NULL,
+  roi_path_map = NULL,
+  progress = NULL
+)
 }
 \arguments{
 \item{db_path}{Path to the SQLite database file}
@@ -14,6 +20,14 @@ export_all_db_to_mat(db_path, output_folder, samples = NULL)
 \item{samples}{Optional character vector of sample names to export. When
 \code{NULL} (the default), all annotated samples in the database are
 exported.}
+
+\item{roi_path_map}{Optional named list mapping sample names to \code{.roi}
+file paths (as in \code{\link{export_all_db_to_png}}). When supplied, the
+\code{.adc} file next to each \code{.roi} file gives the exact number of
+ROIs of the sample; see \code{\link{export_db_to_mat}}.}
+
+\item{progress}{Optional callback \code{function(done, total)} called after
+each sample, e.g. to drive a Shiny progress bar.}
 }
 \value{
 Named list with counts: \code{success}, \code{failed}

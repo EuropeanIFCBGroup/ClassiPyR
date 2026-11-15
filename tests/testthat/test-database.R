@@ -2146,3 +2146,106 @@ test_that("fill_unclassified_db returns zero counts for non-existent database", 
   expect_equal(result$samples, 0L)
   expect_equal(result$skipped, 0L)
 })
+
+# ---------------------------------------------------------------------------
+# export_db_to_mat: ROI alignment
+# ---------------------------------------------------------------------------
+
+test_that("export_db_to_mat writes each annotation to the row of its own ROI", {
+  db_dir <- tempfile("db_")
+  mat_dir <- tempfile("mat_")
+  dir.create(db_dir)
+  dir.create(mat_dir)
+  on.exit(unlink(c(db_dir, mat_dir), recursive = TRUE), add = TRUE)
+  db_path <- get_db_path(db_dir)
+
+  sample_name <- "D20230101T120000_IFCB134"
+  class2use <- c("unclassified", "Diatom", "Ciliate")
+
+  # ROIs 2 and 4 are triggers without an image: the app never stores them
+  classifications <- data.frame(
+    file_name = sprintf("%s_%05d.png", sample_name, c(1, 3, 5)),
+    class_name = c("Diatom", "Ciliate", "Diatom"),
+    stringsAsFactors = FALSE
+  )
+  save_annotations_db(db_path, sample_name, classifications, class2use, "Test")
+
+  expect_true(export_db_to_mat(db_path, sample_name, mat_dir))
+
+  classlist <- iRfcb::ifcb_get_mat_variable(
+    file.path(mat_dir, paste0(sample_name, ".mat")),
+    variable_name = "classlist"
+  )
+  expect_equal(classlist[, 1], 1:5)
+  expect_equal(classlist[c(1, 3, 5), 2], c(2, 3, 2))
+  expect_true(all(is.nan(classlist[c(2, 4), 2])))
+})
+
+test_that("export_db_to_mat takes the number of ROIs from the ADC file", {
+  db_dir <- tempfile("db_")
+  mat_dir <- tempfile("mat_")
+  roi_dir <- tempfile("roi_")
+  dir.create(db_dir)
+  dir.create(mat_dir)
+  on.exit(unlink(c(db_dir, mat_dir, roi_dir), recursive = TRUE), add = TRUE)
+  db_path <- get_db_path(db_dir)
+
+  sample_name <- "D20230101T120000_IFCB134"
+  # Seven triggers, the last two without an image
+  adc_path <- write_mock_adc(roi_dir, sample_name, 7, zero_dims = c(6, 7))
+
+  classifications <- data.frame(
+    file_name = sprintf("%s_%05d.png", sample_name, 1:5),
+    class_name = "Diatom",
+    stringsAsFactors = FALSE
+  )
+  save_annotations_db(db_path, sample_name, classifications,
+                      c("unclassified", "Diatom"), "Test")
+
+  expect_true(export_db_to_mat(db_path, sample_name, mat_dir,
+                               adc_path = adc_path))
+  classlist <- iRfcb::ifcb_get_mat_variable(
+    file.path(mat_dir, paste0(sample_name, ".mat")),
+    variable_name = "classlist"
+  )
+  expect_equal(nrow(classlist), 7)
+  expect_equal(classlist[1:5, 2], rep(2, 5))
+  expect_true(all(is.nan(classlist[6:7, 2])))
+
+  # The bulk export finds the ADC file next to the ROI file
+  unlink(list.files(mat_dir, full.names = TRUE))
+  seen <- list()
+  counts <- export_all_db_to_mat(
+    db_path, mat_dir,
+    roi_path_map = stats::setNames(list(sub("\\.adc$", ".roi", adc_path)),
+                                   sample_name),
+    progress = function(done, total) seen[[length(seen) + 1]] <<- c(done, total)
+  )
+  expect_equal(counts$success, 1L)
+  expect_equal(seen, list(c(1, 1)))
+  classlist <- iRfcb::ifcb_get_mat_variable(
+    file.path(mat_dir, paste0(sample_name, ".mat")),
+    variable_name = "classlist"
+  )
+  expect_equal(nrow(classlist), 7)
+})
+
+test_that("sample_has_annotations_db answers for a single sample", {
+  db_dir <- tempfile("db_")
+  dir.create(db_dir)
+  on.exit(unlink(db_dir, recursive = TRUE), add = TRUE)
+  db_path <- get_db_path(db_dir)
+
+  expect_false(sample_has_annotations_db(db_path, "D20230101T120000_IFCB134"))
+
+  classifications <- data.frame(
+    file_name = "D20230101T120000_IFCB134_00001.png",
+    class_name = "Diatom",
+    stringsAsFactors = FALSE
+  )
+  save_annotations_db(db_path, "D20230101T120000_IFCB134", classifications,
+                      c("unclassified", "Diatom"), "Test")
+
+  expect_true(sample_has_annotations_db(db_path, "D20230101T120000_IFCB134"))
+  expect_false(sample_has_annotations_db(db_path, "D20230101T130000_IFCB134"))
+})
