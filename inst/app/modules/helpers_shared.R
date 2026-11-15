@@ -11,14 +11,45 @@ MONTH_NAMES <- c("01" = "Jan", "02" = "Feb", "03" = "Mar", "04" = "Apr",
 # Build class filter choices with unmatched classes marked
 build_class_filter_choices <- function(classes, unmatched = character()) {
   # Create display names with warning for unmatched classes
-  display_names <- sapply(classes, function(cls) {
-    if (cls %in% unmatched) {
-      paste0("\u26A0 ", cls)  # Warning symbol for unmatched
-    } else {
-      cls
-    }
-  })
+  display_names <- ifelse(classes %in% unmatched,
+                          paste0("\u26A0 ", classes),  # Warning symbol for unmatched
+                          classes)
   c("All" = "all", setNames(classes, display_names))
+}
+
+# Suffix shown after a sample name in the sample dropdown: pencil for manual
+# annotations, checkmark for auto-classifications, asterisk for neither
+sample_status_suffix <- function(samples, classified, annotated) {
+  has_manual <- samples %in% annotated
+  has_classified <- samples %in% classified
+  ifelse(has_manual & has_classified, "\u270E\u2713",
+         ifelse(has_manual, "\u270E",
+                ifelse(has_classified, "\u2713", "*")))
+}
+
+# The fingerprint of what was last written to storage for a sample. The
+# navigation and session-end auto-saves compare against it, so a sample that
+# has not changed since its last save is not written (and its images are not
+# copied) a second time.
+saved_state_of <- function(sample_name, classifications) {
+  list(sample = sample_name,
+       files = classifications$file_name,
+       classes = classifications$class_name)
+}
+
+is_saved_state <- function(saved_state, sample_name, classifications) {
+  !is.null(saved_state) && !is.null(classifications) &&
+    identical(saved_state, saved_state_of(sample_name, classifications))
+}
+
+# Annotator name to store, never empty
+annotator_or_unknown <- function(annotator) {
+  if (is.null(annotator) || length(annotator) != 1 || is.na(annotator) ||
+      !nzchar(trimws(annotator))) {
+    "Unknown"
+  } else {
+    annotator
+  }
 }
 
 # Update the display text for current sample in dropdown to show pencil symbol
@@ -29,19 +60,7 @@ update_current_sample_status <- function(session, sample_name,
   classified <- classified_samples_fn()
   annotated <- annotated_samples_fn()
 
-  has_manual <- sample_name %in% annotated
-  has_classified <- sample_name %in% classified
-
-  # Determine the new display suffix
-  new_suffix <- if (has_manual && has_classified) {
-    "\u270E\u2713"  # Both
-  } else if (has_manual) {
-    "\u270E"        # Pencil
-  } else if (has_classified) {
-    "\u2713"        # Checkmark
-  } else {
-    "*"             # Asterisk
-  }
+  new_suffix <- sample_status_suffix(sample_name, classified, annotated)
 
   new_display <- paste0(sample_name, new_suffix)
 

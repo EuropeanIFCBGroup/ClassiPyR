@@ -120,7 +120,9 @@ server <- function(input, output, session) {
     input, output, session, rv, config,
     stats$calculate_stats,
     roi_path_map, classifier_mat_files, classifier_h5_files,
-    last_sync_time, csv_path_map, png_sample_path_map
+    last_sync_time, csv_path_map, png_sample_path_map,
+    save_to_cache = loading$save_to_cache,
+    load_dashboard_autoclass = loading$load_dashboard_autoclass
   )
 
   # Wire the do_switch_to_validation reference
@@ -160,7 +162,8 @@ server <- function(input, output, session) {
   setup_class_review_server(
     input, output, session, rv, config,
     roi_path_map, loading$save_to_cache,
-    loading$disable_nav_buttons, loading$enable_nav_buttons
+    loading$disable_nav_buttons, loading$enable_nav_buttons,
+    png_sample_path_map = png_sample_path_map
   )
 
   # 14. Manual save
@@ -169,9 +172,10 @@ server <- function(input, output, session) {
     roi_path_map, annotated_samples,
     loading$disable_nav_buttons, loading$enable_nav_buttons,
     update_current_sample_status_fn,
-    loading$find_sample_png_dir
+    loading$find_sample_png_dir,
+    mark_current_saved = loading$mark_current_saved
   )
 
   # 15. Session cleanup
-  setup_session_cleanup_server(input, session, rv, config)
+  setup_session_cleanup_server(input, session, rv, config, roi_path_map)
 }

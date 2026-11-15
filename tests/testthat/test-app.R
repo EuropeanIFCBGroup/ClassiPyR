@@ -139,6 +139,7 @@ test_that("Save button saves PNG-only samples to SQLite (no ROI file needed)", {
   skip_if(app_dir == "", "Package not installed")
 
   module_env <- new.env(parent = globalenv())
+  source(file.path(app_dir, "modules", "helpers_shared.R"), local = module_env)
   source(file.path(app_dir, "modules", "manual_save_server.R"),
          local = module_env)
 
@@ -257,4 +258,205 @@ test_that("gallery handles an empty image list without a phantom row", {
     expect_match(as.character(output$image_gallery$html), "No images to display",
                  fixed = TRUE)
   })
+})
+
+# ---------------------------------------------------------------------------
+# Whole-server tests against the bundled test sample
+# ---------------------------------------------------------------------------
+
+# The complete app server, with its settings pointing at a scratch copy of
+# the test data. The config directory is redirected to the session temp
+# folder, so the settings of the person running the tests are never touched.
+local_app_server <- function(save_format = "sqlite", env = parent.frame()) {
+  app_dir <- system.file("app", package = "ClassiPyR")
+  sample_name <- "D20220522T000439_IFCB134"
+  raw_dir <- testthat::test_path("test_data", "raw")
+  h5_file <- testthat::test_path("test_data", paste0(sample_name, "_class.h5"))
+
+  base <- tempfile("classipyr_app_")
+  dir.create(file.path(base, "classified"), recursive = TRUE)
+  file.copy(h5_file, file.path(base, "classified"))
+
+  old_env <- Sys.getenv("_R_CHECK_PACKAGE_NAME_", unset = NA)
+  Sys.setenv("_R_CHECK_PACKAGE_NAME_" = "ClassiPyR")
+  old_files <- c(get_settings_path(), get_file_index_path())
+  backup <- file.path(base, paste0("backup_", basename(old_files)))
+  had <- file.exists(old_files)
+  file.copy(old_files[had], backup[had])
+
+  do.call(on.exit, list(substitute({
+    unlink(old_files)
+    file.copy(backup[had], old_files[had])
+    if (is.na(old_env)) {
+      Sys.unsetenv("_R_CHECK_PACKAGE_NAME_")
+    } else {
+      Sys.setenv("_R_CHECK_PACKAGE_NAME_" = old_env)
+    }
+    unlink(base, recursive = TRUE)
+  }, list(old_files = old_files, backup = backup, had = had,
+          old_env = old_env, base = base)), add = TRUE), envir = env)
+
+  unlink(get_file_index_path())
+  jsonlite::write_json(list(
+    roi_folder = normalizePath(raw_dir),
+    csv_folder = file.path(base, "classified"),
+    output_folder = file.path(base, "manual"),
+    png_output_folder = file.path(base, "png_out"),
+    db_folder = file.path(base, "db"),
+    save_format = save_format,
+    export_statistics = FALSE
+  ), get_settings_path(), auto_unbox = TRUE)
+
+  suppressPackageStartupMessages({
+    library(shinyjs); library(shinyFiles); library(bslib); library(iRfcb)
+    library(dplyr); library(DT); library(jsonlite); library(DBI); library(RSQLite)
+  })
+  app_env <- new.env(parent = globalenv())
+  source(file.path(app_dir, "global.R"), local = app_env)
+  source(file.path(app_dir, "server.R"), local = app_env)
+
+  list(server = app_env$server, sample_name = sample_name, base = base,
+       db_path = get_db_path(file.path(base, "db")))
+}
+
+app_test_data_available <- function() {
+  nzchar(system.file("app", package = "ClassiPyR")) &&
+    file.exists(testthat::test_path(
+      "test_data", "raw", "2022", "D20220522", "D20220522T000439_IFCB134.roi"
+    )) &&
+    requireNamespace("hdf5r", quietly = TRUE)
+}
+
+test_that("a sample can be validated, saved unchanged and switched between modes", {
+  skip_if_not(app_test_data_available(), "App or test data not available")
+  app <- local_app_server()
+  sample_name <- app$sample_name
+
+  shiny::testServer(app$server, {
+    session$setInputs(annotator_name = "Tester", app_mode = "sample",
+                      class_filter = "all", images_per_page = "100",
+                      sample_status_filter = "all")
+    session$flushReact()
+    session$setInputs(sample_select = sample_name, load_sample = 1)
+
+    # Validation mode from the H5 file, only ROIs that have an image
+    expect_equal(rv$current_sample, sample_name)
+    expect_false(rv$is_annotation_mode)
+    n_images <- nrow(rv$classifications)
+    expect_gt(n_images, 0)
+    png_dir <- file.path(rv$temp_png_folder, sample_name)
+    expect_setequal(rv$classifications$file_name, list.files(png_dir))
+
+    # Saving without any correction records the sample as reviewed
+    session$setInputs(save_btn = 1)
+    expect_true(ClassiPyR:::sample_has_annotations_db(app$db_path, sample_name))
+    expect_true(sample_name %in% annotated_samples())
+
+    # A correction made in validation mode survives the switch to manual mode
+    first <- rv$classifications$file_name[1]
+    session$setInputs(toggle_image = list(img = first, time = 1))
+    session$setInputs(new_class_quick = "Corrected_class", relabel_quick = 1)
+    expect_equal(nrow(rv$changes_log), 1)
+    session$setInputs(switch_to_annotation = 1)
+
+    expect_true(rv$is_annotation_mode)
+    expect_equal(nrow(rv$classifications), n_images)
+    expect_equal(
+      rv$classifications$class_name[rv$classifications$file_name == first],
+      "Corrected_class"
+    )
+    expect_equal(nrow(rv$changes_log), 0)
+
+    # ... and one made in manual mode survives the switch back
+    second <- rv$classifications$file_name[2]
+    session$setInputs(toggle_image = list(img = second, time = 2))
+    session$setInputs(new_class_quick = "Manual_class", relabel_quick = 2)
+    session$setInputs(switch_to_validation = 1)
+    expect_false(rv$is_annotation_mode)
+    expect_equal(nrow(rv$classifications), n_images)
+  })
+
+  dims <- read_roi_dimensions(testthat::test_path(
+    "test_data", "raw", "2022", "D20220522", paste0(sample_name, ".adc")
+  ))
+  saved <- load_annotations_db(app$db_path, sample_name, dims)
+  expect_true("Corrected_class" %in% saved$class_name)
+  expect_true("Manual_class" %in% saved$class_name)
+  # The relabeled images moved in the PNG output, they were not duplicated
+  png_out <- list.files(file.path(app$base, "png_out"), recursive = TRUE)
+  expect_equal(anyDuplicated(basename(png_out)), 0L)
+})
+
+test_that("class review changes are kept when the review is left", {
+  skip_if_not(app_test_data_available(), "App or test data not available")
+  app <- local_app_server()
+  sample_name <- app$sample_name
+
+  shiny::testServer(app$server, {
+    session$setInputs(annotator_name = "Tester", app_mode = "sample",
+                      class_filter = "all", images_per_page = "100",
+                      sample_status_filter = "all")
+    session$flushReact()
+    session$setInputs(sample_select = sample_name, load_sample = 1)
+    all_files <- rv$classifications$file_name
+    session$setInputs(drag_select = list(images = all_files, time = 1))
+    session$setInputs(new_class_quick = "Review_me", relabel_quick = 1)
+    session$setInputs(save_btn = 1)
+
+    session$setInputs(class_review_source = "database", cr_year_select = "all",
+                      cr_month_select = "all", cr_instrument_select = "all",
+                      cr_annotator_select = "all")
+    session$setInputs(app_mode = "class_review")
+    session$setInputs(class_review_select = "Review_me", load_class_review = 1)
+    expect_true(rv$class_review_mode)
+    expect_setequal(rv$classifications$file_name, all_files)
+
+    session$setInputs(toggle_image = list(img = all_files[1], time = 2))
+    session$setInputs(new_class_quick = "Moved", relabel_quick = 2)
+    # Leaving without pressing "Save Changes"
+    session$setInputs(app_mode = "sample")
+    expect_false(rv$class_review_mode)
+  })
+
+  classes <- list_classes_db(app$db_path)
+  expect_equal(classes$count[classes$class_name == "Moved"], 1)
+})
+
+test_that("a MAT save works with a class list that was never loaded from a file", {
+  skip_if_not(app_test_data_available(), "App or test data not available")
+  app <- local_app_server(save_format = "both")
+  sample_name <- app$sample_name
+
+  shiny::testServer(app$server, {
+    session$setInputs(annotator_name = "Tester", app_mode = "sample",
+                      class_filter = "all", images_per_page = "100",
+                      sample_status_filter = "all")
+    session$flushReact()
+    session$setInputs(sample_select = sample_name, load_sample = 1)
+    rv$class2use <- c("unclassified", "Added_in_app")
+    expect_null(rv$class2use_path)
+
+    all_files <- rv$classifications$file_name
+    session$setInputs(drag_select = list(images = all_files, time = 1))
+    session$setInputs(new_class_quick = "Added_in_app", relabel_quick = 1)
+    session$setInputs(save_btn = 1)
+  })
+
+  mat_file <- file.path(app$base, "manual", paste0(sample_name, ".mat"))
+  expect_true(file.exists(mat_file))
+  classlist <- iRfcb::ifcb_get_mat_variable(mat_file, variable_name = "classlist")
+  rois <- as.integer(sub(".*_(\\d+)\\.png$", "\\1", list.files(
+    testthat::test_path("test_data", "png", sample_name)
+  )))
+  expect_equal(unique(classlist[rois, 2]), 2)
+
+  # The SQLite -> .mat export of the same sample puts the classes on the
+  # same ROIs as the direct MAT save
+  export_dir <- file.path(app$base, "export")
+  expect_true(export_db_to_mat(app$db_path, sample_name, export_dir))
+  exported <- iRfcb::ifcb_get_mat_variable(
+    file.path(export_dir, paste0(sample_name, ".mat")),
+    variable_name = "classlist"
+  )
+  expect_equal(exported[rois, 2], classlist[rois, 2])
 })

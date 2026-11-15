@@ -42,32 +42,19 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
   }
 
   infer_roi_dims_from_png <- function(sample_name, sample_png_dir) {
-    png_files <- list_sample_png_files(sample_name, sample_png_dir)
-    if (length(png_files) == 0) return(NULL)
-
-    rows <- lapply(png_files, function(fn) {
-      roi_number <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", fn))
-      dims <- ClassiPyR:::read_png_dimensions(file.path(sample_png_dir, fn))
-      data.frame(roi_number = roi_number, width = dims$width, height = dims$height, stringsAsFactors = FALSE)
-    })
-    dims_df <- do.call(rbind, rows)
-    dims_df <- dims_df[!is.na(dims_df$roi_number), ]
-    if (nrow(dims_df) == 0) return(NULL)
-    dims_df <- dims_df[!duplicated(dims_df$roi_number), ]
-    dims_df <- dims_df[order(dims_df$roi_number), ]
-    dims_df$area <- dims_df$width * dims_df$height
-    dims_df
+    ClassiPyR:::infer_roi_dims_from_png(sample_name, sample_png_dir)
   }
 
   apply_roi_dims_to_classifications <- function(classifications, roi_dims) {
     if (is.null(classifications) || is.null(roi_dims) || nrow(classifications) == 0) {
       return(classifications)
     }
-    roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", classifications$file_name))
-    idx <- match(roi_numbers, roi_dims$roi_number)
-    classifications$width <- ifelse(!is.na(idx), roi_dims$width[idx], NA_real_)
-    classifications$height <- ifelse(!is.na(idx), roi_dims$height[idx], NA_real_)
-    classifications$roi_area <- ifelse(!is.na(idx), roi_dims$area[idx], NA_real_)
+    dims <- ClassiPyR:::match_roi_dims(
+      ClassiPyR:::roi_number_from_file_name(classifications$file_name), roi_dims
+    )
+    classifications$width <- dims$width
+    classifications$height <- dims$height
+    classifications$roi_area <- dims$roi_area
     classifications[order(-classifications$width, na.last = TRUE), ]
   }
 
@@ -82,6 +69,19 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
     cleanup_temp_png_folder()
     rv$temp_png_folder <- path
     rv$temp_png_is_managed <- isTRUE(managed)
+  }
+
+  # Folder holding the .adc file of a sample (needed for MAT saves), or the
+  # sample's PNG folder for PNG-only samples; NULL when neither is known
+  find_adc_folder <- function(sample_name) {
+    roi_path <- roi_path_map()[[sample_name]]
+    if (!is.null(roi_path)) return(dirname(roi_path))
+    find_sample_png_dir(sample_name)
+  }
+
+  # Record that the current sample is stored exactly as it is shown now
+  mark_current_saved <- function() {
+    rv$saved_state <- saved_state_of(rv$current_sample, rv$classifications)
   }
 
   # Save current sample to cache with LRU eviction
@@ -99,28 +99,33 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
         rv$session_cache[[oldest_sample]] <- NULL
       }
 
-      rv$session_cache[[rv$current_sample]] <- list(
+      adc_folder_for_save <- find_adc_folder(rv$current_sample)
+      # Nothing changed since the last save (manual or automatic): writing
+      # the sample again would only copy every image a second time
+      already_saved <- is_saved_state(rv$saved_state, rv$current_sample,
+                                      rv$classifications)
+
+      cache_entry <- list(
         classifications = rv$classifications,
         original_classifications = rv$original_classifications,
         changes_log = rv$changes_log,
         is_annotation_mode = rv$is_annotation_mode,
         has_classification = rv$has_classification,
         # Stored so the session-end autosave can find this sample's images
-        # even after navigation switched the active PNG folder
-        temp_png_folder = rv$temp_png_folder
+        # and ADC file even after navigation switched the active sample
+        temp_png_folder = rv$temp_png_folder,
+        adc_folder = adc_folder_for_save,
+        # TRUE once the entry is known to be in storage, so the session-end
+        # autosave does not write it again
+        saved = already_saved
       )
+      rv$session_cache[[rv$current_sample]] <- cache_entry
+
+      if (already_saved) {
+        return(invisible(NULL))
+      }
 
       tryCatch({
-        roi_path_for_save <- roi_path_map()[[rv$current_sample]]
-        sample_png_dir_for_save <- find_sample_png_dir(rv$current_sample)
-        adc_folder_for_save <- if (!is.null(roi_path_for_save)) {
-          dirname(roi_path_for_save)
-        } else if (!is.null(sample_png_dir_for_save)) {
-          sample_png_dir_for_save
-        } else {
-          NULL
-        }
-
         save_fmt_for_autosave <- config$save_format
         if (identical(config$data_source, "dashboard") && is.null(adc_folder_for_save)) {
           if (save_fmt_for_autosave %in% c("mat", "both")) {
@@ -139,17 +144,16 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
           roi_folder = config$roi_folder,
           class2use_path = rv$class2use_path,
           class2use = rv$class2use,
-          annotator = if (is.null(input$annotator_name) || !nzchar(input$annotator_name)) {
-            "Unknown"
-          } else {
-            input$annotator_name
-          },
+          annotator = annotator_or_unknown(input$annotator_name),
           adc_folder = adc_folder_for_save,
           save_format = save_fmt_for_autosave,
           db_folder = config$db_folder,
           export_statistics = config$export_statistics
         )
         if (isTRUE(saved)) {
+          mark_current_saved()
+          cache_entry$saved <- TRUE
+          rv$session_cache[[rv$current_sample]] <- cache_entry
           current_annotated <- annotated_samples()
           if (!rv$current_sample %in% current_annotated) {
             annotated_samples(c(current_annotated, rv$current_sample))
@@ -160,6 +164,14 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
         showNotification(paste("Auto-save failed:", e$message), type = "error")
       })
     }
+  }
+
+  # Refresh the class filter dropdown from the current classifications
+  update_class_filter <- function() {
+    available_classes <- sort(unique(rv$classifications$class_name))
+    unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
+    updateSelectInput(session, "class_filter",
+                      choices = build_class_filter_choices(available_classes, unmatched))
   }
 
   # Main sample loading function
@@ -181,18 +193,58 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
     rv$current_page <- 1
     rv$changes_log <- create_empty_changes_log()
 
-    available_classes <- sort(unique(classifications$class_name))
-    unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
-    display_names <- sapply(available_classes, function(cls) {
-      if (cls %in% unmatched) paste0("\u26A0 ", cls) else cls
-    })
-    updateSelectInput(session, "class_filter",
-                      choices = c("All" = "all", setNames(available_classes, display_names)))
+    update_class_filter()
 
     if (!is.null(mode_message)) {
       actual_count <- nrow(rv$classifications)
       showNotification(paste0(mode_message, ": ", actual_count, " images"), type = "message")
     }
+  }
+
+  # Auto-classifications of a sample from the dashboard, with ROI dimensions
+  # attached; NULL (after a notification) when the dashboard has none
+  load_dashboard_autoclass <- function(sample_name, roi_dims) {
+    parsed <- parse_dashboard_url(config$dashboard_url)
+    autoclass_warning <- NULL
+    autoclass <- withProgress(message = "Downloading auto-classifications...", value = 0, {
+      incProgress(0.1, detail = "Requesting classifier output...")
+      out <- tryCatch(
+        withCallingHandlers(
+          download_dashboard_autoclass(parsed$base_url, sample_name,
+                                       get_dashboard_cache_dir(),
+                                       dataset_name = parsed$dataset_name,
+                                       parallel_downloads = config$dashboard_parallel_downloads,
+                                       sleep_time = config$dashboard_sleep_time,
+                                       multi_timeout = config$dashboard_multi_timeout,
+                                       max_retries = config$dashboard_max_retries),
+          warning = function(w) {
+            autoclass_warning <<- conditionMessage(w)
+            invokeRestart("muffleWarning")
+          }
+        ),
+        error = function(e) NULL
+      )
+      incProgress(0.9, detail = "Download complete")
+      out
+    })
+
+    if (is.null(autoclass) || nrow(autoclass) == 0) {
+      if (!is.null(autoclass_warning)) {
+        showNotification(
+          "No auto-classifications available for this sample on the dashboard.",
+          type = "warning", duration = 6
+        )
+      }
+      return(NULL)
+    }
+
+    dims <- ClassiPyR:::match_roi_dims(
+      ClassiPyR:::roi_number_from_file_name(autoclass$file_name), roi_dims
+    )
+    autoclass$width <- dims$width
+    autoclass$height <- dims$height
+    autoclass$roi_area <- dims$roi_area
+    autoclass
   }
 
   # Dashboard mode sample loading
@@ -205,7 +257,7 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
       parsed <- parse_dashboard_url(config$dashboard_url)
       cache_dir <- get_dashboard_cache_dir()
       db_path <- get_db_path(config$db_folder)
-      has_db_annotation <- sample_name %in% list_annotated_samples_db(db_path)
+      has_db_annotation <- ClassiPyR:::sample_has_annotations_db(db_path, sample_name)
 
       png_folder <- withProgress(message = "Downloading images...", value = 0, {
         incProgress(0.1, detail = "Requesting image bundle...")
@@ -245,94 +297,44 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
         }
         classifications <- load_from_db(db_path, sample_name, roi_dims)
         rv$is_annotation_mode <- TRUE
-        rv$has_classification <- isTRUE(config$dashboard_autoclass)
+        # Local classifier output counts as well, so the switch to
+        # validation mode is offered for it too
+        rv$has_classification <- isTRUE(config$dashboard_autoclass) ||
+          !is.null(find_csv_file(sample_name)) ||
+          !is.null(find_classifier_h5(sample_name)) ||
+          !is.null(find_classifier_mat(sample_name))
         mode_message <- if (rv$has_classification) "Manual mode (switch available)" else "Resumed"
       }
 
       if (is.null(classifications) && !isTRUE(config$dashboard_autoclass)) {
-        csv_folder <- config$csv_folder
-        has_csv_folder <- !is.null(csv_folder) && nzchar(csv_folder) && dir.exists(csv_folder)
+        # Local classifier output for dashboard samples comes from the file
+        # index, which already scanned the classification folder. Listing
+        # the folder recursively for every sample made each load slow.
+        local_csv <- find_csv_file(sample_name)
+        local_h5 <- find_classifier_h5(sample_name)
+        local_mat <- find_classifier_mat(sample_name)
+        threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
 
-        if (has_csv_folder) {
-          local_csv <- list.files(csv_folder, pattern = paste0("^", sample_name, "\\.csv$"),
-                                  recursive = TRUE, full.names = TRUE)
-          local_h5 <- list.files(csv_folder, pattern = paste0("^", sample_name, ".*\\.h5$"),
-                                 recursive = TRUE, full.names = TRUE)
-          local_mat <- list.files(csv_folder, pattern = paste0("^", sample_name, ".*\\.mat$"),
-                                  recursive = TRUE, full.names = TRUE)
-
-          if (length(local_csv) > 0) {
-            classifications <- load_from_csv(local_csv[1], use_threshold = config$use_threshold)
-            rv$is_annotation_mode <- FALSE
-            rv$has_classification <- TRUE
-            threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
-            mode_message <- paste0("Validation mode (Local CSV, ", threshold_text, ")")
-          } else if (length(local_h5) > 0) {
-            classifications <- load_from_h5(local_h5[1], sample_name, roi_dims, use_threshold = config$use_threshold)
-            rv$is_annotation_mode <- FALSE
-            rv$has_classification <- TRUE
-            threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
-            mode_message <- paste0("Validation mode (Local H5, ", threshold_text, ")")
-          } else if (length(local_mat) > 0) {
-            classifications <- load_from_classifier_mat(local_mat[1], sample_name, rv$class2use, roi_dims, use_threshold = config$use_threshold)
-            rv$is_annotation_mode <- FALSE
-            rv$has_classification <- TRUE
-            threshold_text <- if (config$use_threshold) "with threshold" else "without threshold"
-            mode_message <- paste0("Validation mode (Local MAT, ", threshold_text, ")")
-          }
+        if (!is.null(local_csv)) {
+          classifications <- load_from_csv(local_csv, use_threshold = config$use_threshold)
+          classifications <- apply_roi_dims_to_classifications(classifications, roi_dims)
+          mode_message <- paste0("Validation mode (Local CSV, ", threshold_text, ")")
+        } else if (!is.null(local_h5) && file.exists(local_h5)) {
+          classifications <- load_from_h5(local_h5, sample_name, roi_dims, use_threshold = config$use_threshold)
+          mode_message <- paste0("Validation mode (Local H5, ", threshold_text, ")")
+        } else if (!is.null(local_mat) && file.exists(local_mat)) {
+          classifications <- load_from_classifier_mat(local_mat, sample_name, rv$class2use, roi_dims, use_threshold = config$use_threshold)
+          mode_message <- paste0("Validation mode (Local MAT, ", threshold_text, ")")
+        }
+        if (!is.null(classifications)) {
+          rv$is_annotation_mode <- FALSE
+          rv$has_classification <- TRUE
         }
       }
 
       if (is.null(classifications) && isTRUE(config$dashboard_autoclass)) {
-        autoclass_warning <- NULL
-        autoclass <- withProgress(message = "Downloading auto-classifications...", value = 0, {
-          incProgress(0.1, detail = "Requesting classifier output...")
-          out <- tryCatch(
-            withCallingHandlers(
-              download_dashboard_autoclass(parsed$base_url, sample_name, cache_dir,
-                                           dataset_name = parsed$dataset_name,
-                                           parallel_downloads = config$dashboard_parallel_downloads,
-                                           sleep_time = config$dashboard_sleep_time,
-                                           multi_timeout = config$dashboard_multi_timeout,
-                                           max_retries = config$dashboard_max_retries),
-              warning = function(w) {
-                autoclass_warning <<- conditionMessage(w)
-                invokeRestart("muffleWarning")
-              }
-            ),
-            error = function(e) NULL
-          )
-          incProgress(0.9, detail = "Download complete")
-          out
-        })
-
-        if ((is.null(autoclass) || nrow(autoclass) == 0) && !is.null(autoclass_warning)) {
-          showNotification(
-            paste("No auto-classifications available for this sample on the dashboard."),
-            type = "warning", duration = 6
-          )
-        }
-
-        if (!is.null(autoclass) && nrow(autoclass) > 0) {
-          if (!is.null(roi_dims)) {
-            roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", autoclass$file_name))
-            dim_data <- lapply(roi_numbers, function(rn) {
-              idx <- which(roi_dims$roi_number == rn)
-              if (length(idx) > 0) {
-                list(width = roi_dims$width[idx], height = roi_dims$height[idx], area = roi_dims$area[idx])
-              } else {
-                list(width = NA_real_, height = NA_real_, area = NA_real_)
-              }
-            })
-            autoclass$width <- vapply(dim_data, `[[`, numeric(1), "width")
-            autoclass$height <- vapply(dim_data, `[[`, numeric(1), "height")
-            autoclass$roi_area <- vapply(dim_data, `[[`, numeric(1), "area")
-          } else {
-            autoclass$width <- NA_real_
-            autoclass$height <- NA_real_
-            autoclass$roi_area <- NA_real_
-          }
-
+        autoclass <- load_dashboard_autoclass(sample_name, roi_dims)
+        if (!is.null(autoclass)) {
           classifications <- autoclass
           rv$is_annotation_mode <- FALSE
           rv$has_classification <- TRUE
@@ -409,7 +411,7 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
     tryCatch({
       annotation_mat_path <- file.path(config$output_folder, paste0(sample_name, ".mat"))
       db_path <- get_db_path(config$db_folder)
-      has_db_annotation <- sample_name %in% list_annotated_samples_db(db_path)
+      has_db_annotation <- ClassiPyR:::sample_has_annotations_db(db_path, sample_name)
       has_mat_annotation <- file.exists(annotation_mat_path)
       has_existing_annotation <- has_db_annotation || has_mat_annotation
       has_classification <- has_csv || has_classifier_h5 || has_classifier_mat
@@ -485,13 +487,7 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
         rv$original_classifications <- rv$original_classifications[
           rv$original_classifications$file_name %in% extracted_files, ]
 
-        available_classes <- sort(unique(rv$classifications$class_name))
-        unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
-        display_names <- sapply(available_classes, function(cls) {
-          if (cls %in% unmatched) paste0("\u26A0 ", cls) else cls
-        })
-        updateSelectInput(session, "class_filter",
-                          choices = c("All" = "all", setNames(available_classes, display_names)))
+        update_class_filter()
 
         if (!is.null(mode_message)) {
           showNotification(paste0(mode_message, ": ", nrow(rv$classifications), " images"), type = "message")
@@ -534,14 +530,12 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
     rv$current_page <- 1
     rv$is_annotation_mode <- cached$is_annotation_mode
     rv$has_classification <- cached$has_classification %||% FALSE
+    # The cached state is what storage holds when its auto-save succeeded
+    rv$saved_state <- if (isTRUE(cached$saved)) {
+      saved_state_of(sample_name, cached$classifications)
+    }
 
-    available_classes <- sort(unique(rv$classifications$class_name))
-    unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
-    display_names <- sapply(available_classes, function(cls) {
-      if (cls %in% unmatched) paste0("\u26A0 ", cls) else cls
-    })
-    updateSelectInput(session, "class_filter",
-                      choices = c("All" = "all", setNames(available_classes, display_names)))
+    update_class_filter()
 
     if (is_dashboard) {
       cache_dir <- get_dashboard_cache_dir()
@@ -609,13 +603,7 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
       rv$original_classifications <- rv$original_classifications[
         rv$original_classifications$file_name %in% extracted_files, ]
 
-      available_classes <- sort(unique(rv$classifications$class_name))
-      unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
-      display_names <- sapply(available_classes, function(cls) {
-        if (cls %in% unmatched) paste0("\u26A0 ", cls) else cls
-      })
-      updateSelectInput(session, "class_filter",
-                        choices = c("All" = "all", setNames(available_classes, display_names)))
+      update_class_filter()
     }
 
     if (!is.null(mode_message)) {
@@ -746,6 +734,9 @@ setup_sample_loading_server <- function(input, output, session, rv, config,
 
   list(
     save_to_cache = save_to_cache,
+    mark_current_saved = mark_current_saved,
+    find_adc_folder = find_adc_folder,
+    load_dashboard_autoclass = load_dashboard_autoclass,
     load_from_cache = load_from_cache,
     disable_nav_buttons = disable_nav_buttons,
     enable_nav_buttons = enable_nav_buttons,

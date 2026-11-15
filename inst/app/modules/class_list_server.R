@@ -106,6 +106,26 @@ setup_class_list_server <- function(input, output, session, rv, config,
     ))
   })
 
+  # Class names typed into the editor get the same treatment as names read
+  # from a class list file: they are used as folder names in the PNG output,
+  # so a "/" would otherwise create nested folders
+  clean_class_names <- function(x) {
+    x <- trimws(as.character(x))
+    x <- x[!is.na(x) & nzchar(x)]
+    sanitized <- withCallingHandlers(
+      suppressMessages(ClassiPyR:::sanitize_class_names(x)),
+      warning = function(w) invokeRestart("muffleWarning")
+    )
+    if (!identical(sanitized, x)) {
+      showNotification(
+        "Some class names contained characters that cannot be used in folder names and were adjusted.",
+        type = "warning", duration = 8
+      )
+    }
+    sanitized <- trimws(sanitized)
+    sanitized[nzchar(sanitized)]
+  }
+
   # Sort button handlers
   observeEvent(input$sort_by_id, { rv$class_sort_mode <- "id" })
   observeEvent(input$sort_alpha, { rv$class_sort_mode <- "alpha" })
@@ -154,7 +174,8 @@ setup_class_list_server <- function(input, output, session, rv, config,
   # Add new class
   observeEvent(input$add_class_btn, {
     req(input$new_class_name)
-    new_class <- trimws(input$new_class_name)
+    new_class <- clean_class_names(input$new_class_name)
+    if (length(new_class) == 0) new_class <- ""
 
     if (new_class == "") {
       showNotification("Please enter a class name", type = "warning")
@@ -197,9 +218,15 @@ setup_class_list_server <- function(input, output, session, rv, config,
     text_content <- input$class_list_edit
     if (is.null(text_content)) text_content <- ""
 
-    new_classes <- strsplit(text_content, "\n")[[1]]
-    new_classes <- trimws(new_classes)
-    new_classes <- new_classes[new_classes != ""]
+    new_classes <- clean_class_names(strsplit(text_content, "\n")[[1]])
+    if (anyDuplicated(new_classes) > 0) {
+      showNotification(
+        paste("Duplicate class names were removed:",
+              paste(unique(new_classes[duplicated(new_classes)]), collapse = ", ")),
+        type = "warning", duration = 8
+      )
+      new_classes <- unique(new_classes)
+    }
 
     if (length(new_classes) == 0) {
       showNotification("Please enter at least one class name", type = "warning")
@@ -215,6 +242,9 @@ setup_class_list_server <- function(input, output, session, rv, config,
     }
 
     rv$class2use <- new_classes
+    # Show what was actually applied (sanitized, without duplicates)
+    updateTextAreaInput(session, "class_list_edit",
+                        value = paste(new_classes, collapse = "\n"))
 
     if (is.null(rv$class2use_path)) {
       temp_class_file <- file.path(tempdir(), "class2use_temp.txt")

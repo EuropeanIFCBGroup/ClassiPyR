@@ -208,7 +208,11 @@ You can change the storage format in **Settings > Annotation Storage**:
 Work is automatically saved when:
 
 - You navigate to another sample
+- You switch a sample between validation and manual mode
+- You load another class or leave Class Review
 - You close the app (attempts to save)
+
+A sample you only looked at is not saved by the auto-save. In validation mode, click **Save Annotations** to record a sample as reviewed even when every auto-classification was correct.
 
 ---
 

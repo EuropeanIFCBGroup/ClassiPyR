@@ -1,6 +1,7 @@
 # onSessionEnded cleanup
 
-setup_session_cleanup_server <- function(input, session, rv, config) {
+setup_session_cleanup_server <- function(input, session, rv, config,
+                                         roi_path_map = function() list()) {
   session$onSessionEnded(function() {
     # Capture all values upfront while session context is still valid
     tryCatch({
@@ -13,13 +14,17 @@ setup_session_cleanup_server <- function(input, session, rv, config) {
           !is.null(current_sample) && !is.null(current_classifications) &&
           !identical(current_sample, "__external_review__")) {
         isolate({
+          roi_path <- roi_path_map()[[current_sample]]
           rv$session_cache[[current_sample]] <- list(
             classifications = rv$classifications,
             original_classifications = rv$original_classifications,
             changes_log = rv$changes_log,
             is_annotation_mode = rv$is_annotation_mode,
             has_classification = rv$has_classification,
-            temp_png_folder = rv$temp_png_folder
+            temp_png_folder = rv$temp_png_folder,
+            adc_folder = if (!is.null(roi_path)) dirname(roi_path),
+            saved = is_saved_state(rv$saved_state, current_sample,
+                                   rv$classifications)
           )
         })
       }
@@ -39,6 +44,11 @@ setup_session_cleanup_server <- function(input, session, rv, config) {
       for (sample_name in names(session_cache)) {
         if (identical(sample_name, "__external_review__")) next
         cached <- session_cache[[sample_name]]
+        # Samples already written by the Save button or the navigation
+        # auto-save are skipped: their image folder is gone by now, so a
+        # second MAT save could only fail, and a second database save would
+        # only repeat the first.
+        if (isTRUE(cached$saved)) next
         if (!is.null(cached$changes_log) && nrow(cached$changes_log) > 0) {
           tryCatch({
             save_sample_annotations(
@@ -55,6 +65,7 @@ setup_session_cleanup_server <- function(input, session, rv, config) {
               class2use_path = class2use_path,
               class2use = class2use,
               annotator = annotator,
+              adc_folder = cached$adc_folder,
               save_format = isolate(config$save_format),
               db_folder = isolate(config$db_folder),
               export_statistics = isolate(config$export_statistics)

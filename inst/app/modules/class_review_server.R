@@ -2,7 +2,76 @@
 
 setup_class_review_server <- function(input, output, session, rv, config,
                                       roi_path_map, save_to_cache,
-                                      disable_nav_buttons, enable_nav_buttons) {
+                                      disable_nav_buttons, enable_nav_buttons,
+                                      png_sample_path_map = function() list()) {
+  # Reclassified rows of a database class review that are not stored yet
+  pending_class_review_changes <- function() {
+    if (!isTRUE(rv$class_review_mode) ||
+        !identical(rv$class_review_source, "database") ||
+        is.null(rv$classifications) || is.null(rv$class_review_original) ||
+        nrow(rv$classifications) != nrow(rv$class_review_original)) {
+      return(NULL)
+    }
+    changed <- rv$classifications$class_name != rv$class_review_original$class_name
+    if (!any(changed)) return(NULL)
+    changed_files <- rv$classifications$file_name[changed]
+    data.frame(
+      sample_name = sub("_(\\d{5})\\.png$", "", changed_files),
+      roi_number = as.integer(sub(".*_(\\d{5})\\.png$", "\\1", changed_files)),
+      new_class_name = rv$classifications$class_name[changed],
+      stringsAsFactors = FALSE
+    )
+  }
+
+  # Write pending class review changes to the database. Returns the number
+  # of rows updated, or NULL when there was nothing to save or it failed.
+  # `notify = FALSE` is for the end of the session, when no notification can
+  # be shown any more.
+  save_pending_class_review <- function(auto = FALSE, notify = TRUE) {
+    changes_df <- pending_class_review_changes()
+    if (is.null(changes_df)) return(NULL)
+
+    updated <- tryCatch(
+      save_class_review_changes_db(
+        get_db_path(config$db_folder), changes_df,
+        annotator_or_unknown(input$annotator_name)
+      ),
+      error = function(e) e
+    )
+    if (inherits(updated, "error")) {
+      if (notify) {
+        showNotification(paste("Error saving class review changes:",
+                               conditionMessage(updated)), type = "error")
+      } else {
+        message("Failed to save class review changes: ", conditionMessage(updated))
+      }
+      return(NULL)
+    }
+
+    # Update original to reflect saved state
+    rv$class_review_original <- rv$classifications
+    if (notify) {
+      showNotification(
+        sprintf("%s %d changes across %d samples",
+                if (auto) "Auto-saved" else "Saved",
+                updated, length(unique(changes_df$sample_name))),
+        type = "message"
+      )
+    }
+    updated
+  }
+
+  # Closing the app during a class review keeps its changes, like closing it
+  # with a sample open does
+  session$onSessionEnded(function() {
+    tryCatch(
+      isolate(save_pending_class_review(auto = TRUE, notify = FALSE)),
+      error = function(e) {
+        message("Failed to save class review changes on session end: ", e$message)
+      }
+    )
+  })
+
   # Helper: update class review class list based on current filter values
   update_cr_class_list <- function() {
     db_path <- get_db_path(config$db_folder)
@@ -110,6 +179,8 @@ setup_class_review_server <- function(input, output, session, rv, config,
       # a regular sample and auto-saved (e.g. "__external_review__" ending up
       # in the annotations database via save_to_cache/session cleanup).
       if (isTRUE(rv$class_review_mode)) {
+        # Like leaving a sample, leaving a class review keeps the work done
+        save_pending_class_review(auto = TRUE)
         rv$current_sample <- NULL
         rv$classifications <- NULL
         rv$original_classifications <- NULL
@@ -131,6 +202,10 @@ setup_class_review_server <- function(input, output, session, rv, config,
   }, ignoreInit = TRUE)
 
   observeEvent(input$class_review_source, {
+    if (input$app_mode == "class_review") {
+      # rv$class_review_source still names the review being left here
+      save_pending_class_review(auto = TRUE)
+    }
     rv$class_review_source <- input$class_review_source
     if (input$app_mode == "class_review") {
       rv$class_review_mode <- FALSE
@@ -225,6 +300,8 @@ setup_class_review_server <- function(input, output, session, rv, config,
     if (!rv$class_review_mode && !is.null(rv$current_sample)) {
       save_to_cache()
     }
+    # Loading another class replaces the review on screen; keep its changes
+    save_pending_class_review(auto = TRUE)
 
     # Query all annotations for this class (with filters)
     annotations <- load_class_annotations_db(db_path, class_name,
@@ -279,6 +356,9 @@ setup_class_review_server <- function(input, output, session, rv, config,
         missing_samples <- setdiff(unique_samples, downloaded_samples)
       }
 
+      rois_by_sample <- split(annotations$roi_number, annotations$sample_name)
+      current_png_map <- png_sample_path_map()
+
       for (idx in seq_along(unique_samples)) {
         sn <- unique_samples[idx]
 
@@ -286,37 +366,50 @@ setup_class_review_server <- function(input, output, session, rv, config,
           # Already handled above in batch
           incProgress(1 / length(unique_samples))
           next
-        } else {
-          # Local mode: extract from ROI file
-          roi_path <- current_roi_map[[sn]]
+        }
 
-          if (is.null(roi_path) || !file.exists(roi_path)) {
-            missing_samples <- c(missing_samples, sn)
-            next
-          }
+        # Local mode: extract from the ROI file, or copy from the sample's
+        # extracted PNG folder when the sample has no ROI file
+        roi_path <- current_roi_map[[sn]]
+        has_roi <- !is.null(roi_path) && file.exists(roi_path)
+        png_dir <- current_png_map[[sn]]
+        has_png_dir <- !is.null(png_dir) && dir.exists(png_dir)
 
-          sample_rois <- annotations$roi_number[annotations$sample_name == sn]
+        if (!has_roi && !has_png_dir) {
+          missing_samples <- c(missing_samples, sn)
+          incProgress(1 / length(unique_samples))
+          next
+        }
 
-          tryCatch({
+        sample_rois <- rois_by_sample[[sn]]
+        sample_dir <- file.path(rv$temp_png_folder, sn)
+
+        tryCatch({
+          if (has_roi) {
             ifcb_extract_pngs(
               roi_file = roi_path,
               out_folder = rv$temp_png_folder,
               ROInumbers = sample_rois,
               verbose = FALSE
             )
+          } else {
+            wanted <- sprintf("%s_%05d.png", sn, sample_rois)
+            wanted <- wanted[file.exists(file.path(png_dir, wanted))]
+            dir.create(sample_dir, recursive = TRUE, showWarnings = FALSE)
+            file.copy(file.path(png_dir, wanted), file.path(sample_dir, wanted))
+          }
 
-            # Check which files were actually extracted
-            sample_dir <- file.path(rv$temp_png_folder, sn)
-            if (dir.exists(sample_dir)) {
-              files <- list.files(sample_dir, pattern = "\\.png$")
-              extracted_files <- c(extracted_files, files)
-            }
-          }, error = function(e) {
-            missing_samples <<- c(missing_samples, sn)
-          })
-        }
+          # Check which files were actually extracted
+          if (dir.exists(sample_dir)) {
+            files <- list.files(sample_dir, pattern = "\\.png$")
+            extracted_files <- c(extracted_files, files)
+          }
+        }, error = function(e) {
+          missing_samples <<- c(missing_samples, sn)
+        })
 
-        incProgress(1 / length(unique_samples))
+        incProgress(1 / length(unique_samples),
+                    detail = sprintf("%d / %d samples", idx, length(unique_samples)))
       }
     })
 
@@ -367,7 +460,7 @@ setup_class_review_server <- function(input, output, session, rv, config,
     n_samples <- length(rv$class_review_samples)
     msg <- sprintf("Loaded %d %s images from %d samples", n_extracted, class_name, n_samples)
     if (length(missing_samples) > 0) {
-      msg <- paste0(msg, sprintf(" (%d samples skipped - ROI not found)", length(missing_samples)))
+      msg <- paste0(msg, sprintf(" (%d samples skipped - images not found)", length(missing_samples)))
     }
     showNotification(msg, type = "message", duration = 8)
   })
@@ -525,48 +618,13 @@ setup_class_review_server <- function(input, output, session, rv, config,
     rv$is_loading <- TRUE
     on.exit({ rv$is_loading <- FALSE })
 
-    # Find changed rows
-    current <- rv$classifications
-    original <- rv$class_review_original
-    changed_mask <- current$class_name != original$class_name
-    n_changed <- sum(changed_mask)
-
-    if (n_changed == 0) {
+    if (is.null(pending_class_review_changes())) {
       showNotification("No changes to save", type = "warning")
       return()
     }
 
-    # Parse sample_name and roi_number from file_name
-    changed_files <- current$file_name[changed_mask]
-    changes_df <- data.frame(
-      sample_name = sub("_(\\d{5})\\.png$", "", changed_files),
-      roi_number = as.integer(sub(".*_(\\d{5})\\.png$", "\\1", changed_files)),
-      new_class_name = current$class_name[changed_mask],
-      stringsAsFactors = FALSE
-    )
-
-    db_path <- get_db_path(config$db_folder)
-    annotator <- if (!is.null(input$annotator_name) && nzchar(input$annotator_name)) {
-      input$annotator_name
-    } else {
-      "Unknown"
-    }
-
-    tryCatch({
-      withProgress(message = "Saving class review changes...", {
-        updated <- save_class_review_changes_db(db_path, changes_df, annotator)
-      })
-
-      # Update original to reflect saved state
-      rv$class_review_original <- rv$classifications
-
-      showNotification(
-        sprintf("Saved %d changes across %d samples",
-                updated, length(unique(changes_df$sample_name))),
-        type = "message"
-      )
-    }, error = function(e) {
-      showNotification(paste("Error saving:", e$message), type = "error")
+    withProgress(message = "Saving class review changes...", {
+      save_pending_class_review()
     })
   })
 

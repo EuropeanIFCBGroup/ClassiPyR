@@ -4,6 +4,13 @@ setup_import_export_server <- function(input, output, session, rv, config,
                                        persist_settings, get_browse_volumes,
                                        build_zip_readme, roi_path_map,
                                        rescan_trigger) {
+  # Drives the progress bar of the bulk imports/exports, which can run for
+  # minutes on a large database
+  bulk_progress <- function(done, total) {
+    shiny::setProgress(value = done / total,
+                       detail = sprintf("%d / %d samples", done, total))
+  }
+
   # Import .mat -> SQLite bulk handler
   observeEvent(input$import_mat_to_db_btn, {
     if (is.null(config$output_folder) || config$output_folder == "") {
@@ -18,8 +25,9 @@ setup_import_export_server <- function(input, output, session, rv, config,
       "imported"
     }
 
-    withProgress(message = "Importing .mat files to SQLite...", {
-      result <- import_all_mat_to_db(config$output_folder, db_path, annotator)
+    withProgress(message = "Importing .mat files to SQLite...", value = 0, {
+      result <- import_all_mat_to_db(config$output_folder, db_path, annotator,
+                                     progress = bulk_progress)
     })
 
     showNotification(
@@ -62,8 +70,10 @@ setup_import_export_server <- function(input, output, session, rv, config,
     removeModal()
     db_path <- get_db_path(config$db_folder)
 
-    withProgress(message = "Exporting SQLite to .mat files...", {
-      result <- export_all_db_to_mat(db_path, config$output_folder)
+    withProgress(message = "Exporting SQLite to .mat files...", value = 0, {
+      result <- export_all_db_to_mat(db_path, config$output_folder,
+                                     roi_path_map = roi_path_map(),
+                                     progress = bulk_progress)
     })
 
     showNotification(
@@ -320,7 +330,8 @@ setup_import_export_server <- function(input, output, session, rv, config,
 
       withProgress(message = "Exporting PNGs from SQLite...", value = 0, {
         export_counts <- export_all_db_to_png(db_path, temp_png, current_roi_map,
-                                               skip_class = skip, samples = all_samples)
+                                               skip_class = skip, samples = all_samples,
+                                               progress = bulk_progress)
       })
     }
 
@@ -510,8 +521,10 @@ setup_import_export_server <- function(input, output, session, rv, config,
       dir.create(temp_mat_dir, recursive = TRUE, showWarnings = FALSE)
       use_temp_mat <- TRUE
 
-      withProgress(message = "Exporting SQLite to temporary .mat files...", {
-        mat_result <- export_all_db_to_mat(db_path, temp_mat_dir, samples = filtered_samples)
+      withProgress(message = "Exporting SQLite to temporary .mat files...", value = 0, {
+        mat_result <- export_all_db_to_mat(db_path, temp_mat_dir, samples = filtered_samples,
+                                           roi_path_map = roi_path_map(),
+                                           progress = bulk_progress)
       })
 
       if (mat_result$success == 0) {
@@ -756,9 +769,10 @@ setup_import_export_server <- function(input, output, session, rv, config,
         NULL
       }
 
-      withProgress(message = "Exporting PNGs from SQLite...", {
+      withProgress(message = "Exporting PNGs from SQLite...", value = 0, {
         result <- export_all_db_to_png(db_path, config$png_output_folder,
-                                       current_roi_map, skip_class = skip)
+                                       current_roi_map, skip_class = skip,
+                                       progress = bulk_progress)
       })
 
       showNotification(

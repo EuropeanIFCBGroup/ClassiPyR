@@ -122,15 +122,11 @@ setup_prediction_server <- function(input, output, session, rv, config,
     }
 
     cls <- rv$classifications
-    for (i in seq_len(nrow(predictions))) {
-      fname <- predictions$file_name[i]
-      idx <- which(cls$file_name == fname)
-      if (length(idx) == 1) {
-        cls$class_name[idx] <- predictions$class_name[i]
-        if ("score" %in% names(cls)) {
-          cls$score[idx] <- predictions$score[i]
-        }
-      }
+    idx <- match(predictions$file_name, cls$file_name)
+    found <- !is.na(idx)
+    cls$class_name[idx[found]] <- predictions$class_name[found]
+    if ("score" %in% names(cls) && "score" %in% names(predictions)) {
+      cls$score[idx[found]] <- predictions$score[found]
     }
     rv$classifications <- cls
 

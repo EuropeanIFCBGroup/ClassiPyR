@@ -398,13 +398,30 @@ setup_settings_server <- function(input, output, session, rv, config,
 
     old_db_folder <- config$db_folder
 
+    # An emptied field must not replace a working value with one that breaks
+    # the app (an empty database folder resolves to the filesystem root, and
+    # a missing scale makes the measure tool report NaN)
+    db_folder <- trimws(input$cfg_db_folder %||% "")
+    if (!nzchar(db_folder)) {
+      db_folder <- old_db_folder
+      showNotification("Database folder cannot be empty; keeping the current one.",
+                       type = "warning")
+    }
+    pixels_per_micron <- suppressWarnings(as.numeric(input$cfg_pixels_per_micron))
+    if (length(pixels_per_micron) != 1 || is.na(pixels_per_micron) ||
+        pixels_per_micron <= 0) {
+      pixels_per_micron <- config$pixels_per_micron
+      showNotification("Pixels per micron must be a positive number; keeping the current value.",
+                       type = "warning")
+    }
+
     config$csv_folder <- input$cfg_csv_folder
     config$roi_folder <- input$cfg_roi_folder
     config$output_folder <- input$cfg_output_folder
     config$png_output_folder <- input$cfg_png_output_folder
-    config$db_folder <- input$cfg_db_folder
+    config$db_folder <- db_folder
     config$use_threshold <- input$cfg_use_threshold
-    config$pixels_per_micron <- input$cfg_pixels_per_micron
+    config$pixels_per_micron <- pixels_per_micron
     config$auto_sync <- input$cfg_auto_sync
     config$save_format <- input$cfg_save_format
     config$export_statistics <- input$cfg_export_statistics
@@ -430,9 +447,9 @@ setup_settings_server <- function(input, output, session, rv, config,
       roi_folder = input$cfg_roi_folder,
       output_folder = input$cfg_output_folder,
       png_output_folder = input$cfg_png_output_folder,
-      db_folder = input$cfg_db_folder,
+      db_folder = db_folder,
       use_threshold = input$cfg_use_threshold,
-      pixels_per_micron = input$cfg_pixels_per_micron,
+      pixels_per_micron = pixels_per_micron,
       auto_sync = input$cfg_auto_sync,
       save_format = input$cfg_save_format,
       export_statistics = input$cfg_export_statistics,
@@ -446,7 +463,9 @@ setup_settings_server <- function(input, output, session, rv, config,
       dashboard_multi_timeout = config$dashboard_multi_timeout,
       dashboard_max_retries = config$dashboard_max_retries,
       gradio_url = input$cfg_gradio_url,
-      prediction_model = input$cfg_prediction_model,
+      # config, not the widget: an empty model select sends NULL, which
+      # would remove the stored model from the settings file
+      prediction_model = config$prediction_model,
       zip_readme_author = config$zip_readme_author,
       zip_readme_contact_email = config$zip_readme_contact_email,
       zip_readme_doi = config$zip_readme_doi,

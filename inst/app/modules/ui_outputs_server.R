@@ -4,7 +4,9 @@ setup_ui_outputs_server <- function(input, output, session, rv, config,
                                     calculate_stats, roi_path_map,
                                     classifier_mat_files, classifier_h5_files,
                                     last_sync_time, csv_path_map,
-                                    png_sample_path_map) {
+                                    png_sample_path_map,
+                                    save_to_cache = function() NULL,
+                                    load_dashboard_autoclass = function(...) NULL) {
   output$cache_age_text <- renderUI({
     invalidateLater(60000)
     ts <- last_sync_time()
@@ -184,92 +186,108 @@ setup_ui_outputs_server <- function(input, output, session, rv, config,
     NULL
   }
 
-  infer_roi_dims_from_png_local <- function(sample_name, sample_png_dir) {
-    if (is.null(sample_png_dir) || !dir.exists(sample_png_dir)) return(NULL)
-    pattern <- paste0("^", sample_name, "_\\d+\\.png$")
-    png_files <- list.files(sample_png_dir, pattern = pattern, full.names = FALSE)
-    if (length(png_files) == 0) return(NULL)
-
-    rows <- lapply(png_files, function(fn) {
-      roi_number <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", fn))
-      dims <- ClassiPyR:::read_png_dimensions(file.path(sample_png_dir, fn))
-      data.frame(roi_number = roi_number, width = dims$width, height = dims$height, stringsAsFactors = FALSE)
-    })
-    dims_df <- do.call(rbind, rows)
-    dims_df <- dims_df[!is.na(dims_df$roi_number), ]
-    if (nrow(dims_df) == 0) return(NULL)
-    dims_df <- dims_df[!duplicated(dims_df$roi_number), ]
-    dims_df <- dims_df[order(dims_df$roi_number), ]
-    dims_df$area <- dims_df$width * dims_df$height
-    dims_df
-  }
-
-  do_switch_to_validation <- function() {
-    req(rv$current_sample, rv$has_classification)
-
-    sample_name <- rv$current_sample
+  # ROI dimensions of the current sample: from its ADC file, the dashboard
+  # cache, or the extracted PNG files
+  current_roi_dims <- function(sample_name) {
     roi_path <- roi_path_map()[[sample_name]]
     if (!is.null(roi_path) && !file.exists(roi_path)) roi_path <- NULL
-    sample_png_dir <- find_sample_png_dir(sample_name)
     adc_path <- if (!is.null(roi_path)) sub("\\.roi$", ".adc", roi_path) else NULL
-    roi_dims <- if (!is.null(adc_path) && file.exists(adc_path)) {
-      read_roi_dimensions(adc_path)
-    } else {
-      infer_roi_dims_from_png_local(sample_name, sample_png_dir)
+    if (is.null(adc_path) && identical(config$data_source, "dashboard")) {
+      cached_adc <- file.path(get_dashboard_cache_dir(), substr(sample_name, 1, 9),
+                              paste0(sample_name, ".adc"))
+      if (file.exists(cached_adc)) adc_path <- cached_adc
     }
-
-    csv_path <- find_csv_file(sample_name)
-    classifier_h5_path <- find_classifier_h5(sample_name)
-    classifier_mat_path <- classifier_mat_files()[[sample_name]]
-
-    if (!is.null(csv_path)) {
-      classifications <- load_from_csv(csv_path, use_threshold = config$use_threshold)
-      showNotification("Switched to Validation mode (CSV)", type = "message")
-    } else if (!is.null(classifier_h5_path)) {
-      if (is.null(roi_dims)) {
-        showNotification("No ROI dimensions available for H5 classifications", type = "error")
-        return()
-      }
-      classifications <- load_from_h5(
-        classifier_h5_path, sample_name, roi_dims,
-        use_threshold = config$use_threshold
-      )
-      showNotification("Switched to Validation mode (H5)", type = "message")
-    } else if (!is.null(classifier_mat_path)) {
-      if (is.null(roi_dims)) {
-        showNotification("No ROI dimensions available for MAT classifications", type = "error")
-        return()
-      }
-      classifications <- load_from_classifier_mat(
-        classifier_mat_path, sample_name, rv$class2use, roi_dims,
-        use_threshold = config$use_threshold
-      )
-      showNotification("Switched to Validation mode (MAT)", type = "message")
-    } else if (!is.null(rv$cached_validation_classifications) &&
-               nrow(rv$cached_validation_classifications) > 0) {
-      # Restore cached validation classifications (e.g., dashboard autoclass)
-      classifications <- rv$cached_validation_classifications
-      showNotification("Switched to Validation mode (cached)", type = "message")
-    } else {
-      showNotification("No classification data available", type = "warning")
-      return()
+    if (!is.null(adc_path) && file.exists(adc_path)) {
+      dims <- tryCatch(read_roi_dimensions(adc_path), error = function(e) NULL)
+      if (!is.null(dims)) return(dims)
     }
+    ClassiPyR:::infer_roi_dims_from_png(sample_name, find_sample_png_dir(sample_name))
+  }
+
+  # Show a freshly loaded set of classifications for the current sample.
+  # Only ROIs that have an image are kept, exactly as when a sample is
+  # loaded: the classifier and the database can list triggers without an
+  # image, which would otherwise appear as "Not found" tiles and be saved.
+  show_switched_classifications <- function(classifications, annotation_mode) {
+    sample_name <- rv$current_sample
+    classifications <- filter_to_extracted(
+      classifications, file.path(rv$temp_png_folder %||% "", sample_name)
+    )
 
     rv$original_classifications <- classifications
     rv$classifications <- classifications
-    rv$is_annotation_mode <- FALSE
+    rv$is_annotation_mode <- annotation_mode
     rv$selected_images <- character()
     rv$current_page <- 1
     rv$changes_log <- create_empty_changes_log()
 
     available_classes <- sort(unique(classifications$class_name))
     unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
-    display_names <- sapply(available_classes, function(cls) {
-      if (cls %in% unmatched) paste0("\u26A0 ", cls) else cls
-    })
     updateSelectInput(session, "class_filter",
-                      choices = c("All" = "all", setNames(available_classes, display_names)),
+                      choices = build_class_filter_choices(available_classes, unmatched),
                       selected = "all")
+  }
+
+  do_switch_to_validation <- function() {
+    req(rv$current_sample, rv$has_classification)
+
+    # Relabels made in manual mode are stored before the view is replaced;
+    # switching used to discard them without a word
+    save_to_cache()
+
+    sample_name <- rv$current_sample
+    roi_dims <- current_roi_dims(sample_name)
+
+    csv_path <- find_csv_file(sample_name)
+    classifier_h5_path <- find_classifier_h5(sample_name)
+    classifier_mat_path <- classifier_mat_files()[[sample_name]]
+    is_dashboard <- identical(config$data_source, "dashboard")
+    source_label <- NULL
+
+    classifications <- tryCatch({
+      if (!is.null(csv_path)) {
+        source_label <- "CSV"
+        csv <- load_from_csv(csv_path, use_threshold = config$use_threshold)
+        dims <- ClassiPyR:::match_roi_dims(
+          ClassiPyR:::roi_number_from_file_name(csv$file_name), roi_dims
+        )
+        csv$width <- dims$width
+        csv$height <- dims$height
+        csv$roi_area <- dims$roi_area
+        csv
+      } else if (!is.null(classifier_h5_path)) {
+        source_label <- "H5"
+        load_from_h5(classifier_h5_path, sample_name, roi_dims,
+                     use_threshold = config$use_threshold)
+      } else if (!is.null(classifier_mat_path)) {
+        source_label <- "MAT"
+        load_from_classifier_mat(classifier_mat_path, sample_name, rv$class2use,
+                                 roi_dims, use_threshold = config$use_threshold)
+      } else if (!is.null(rv$cached_validation_classifications) &&
+                 nrow(rv$cached_validation_classifications) > 0) {
+        # Restore cached validation classifications (e.g., dashboard autoclass)
+        source_label <- "cached"
+        rv$cached_validation_classifications
+      } else if (is_dashboard && isTRUE(config$dashboard_autoclass)) {
+        # A sample opened in manual mode never downloaded its dashboard
+        # auto-classifications; fetch them now
+        source_label <- "Dashboard autoclass"
+        load_dashboard_autoclass(sample_name, roi_dims)
+      }
+    }, error = function(e) {
+      showNotification(paste("Could not load classifications:", e$message),
+                       type = "error")
+      NULL
+    })
+
+    if (is.null(classifications) || nrow(classifications) == 0) {
+      showNotification("No classification data available", type = "warning")
+      return()
+    }
+
+    show_switched_classifications(classifications, annotation_mode = FALSE)
+    showNotification(paste0("Switched to Validation mode (", source_label, ")"),
+                     type = "message")
   }
 
   observeEvent(input$switch_to_validation, {
@@ -284,59 +302,44 @@ setup_ui_outputs_server <- function(input, output, session, rv, config,
       rv$cached_validation_classifications <- rv$original_classifications
     }
 
+    # Corrections made in validation mode are stored before the view is
+    # replaced; switching used to discard them without a word. The manual
+    # annotations loaded below then include them.
+    save_to_cache()
+
     sample_name <- rv$current_sample
-    roi_path <- roi_path_map()[[sample_name]]
-    if (!is.null(roi_path) && !file.exists(roi_path)) roi_path <- NULL
-    sample_png_dir <- find_sample_png_dir(sample_name)
-    adc_path <- if (!is.null(roi_path)) sub("\\.roi$", ".adc", roi_path) else NULL
+    roi_dims <- current_roi_dims(sample_name)
 
     db_path <- get_db_path(config$db_folder)
     annotation_mat_path <- file.path(config$output_folder, paste0(sample_name, ".mat"))
-    has_db <- sample_name %in% list_annotated_samples_db(db_path)
+    has_db <- ClassiPyR:::sample_has_annotations_db(db_path, sample_name)
     has_mat <- file.exists(annotation_mat_path)
 
-    roi_dims <- if (!is.null(adc_path) && file.exists(adc_path)) {
-      read_roi_dimensions(adc_path)
-    } else {
-      infer_roi_dims_from_png_local(sample_name, sample_png_dir)
+    if (is.null(roi_dims)) {
+      showNotification("No ROI dimensions available for manual annotations", type = "error")
+      return()
     }
 
-    if (has_db || has_mat) {
-      if (is.null(roi_dims)) {
-        showNotification("No ROI dimensions available for manual annotations", type = "error")
-        return()
-      }
+    classifications <- tryCatch({
       if (has_db) {
-        classifications <- load_from_db(db_path, sample_name, roi_dims)
+        load_from_db(db_path, sample_name, roi_dims)
+      } else if (has_mat) {
+        load_from_mat(annotation_mat_path, sample_name, rv$class2use, roi_dims)
       } else {
-        classifications <- load_from_mat(annotation_mat_path, sample_name, rv$class2use, roi_dims)
+        # No existing annotations: blank classifications from ROI dimensions
+        create_new_classifications(sample_name, roi_dims)
       }
-      showNotification("Switched to Manual annotation mode", type = "message")
-    } else {
-      # No existing annotations — create blank classifications from ROI dimensions
-      if (is.null(roi_dims)) {
-        showNotification("No ROI dimensions available to create annotations", type = "error")
-        return()
-      }
-      classifications <- create_new_classifications(sample_name, roi_dims)
-      showNotification("Switched to Annotation mode (new)", type = "message")
-    }
-
-    rv$original_classifications <- classifications
-    rv$classifications <- classifications
-    rv$is_annotation_mode <- TRUE
-    rv$selected_images <- character()
-    rv$current_page <- 1
-    rv$changes_log <- create_empty_changes_log()
-
-    available_classes <- sort(unique(classifications$class_name))
-    unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
-    display_names <- sapply(available_classes, function(cls) {
-      if (cls %in% unmatched) paste0("\u26A0 ", cls) else cls
+    }, error = function(e) {
+      showNotification(paste("Could not load annotations:", e$message), type = "error")
+      NULL
     })
-    updateSelectInput(session, "class_filter",
-                      choices = c("All" = "all", setNames(available_classes, display_names)),
-                      selected = "all")
+    if (is.null(classifications)) return()
+
+    show_switched_classifications(classifications, annotation_mode = TRUE)
+    showNotification(
+      if (has_db || has_mat) "Switched to Manual annotation mode" else "Switched to Annotation mode (new)",
+      type = "message"
+    )
   })
 
   # Return do_switch_to_validation for use by statistics tab link

@@ -89,47 +89,41 @@ setup_selection_relabel_server <- function(input, output, session, rv,
     req(length(rv$selected_images) > 0)
     req(new_class, new_class != "")
 
-    # Work with copies to avoid mutation issues with reactivity
+    # All selected images are relabeled in one vectorised step. (One
+    # which() and one rbind() per image made "Select All" + Relabel on a
+    # large sample take many seconds.)
     updated_classifications <- rv$classifications
-    updated_changes_log <- rv$changes_log
-    relabeled_count <- 0
+    idx <- match(unique(rv$selected_images), updated_classifications$file_name)
+    idx <- idx[!is.na(idx)]
+    idx <- idx[updated_classifications$class_name[idx] != new_class]
+    relabeled_count <- length(idx)
 
-    for (img in rv$selected_images) {
-      idx <- which(updated_classifications$file_name == img)
-      if (length(idx) > 0) {
-        old_class <- updated_classifications$class_name[idx]
+    if (relabeled_count > 0) {
+      new_changes <- data.frame(
+        image = updated_classifications$file_name[idx],
+        original_class = updated_classifications$class_name[idx],
+        new_class = new_class,
+        stringsAsFactors = FALSE
+      )
+      updated_classifications$class_name[idx] <- new_class
 
-        if (old_class != new_class) {
-          updated_changes_log <- rbind(updated_changes_log, data.frame(
-            image = img,
-            original_class = old_class,
-            new_class = new_class,
-            stringsAsFactors = FALSE
-          ))
-
-          updated_classifications$class_name[idx] <- new_class
-          relabeled_count <- relabeled_count + 1
-        }
-      }
+      # Single assignment to reactive values
+      rv$classifications <- updated_classifications
+      rv$changes_log <- rbind(rv$changes_log, new_changes)
     }
-
-    # Single assignment to reactive values
-    rv$classifications <- updated_classifications
-    rv$changes_log <- updated_changes_log
 
     available_classes <- sort(unique(rv$classifications$class_name))
     unmatched <- setdiff(available_classes, c(rv$class2use, "unclassified"))
-    display_names <- sapply(available_classes, function(cls) {
-      if (cls %in% unmatched) paste0("\u26A0 ", cls) else cls
-    })
     updateSelectInput(session, "class_filter",
-                      choices = c("All" = "all", setNames(available_classes, display_names)),
+                      choices = build_class_filter_choices(available_classes, unmatched),
                       selected = input$class_filter)
 
     showNotification(paste("Relabeled", relabeled_count, "images to", new_class), type = "message")
-    # No setSelectedCards sync needed: the rv$classifications assignment above
-    # re-renders the gallery, which picks up the cleared selection
     rv$selected_images <- character()
+    # A relabel that changed something re-renders the gallery, which picks up
+    # the cleared selection; one that changed nothing (images already in that
+    # class) does not, so the cards are deselected explicitly
+    if (relabeled_count == 0) sync_selection_to_client()
   }
 
   observeEvent(input$relabel_quick, {

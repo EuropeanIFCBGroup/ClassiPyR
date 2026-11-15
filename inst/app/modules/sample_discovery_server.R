@@ -55,6 +55,31 @@ setup_sample_discovery_server <- function(input, output, session, rv, config,
     TRUE
   }
 
+  # The annotated list of a cached index is refreshed from the output folder
+  # and the database every time the cache is used. Both are cheap to read (one
+  # folder listing, one query), and the cached list goes stale whenever
+  # annotations arrive another way: a .mat or PNG import, another session, or
+  # a changed database folder.
+  with_fresh_annotations <- function(cached) {
+    is_dashboard <- identical(cached$data_source, "dashboard")
+    fresh <- tryCatch(
+      ClassiPyR:::scan_annotated_samples(
+        if (!is_dashboard) config$output_folder,
+        config$db_folder,
+        as.character(cached$sample_names)
+      ),
+      error = function(e) NULL
+    )
+    if (!is.null(fresh)) cached$annotated_samples <- fresh
+    cached
+  }
+
+  # A cache written for another database folder lists that database's
+  # annotations. (Caches from before the folder was recorded are accepted.)
+  same_db_folder <- function(cached) {
+    is.null(cached$db_folder) || identical(cached$db_folder, config$db_folder)
+  }
+
   # Scan for available ROI files and classification files
   observe({
     rescan_trigger()
@@ -69,17 +94,18 @@ setup_sample_discovery_server <- function(input, output, session, rv, config,
         identical(cached$data_source, "dashboard") &&
         identical(cached$dashboard_url, dashboard_url) &&
         identical(cached$csv_folder, config$csv_folder) &&
-        identical(cached$dashboard_autoclass, isTRUE(config$dashboard_autoclass))
+        identical(cached$dashboard_autoclass, isTRUE(config$dashboard_autoclass)) &&
+        same_db_folder(cached)
 
       if (cache_valid) {
-        populate_from_index(cached)
+        populate_from_index(with_fresh_annotations(cached))
         return()
       }
 
       auto_sync <- config$auto_sync
       if (!isTRUE(auto_sync) && !is.null(cached) &&
           identical(cached$data_source, "dashboard")) {
-        populate_from_index(cached)
+        populate_from_index(with_fresh_annotations(cached))
         return()
       }
 
@@ -114,16 +140,17 @@ setup_sample_discovery_server <- function(input, output, session, rv, config,
       cache_valid <- !is.null(cached) &&
         identical(cached$roi_folder, roi_folder) &&
         identical(cached$csv_folder, csv_folder) &&
-        identical(cached$output_folder, output_folder)
+        identical(cached$output_folder, output_folder) &&
+        same_db_folder(cached)
 
       if (cache_valid) {
-        populate_from_index(cached)
+        populate_from_index(with_fresh_annotations(cached))
         return()
       }
 
       auto_sync <- config$auto_sync
       if (!isTRUE(auto_sync) && !is.null(cached)) {
-        populate_from_index(cached)
+        populate_from_index(with_fresh_annotations(cached))
         return()
       }
 
@@ -132,6 +159,7 @@ setup_sample_discovery_server <- function(input, output, session, rv, config,
           roi_folder = roi_folder,
           csv_folder = csv_folder,
           output_folder = output_folder,
+          db_folder = config$db_folder,
           verbose = FALSE,
           progress = function(value = NULL, detail = NULL) {
             if (!is.null(value)) {
@@ -254,20 +282,10 @@ setup_sample_discovery_server <- function(input, output, session, rv, config,
     samples <- sort(samples)
 
     if (length(samples) > 0) {
-      display_names <- sapply(samples, function(s) {
-        has_manual <- s %in% annotated
-        has_classified <- s %in% classified
-        if (has_manual && has_classified) {
-          paste0(s, "\u270E\u2713")
-        } else if (has_manual) {
-          paste0(s, "\u270E")
-        } else if (has_classified) {
-          paste0(s, "\u2713")
-        } else {
-          paste0(s, "*")
-        }
-      })
-      choices <- setNames(samples, display_names)
+      choices <- setNames(
+        samples,
+        paste0(samples, sample_status_suffix(samples, classified, annotated))
+      )
     } else {
       choices <- character(0)
     }

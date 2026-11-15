@@ -99,7 +99,7 @@ Review all annotated images of a class across the entire database:
 4. Select a class and click **Load** — images are loaded from ROI files or discovered PNG sample folders across all samples
 5. Review images in the gallery. Each image label shows the full name (sample + ROI) so you can identify which sample it belongs to
 6. Use the same selection and relabeling tools as in sample mode
-7. Click **Save Changes** to write row-level updates to the database
+7. Click **Save Changes** to write row-level updates to the database. Unsaved changes are also written when you load another class, leave Class Review or close the app
 
 ### External folder review
 

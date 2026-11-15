@@ -22,6 +22,7 @@ setup_init_server <- function(input, output, session) {
 
     # Session management
     session_cache = list(),         # Cache of loaded samples (for quick switching)
+    saved_state = NULL,             # Sample + classes as last written to storage
 
     # Mode tracking
     is_annotation_mode = FALSE,     # TRUE = annotation (no auto-class), FALSE = validation

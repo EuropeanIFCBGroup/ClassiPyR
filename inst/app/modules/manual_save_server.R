@@ -4,7 +4,8 @@ setup_manual_save_server <- function(input, output, session, rv, config,
                                      roi_path_map, annotated_samples,
                                      disable_nav_buttons, enable_nav_buttons,
                                      update_current_sample_status_fn,
-                                     find_sample_png_dir) {
+                                     find_sample_png_dir,
+                                     mark_current_saved = function() NULL) {
   # --- Clear Annotations button (conditionally rendered) ---
   output$clear_btn_ui <- renderUI({
     is_enabled <- isTRUE(rv$is_annotation_mode) &&
@@ -42,11 +43,14 @@ setup_manual_save_server <- function(input, output, session, rv, config,
     sample_name <- rv$current_sample
     db_path <- get_db_path(config$db_folder)
 
-    # Delete from SQLite
-    deleted <- delete_annotations_db(db_path, sample_name)
-    if (!isTRUE(deleted)) {
-      showNotification("Failed to delete annotations from database", type = "error")
-      return()
+    # Delete from SQLite. With MAT-only storage there may be no database at
+    # all, which is not a failure: the .mat file below is what gets removed.
+    if (file.exists(db_path)) {
+      deleted <- delete_annotations_db(db_path, sample_name)
+      if (!isTRUE(deleted)) {
+        showNotification("Failed to delete annotations from database", type = "error")
+        return()
+      }
     }
 
     # Delete .mat file if it exists
@@ -54,6 +58,7 @@ setup_manual_save_server <- function(input, output, session, rv, config,
     if (file.exists(mat_path)) {
       file.remove(mat_path)
     }
+    rv$saved_state <- NULL
 
     # Reconstruct roi_dimensions from current classifications
     roi_numbers <- as.integer(gsub(".*_(\\d+)\\.png$", "\\1", rv$classifications$file_name))
@@ -88,10 +93,10 @@ setup_manual_save_server <- function(input, output, session, rv, config,
     req(rv$classifications)
     req(rv$class2use)
     req(rv$current_sample)
-    # class2use_path is only required for MAT saves; SQLite uses rv$class2use directly
-    if (config$save_format %in% c("mat", "both")) {
-      req(rv$class2use_path)
-    }
+    # No class list file is needed: MAT saves write their class2use from
+    # rv$class2use, like SQLite saves. (Requiring rv$class2use_path here made
+    # the button do nothing, without a message, whenever the class list had
+    # been restored from the database rather than loaded from a file.)
 
     rv$is_loading <- TRUE
     disable_nav_buttons()
@@ -100,8 +105,7 @@ setup_manual_save_server <- function(input, output, session, rv, config,
       enable_nav_buttons()
     })
 
-    annotator <- input$annotator_name
-    if (is.null(annotator) || annotator == "") annotator <- "Unknown"
+    annotator <- annotator_or_unknown(input$annotator_name)
 
     # Check for unmatched classes and warn
     current_classes <- unique(rv$classifications$class_name)
@@ -188,7 +192,11 @@ setup_manual_save_server <- function(input, output, session, rv, config,
           adc_folder = adc_folder,
           save_format = save_fmt,
           db_folder = config$db_folder,
-          export_statistics = config$export_statistics
+          export_statistics = config$export_statistics,
+          # In validation mode an explicit save records the sample as
+          # reviewed even when every auto-classification was left as it is.
+          # A sample being annotated from scratch still needs a change.
+          force = !isTRUE(rv$is_annotation_mode)
         )
       })
 
@@ -198,6 +206,8 @@ setup_manual_save_server <- function(input, output, session, rv, config,
         showNotification("No changes to save", type = "message")
         return()
       }
+
+      mark_current_saved()
 
       # Update annotated samples list to reflect new manual annotation
       current_annotated <- annotated_samples()
