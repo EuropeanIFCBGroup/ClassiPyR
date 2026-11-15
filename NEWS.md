@@ -10,6 +10,39 @@
   - A review survives its data being away: images whose raw data cannot be found stay pending and come back once it is available again, and a frozen review can be opened, shown and exported without the class-score files or their index.
 - New exported functions, all experimental: `build_threshold_index()` (builds or updates the cache of class-score files the app reads, and can be run from a script for large folders), `estimate_precision_curve()` and `choose_class_threshold()` (the estimate and the rule behind the app's results), and `write_thresholds_json()`, `write_thresholds_csv()` and `write_thresholds_report_csv()` (write a thresholds file that ifcb-classify reads back exactly, also usable for thresholds set by hand).
 
+## Bug fixes
+
+Data integrity:
+
+- **SQLite → `.mat` export no longer shifts classes onto the wrong ROIs**: `export_db_to_mat()` (and with it the "SQLite → .mat" and "SQLite → MATLAB ZIP" exports) wrote the annotations of a sample one after the other, numbering them 1, 2, 3, …. The database only holds the ROIs that have an image, so for any sample with a trigger without an image — which is most samples — every class after the first such trigger ended up on the wrong ROI. Each annotation is now written to the row of its own ROI number, and ROIs without an annotation are written as `NaN`, as in files saved directly as `.mat`. `export_db_to_mat()` gains an `adc_path` argument and `export_all_db_to_mat()` a `roi_path_map` argument, used to give the file the exact number of ROIs of the sample. **If you have shared `.mat` files produced by these exports, re-export them.** Files written by the *MAT file* and *Both* storage formats were not affected.
+- **MAT saves use the class list as it is in the app**: `.mat` files were written with the class list file that was last uploaded, not the list in use. A class added or renamed in the class list editor afterwards was missing from that file, and every image annotated with it was silently saved as `unclassified`. With the class list restored from the database (no file uploaded this session), the Save button did nothing at all, without a message, for the *MAT file* and *Both* formats. The class list in use is now always the one written.
+- **Relabeled images no longer stay behind in their old class folder**: Saving copied each image into the PNG output folder of its current class but never removed the copy made by an earlier save, so an image relabeled after its first save existed under two classes.
+- **Switching between validation and manual mode keeps unsaved work**: The "→ Manual" and "→ Validation" links discarded every relabel made since the last save. They now save first. Switching to manual mode also no longer adds triggers without an image as "Not found" tiles (which were then saved as annotations).
+- **Class review changes are no longer lost**: Loading another class, switching to the external source, going back to Sample Mode or closing the app discarded unsaved class review changes. They are now saved automatically, like a sample is when you leave it.
+
+Interface:
+
+- **A reviewed sample can be saved without corrections**: In validation mode, *Save Annotations* answered "No changes to save" when every auto-classification was correct, so the sample could not be recorded as reviewed. An explicit save now stores it. Samples you only browse are still not saved by the navigation auto-save, and `save_sample_annotations()` gains a `force` argument for the same purpose.
+- **H5 classifications of samples with a single ROI can be loaded**: `load_from_h5()` failed with `dim(X) must have a positive length`.
+- **Annotation markers (✎) stay up to date**: Samples imported with ".mat → SQLite" or "PNG → SQLite" only got their marker after a manual sync, annotations in the database were ignored when the MAT output folder did not exist, and changing the database folder left the markers of the previous database in place.
+- **"Clear Annotations" works with MAT-only storage**: It failed with "Failed to delete annotations from database" when no database existed, leaving the `.mat` file in place.
+- **Dashboard samples with existing annotations can switch to validation mode**: The switch was offered but answered "No classification data available" unless the auto-classifications had been loaded earlier in the session, and it was not offered at all for local classification files.
+- **Class names typed into the class list editor are sanitized** like names read from a file (a `/` created nested folders in the PNG output), and duplicate names are removed.
+- **Settings**: an emptied database folder or pixels-per-micron field no longer replaces a working value, and the prediction model is no longer removed from the settings file when the model list is empty.
+- **Class Review reads PNG-only samples**: samples that exist only as extracted PNG folders were skipped as "ROI not found".
+- The threshold review app's results no longer fail with `is.character(txt) is not TRUE` when the `jsonlite` package is attached in the R session.
+
+## Performance
+
+- **Building the threshold index and loading H5 classifications is about three times faster.** Class-score files are closed without the full garbage collection `hdf5r` otherwise runs for each file, as iRfcb now does for its own reader.
+- **Relabeling many images at once is instant**: "Select All" followed by Relabel worked through the images one by one and took many seconds on a large sample.
+- **Navigating between samples no longer rebuilds the sample list slowly**: with tens of thousands of samples, every Previous/Next click spent seconds on the status symbols of the dropdown.
+- **Saving is faster**: images already in the PNG output folder are not copied again, a sample that has not changed since its last save is not written a second time when you navigate away or close the app, and the extra image copy needed for `.mat` files is only made when a `.mat` file is written.
+- **Folder sync is faster for large archives**: the file index is built with vectorised lookups instead of growing lists one sample at a time.
+- **Loading dashboard samples is faster**: local classification files are found through the file index instead of three recursive folder listings per sample, and the auto-classification file is looked up directly instead of by listing the whole image cache.
+- **Scanning a PNG class folder** (`scan_png_class_folder()`, "PNG → SQLite") and writing the EcoTaxa inventory files of a ZIP export no longer process files one at a time.
+- The bulk imports and exports show their progress per sample; `import_all_mat_to_db()`, `export_all_db_to_mat()` and `export_all_db_to_png()` gain a `progress` argument.
+
 # ClassiPyR 0.3.0
 
 - ClassiPyR now requires R >= 4.4.0 (for base R's `%||%` operator, which the app already relied on).
