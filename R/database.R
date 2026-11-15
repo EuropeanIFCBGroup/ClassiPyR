@@ -481,25 +481,15 @@ load_annotations_db <- function(db_path, sample_name, roi_dimensions) {
     return(NULL)
   }
 
-  # Match ROI dimensions by roi_number (safe lookup with NA fallback)
-  roi_data <- lapply(rows$roi_number, function(rn) {
-    idx <- which(roi_dimensions$roi_number == rn)
-    if (length(idx) > 0) {
-      list(width = roi_dimensions$width[idx],
-           height = roi_dimensions$height[idx],
-           area = roi_dimensions$area[idx])
-    } else {
-      list(width = NA_real_, height = NA_real_, area = NA_real_)
-    }
-  })
+  dims <- match_roi_dims(rows$roi_number, roi_dimensions)
 
   classifications <- data.frame(
     file_name = sprintf("%s_%05d.png", sample_name, rows$roi_number),
     class_name = rows$class_name,
     score = NA_real_,
-    width = vapply(roi_data, `[[`, numeric(1), "width"),
-    height = vapply(roi_data, `[[`, numeric(1), "height"),
-    roi_area = vapply(roi_data, `[[`, numeric(1), "area"),
+    width = dims$width,
+    height = dims$height,
+    roi_area = dims$roi_area,
     stringsAsFactors = FALSE
   )
 
@@ -629,13 +619,7 @@ import_mat_to_db <- function(mat_path, db_path, sample_name,
     is_nan <- is.nan(class_indices)
     is_manual <- ifelse(is_nan, 0L, 1L)
 
-    class_names <- vapply(class_indices, function(idx) {
-      if (is.na(idx) || is.nan(idx) || idx < 1 || idx > length(class2use)) {
-        "unclassified"
-      } else {
-        class2use[idx]
-      }
-    }, character(1))
+    class_names <- class_names_from_indices(class_indices, class2use)
 
     # Build a classifications-like data frame for save_annotations_db
     classifications <- data.frame(
@@ -760,6 +744,8 @@ export_db_to_mat <- function(db_path, sample_name, output_folder,
 #' @param mat_folder Folder containing .mat annotation files
 #' @param db_path Path to the SQLite database file
 #' @param annotator Annotator name (defaults to \code{"imported"})
+#' @param progress Optional callback \code{function(done, total)} called after
+#'   each file, e.g. to drive a Shiny progress bar.
 #' @return Named list with counts: \code{success}, \code{failed}, \code{skipped}
 #' @export
 #' @examples
@@ -769,7 +755,7 @@ export_db_to_mat <- function(db_path, sample_name, output_folder,
 #' cat(result$success, "imported,", result$failed, "failed,", result$skipped, "skipped\n")
 #' }
 import_all_mat_to_db <- function(mat_folder, db_path,
-                                  annotator = "imported") {
+                                  annotator = "imported", progress = NULL) {
   mat_files <- list.files(mat_folder, pattern = "\\.mat$", full.names = TRUE)
   # Exclude classifier output files (*_class*.mat) and class2use files
   mat_files <- mat_files[!grepl("_class", basename(mat_files))]
@@ -784,8 +770,10 @@ import_all_mat_to_db <- function(mat_folder, db_path,
   # Get already-imported samples to allow skipping
   existing <- list_annotated_samples_db(db_path)
 
-  for (mat_path in mat_files) {
+  for (i in seq_along(mat_files)) {
+    mat_path <- mat_files[i]
     sample_name <- tools::file_path_sans_ext(basename(mat_path))
+    report_bulk_progress(progress, i, length(mat_files))
 
     if (sample_name %in% existing) {
       counts$skipped <- counts$skipped + 1L
@@ -1022,10 +1010,10 @@ import_png_folder_to_db <- function(png_folder, db_path, class2use,
 
   # Group by sample_name and save each sample
 
-  sample_names <- unique(annotations$sample_name)
+  rows_by_sample <- split(seq_len(nrow(annotations)), annotations$sample_name)
 
-  for (sn in sample_names) {
-    sample_rows <- annotations[annotations$sample_name == sn, ]
+  for (sn in names(rows_by_sample)) {
+    sample_rows <- annotations[rows_by_sample[[sn]], ]
 
     classifications <- data.frame(
       file_name = sample_rows$file_name,
@@ -1221,6 +1209,8 @@ import_png_folder_with_unclassified <- function(png_folder, db_path, class2use,
 #' @param samples Optional character vector of sample names to export. When
 #'   \code{NULL} (the default), all annotated samples in the database are
 #'   exported.
+#' @param progress Optional callback \code{function(done, total)} called after
+#'   each sample, e.g. to drive a Shiny progress bar.
 #' @return Named list with counts: \code{success}, \code{failed}, \code{skipped}
 #' @export
 #' @examples
@@ -1232,7 +1222,8 @@ import_png_folder_with_unclassified <- function(png_folder, db_path, class2use,
 #' cat(result$success, "exported,", result$failed, "failed,", result$skipped, "skipped\n")
 #' }
 export_all_db_to_png <- function(db_path, png_folder, roi_path_map,
-                                 skip_class = NULL, samples = NULL) {
+                                 skip_class = NULL, samples = NULL,
+                                 progress = NULL) {
   if (is.null(samples)) {
     samples <- list_annotated_samples_db(db_path)
   }
@@ -1243,7 +1234,9 @@ export_all_db_to_png <- function(db_path, png_folder, roi_path_map,
     return(counts)
   }
 
-  for (sample_name in samples) {
+  for (i in seq_along(samples)) {
+    sample_name <- samples[i]
+    report_bulk_progress(progress, i, length(samples))
     roi_path <- roi_path_map[[sample_name]]
     if (is.null(roi_path) || !file.exists(roi_path)) {
       counts$skipped <- counts$skipped + 1L
@@ -1323,6 +1316,62 @@ parse_ifcb_png_name <- function(file_name) {
   )
 }
 
+# Parse a vector of IFCB PNG filenames into date/time/ROI components
+#
+# One call to the iRfcb parser for the whole vector; names it cannot handle
+# fall back to parse_ifcb_png_name() one by one.
+#
+# @param file_names Basenames of IFCB PNG files
+# @return Data frame with `object_id`, `object_date`, `object_time` and
+#   `object_roi_number` (character), one row per file name.
+# @keywords internal
+parse_ifcb_png_names <- function(file_names) {
+  one_by_one <- function() {
+    parsed <- lapply(file_names, parse_ifcb_png_name)
+    data.frame(
+      object_id = vapply(parsed, `[[`, character(1), "object_id"),
+      object_date = vapply(parsed, `[[`, character(1), "object_date"),
+      object_time = vapply(parsed, `[[`, character(1), "object_time"),
+      object_roi_number = vapply(parsed, `[[`, character(1), "object_roi_number"),
+      stringsAsFactors = FALSE
+    )
+  }
+  if (length(file_names) == 0) {
+    return(one_by_one())
+  }
+
+  parsed <- tryCatch(iRfcb::ifcb_convert_filenames(file_names),
+                     error = function(e) NULL)
+  if (is.null(parsed) || nrow(parsed) != length(file_names) ||
+      !"timestamp" %in% names(parsed)) {
+    return(one_by_one())
+  }
+
+  timestamp <- suppressWarnings(as.POSIXct(parsed$timestamp, tz = "UTC"))
+  roi_number <- if ("roi" %in% names(parsed)) {
+    suppressWarnings(as.integer(parsed$roi))
+  } else {
+    rep(NA_integer_, length(file_names))
+  }
+  out <- data.frame(
+    object_id = tools::file_path_sans_ext(file_names),
+    object_date = format(timestamp, "%Y%m%d", tz = "UTC"),
+    object_time = format(timestamp, "%H%M%S", tz = "UTC"),
+    object_roi_number = as.character(roi_number),
+    stringsAsFactors = FALSE
+  )
+
+  # Names the vectorised parser could not date get the tolerant fallback
+  unparsed <- which(is.na(timestamp))
+  for (i in unparsed) {
+    fallback <- parse_ifcb_png_name(file_names[i])
+    out$object_date[i] <- fallback$object_date
+    out$object_time[i] <- fallback$object_time
+    out$object_roi_number[i] <- fallback$object_roi_number
+  }
+  out
+}
+
 # Create per-class EcoTaxa inventory text files for exported PNG folders
 #
 # Writes one tab-separated `.txt` file inside each class subdirectory with
@@ -1398,11 +1447,11 @@ create_ecotaxa_inventory_txt <- function(png_folder, db_path,
       stringsAsFactors = FALSE
     )
 
-    parsed <- lapply(png_files, parse_ifcb_png_name)
-    rows$object_id <- vapply(parsed, `[[`, character(1), "object_id")
-    rows$object_date <- vapply(parsed, `[[`, character(1), "object_date")
-    rows$object_time <- vapply(parsed, `[[`, character(1), "object_time")
-    rows$object_roi_number <- vapply(parsed, `[[`, character(1), "object_roi_number")
+    parsed <- parse_ifcb_png_names(png_files)
+    rows$object_id <- parsed$object_id
+    rows$object_date <- parsed$object_date
+    rows$object_time <- parsed$object_time
+    rows$object_roi_number <- parsed$object_roi_number
 
     idx <- match(rows$img_file_name, meta$img_file_name)
     has_meta <- !is.na(idx)

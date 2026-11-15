@@ -1004,3 +1004,134 @@ test_that("rescan_file_index dashboard mode skips csv_folder scan when dashboard
   expect_equal(length(result$classifier_h5_files), 0)
   expect_equal(length(result$classifier_mat_files), 0)
 })
+
+# ---------------------------------------------------------------------------
+# Folder scan helpers
+# ---------------------------------------------------------------------------
+
+test_that("first_path_by_name keeps one path per name", {
+  names <- c("a", "b", "a")
+  paths <- c("/1/a", "/1/b", "/2/a")
+  expect_equal(first_path_by_name(names, paths), list(a = "/1/a", b = "/1/b"))
+  expect_equal(first_path_by_name(names, paths, keep = "last"),
+               list(b = "/1/b", a = "/2/a"))
+  expect_length(first_path_by_name(character(), character()), 0)
+})
+
+test_that("scan_annotated_samples reads the database without an output folder", {
+  db_dir <- tempfile("db_")
+  out_dir <- tempfile("out_")
+  dir.create(db_dir)
+  dir.create(out_dir)
+  on.exit(unlink(c(db_dir, out_dir), recursive = TRUE), add = TRUE)
+
+  samples <- c("D20230101T120000_IFCB134", "D20230101T130000_IFCB134",
+               "D20230101T140000_IFCB134")
+  save_annotations_db(
+    get_db_path(db_dir), samples[1],
+    data.frame(file_name = paste0(samples[1], "_00001.png"),
+               class_name = "Diatom", stringsAsFactors = FALSE),
+    c("unclassified", "Diatom"), "Test"
+  )
+  file.create(file.path(out_dir, paste0(samples[2], ".mat")))
+  file.create(file.path(out_dir, paste0(samples[3], "_class_v1.mat")))
+  file.create(file.path(out_dir, "D20990101T000000_IFCB999.mat"))
+
+  expect_equal(scan_annotated_samples(NULL, db_dir, samples), samples[1])
+  expect_setequal(scan_annotated_samples(out_dir, db_dir, samples),
+                  samples[1:2])
+  expect_equal(scan_annotated_samples(out_dir, NULL, samples), samples[2])
+  expect_equal(scan_annotated_samples(file.path(out_dir, "missing"),
+                                      file.path(db_dir, "missing"), samples),
+               character())
+})
+
+test_that("rescan_file_index marks database annotations when the output folder is missing", {
+  base <- tempfile("scan_")
+  roi_dir <- file.path(base, "raw", "2023", "D20230101")
+  db_dir <- file.path(base, "db")
+  dir.create(roi_dir, recursive = TRUE)
+  dir.create(db_dir)
+  on.exit(unlink(base, recursive = TRUE), add = TRUE)
+
+  samples <- c("D20230101T120000_IFCB134", "D20230101T130000_IFCB134")
+  file.create(file.path(roi_dir, paste0(samples, ".roi")))
+  save_annotations_db(
+    get_db_path(db_dir), samples[2],
+    data.frame(file_name = paste0(samples[2], "_00001.png"),
+               class_name = "Diatom", stringsAsFactors = FALSE),
+    c("unclassified", "Diatom"), "Test"
+  )
+
+  index <- rescan_file_index(
+    roi_folder = file.path(base, "raw"),
+    csv_folder = file.path(base, "no_such_classified"),
+    output_folder = file.path(base, "no_such_output"),
+    db_folder = db_dir,
+    verbose = FALSE
+  )
+
+  expect_setequal(index$sample_names, samples)
+  expect_equal(index$annotated_samples, samples[2])
+  expect_equal(index$db_folder, db_dir)
+  expect_equal(index$roi_path_map[[samples[1]]],
+               file.path(roi_dir, paste0(samples[1], ".roi")))
+})
+
+test_that("scan_classification_files maps samples to their classifier output", {
+  csv_dir <- tempfile("classified_")
+  dir.create(file.path(csv_dir, "sub"), recursive = TRUE)
+  on.exit(unlink(csv_dir, recursive = TRUE), add = TRUE)
+
+  samples <- c("D20230101T120000_IFCB134", "D20230101T130000_IFCB134",
+               "D20230101T140000_IFCB134")
+  file.create(file.path(csv_dir, paste0(samples[1], ".csv")))
+  file.create(file.path(csv_dir, "sub", paste0(samples[1], ".csv")))
+  file.create(file.path(csv_dir, paste0(samples[2], "_class_v1.mat")))
+  file.create(file.path(csv_dir, paste0(samples[2], "_class_v2.mat")))
+  file.create(file.path(csv_dir, "sub", paste0(samples[3], "_class.h5")))
+  file.create(file.path(csv_dir, "D20990101T000000_IFCB999.csv"))
+
+  scan <- scan_classification_files(csv_dir, samples)
+
+  expect_equal(names(scan$csv_map), samples[1])
+  expect_equal(basename(dirname(scan$csv_map[[samples[1]]])), basename(csv_dir))
+  expect_equal(basename(scan$mat_map[[samples[2]]]),
+               paste0(samples[2], "_class_v2.mat"))
+  expect_equal(names(scan$h5_map), samples[3])
+  expect_setequal(scan$classified, samples)
+})
+
+test_that("sanitize_class_names makes names safe for folders", {
+  expect_message(
+    expect_equal(sanitize_class_names(c("Snowella/Woronichinia", "Diatom")),
+                 c("Snowella_Woronichinia", "Diatom")),
+    "underscores"
+  )
+  expect_warning(
+    expect_equal(sanitize_class_names(c("a<b>", "ok..name")),
+                 c("ab", "okname")),
+    "unsafe characters"
+  )
+  expect_silent(expect_equal(sanitize_class_names(c("Diatom", "Ciliate")),
+                             c("Diatom", "Ciliate")))
+  expect_equal(sanitize_class_names(character()), character())
+})
+
+test_that("infer_roi_dims_from_png reads the dimensions of a sample's PNG files", {
+  sample_name <- "D20220522T000439_IFCB134"
+  png_dir <- testthat::test_path("test_data", "png", sample_name)
+  skip_if_not(dir.exists(png_dir), "Test PNG folder not found")
+
+  dims <- infer_roi_dims_from_png(sample_name, png_dir)
+  n_png <- length(list.files(png_dir, pattern = "\\.png$"))
+
+  expect_equal(nrow(dims), n_png)
+  expect_named(dims, c("roi_number", "width", "height", "area"))
+  expect_false(is.unsorted(dims$roi_number))
+  expect_true(all(dims$width > 0 & dims$height > 0))
+  expect_equal(dims$area, dims$width * dims$height)
+
+  expect_null(infer_roi_dims_from_png(sample_name, tempfile("missing_")))
+  expect_null(infer_roi_dims_from_png("D20990101T000000_IFCB999", png_dir))
+})

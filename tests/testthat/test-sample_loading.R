@@ -421,3 +421,88 @@ test_that("load_from_csv backfills a missing score column", {
   expect_true("score" %in% names(classifications))
   expect_true(all(is.na(classifications$score)))
 })
+
+# ---------------------------------------------------------------------------
+# Loader helpers
+# ---------------------------------------------------------------------------
+
+test_that("load_from_h5 reads a file with a single ROI", {
+  skip_if_not_installed("hdf5r")
+
+  h5_path <- tempfile(fileext = ".h5")
+  on.exit(unlink(h5_path), add = TRUE)
+  h5 <- hdf5r::H5File$new(h5_path, "w")
+  # classes x ROIs, as hdf5r reads the (ROIs x classes) array ifcb-classify writes
+  h5[["output_scores"]] <- matrix(c(0.1, 0.7, 0.2), nrow = 3, ncol = 1)
+  h5[["roi_numbers"]] <- 2L
+  h5[["class_name"]] <- "Ciliate"
+  h5[["class_name_auto"]] <- "Ciliate"
+  h5$close_all()
+
+  dims <- data.frame(roi_number = 1:3, width = c(10, 20, 30),
+                     height = c(5, 6, 7), area = c(50, 120, 210))
+  result <- load_from_h5(h5_path, "D20230101T120000_IFCB134", dims)
+
+  expect_equal(nrow(result), 1)
+  expect_equal(result$file_name, "D20230101T120000_IFCB134_00002.png")
+  expect_equal(result$class_name, "Ciliate")
+  expect_equal(result$score, 0.7)
+  expect_equal(result$width, 20)
+  expect_equal(result$roi_area, 120)
+})
+
+test_that("match_roi_dims looks ROIs up by number", {
+  dims <- data.frame(roi_number = c(1, 2, 4), width = c(10, 20, 40),
+                     height = c(1, 2, 4), area = c(10, 40, 160))
+
+  result <- match_roi_dims(c(4, 3, 1), dims)
+  expect_equal(result$width, c(40, NA, 10))
+  expect_equal(result$height, c(4, NA, 1))
+  expect_equal(result$roi_area, c(160, NA, 10))
+
+  none <- match_roi_dims(c(1, 2), NULL)
+  expect_equal(nrow(none), 2)
+  expect_true(all(is.na(none$width)))
+})
+
+test_that("class_names_from_indices maps out-of-range indices to unclassified", {
+  class2use <- c("unclassified", "Diatom", "Ciliate")
+  expect_equal(
+    class_names_from_indices(c(2, NaN, 0, 3, 7, NA), class2use),
+    c("Diatom", "unclassified", "unclassified", "Ciliate", "unclassified",
+      "unclassified")
+  )
+  expect_equal(class_names_from_indices(numeric(), class2use), character())
+})
+
+test_that("scan_png_class_folder keeps the first of a ROI found in two classes", {
+  png_folder <- tempfile("png_")
+  dir.create(file.path(png_folder, "Alpha_001"), recursive = TRUE)
+  dir.create(file.path(png_folder, "Beta"))
+  on.exit(unlink(png_folder, recursive = TRUE), add = TRUE)
+  file.create(file.path(png_folder, "Alpha_001",
+                        c("D20230101T120000_IFCB134_00001.png",
+                          "D20230101T120000_IFCB134_00002.png",
+                          "strange.png")))
+  file.create(file.path(png_folder, "Beta",
+                        c("D20230101T120000_IFCB134_00002.png",
+                          "D20230202T120000_IFCB134_00007.png")))
+
+  warnings <- character()
+  result <- withCallingHandlers(
+    scan_png_class_folder(png_folder),
+    warning = function(w) {
+      warnings <<- c(warnings, conditionMessage(w))
+      invokeRestart("muffleWarning")
+    }
+  )
+
+  expect_equal(nrow(result$annotations), 3)
+  expect_equal(result$annotations$class_name, c("Alpha", "Alpha", "Beta"))
+  expect_equal(result$annotations$roi_number, c(1L, 2L, 7L))
+  expect_equal(result$sample_names,
+               c("D20230101T120000_IFCB134", "D20230202T120000_IFCB134"))
+  expect_true(any(grepl("unexpected name format: strange.png", warnings)))
+  expect_true(any(grepl("Duplicate ROI .* found in class 'Beta' \\(already in 'Alpha'\\)",
+                        warnings)))
+})

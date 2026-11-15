@@ -2249,3 +2249,19 @@ test_that("sample_has_annotations_db answers for a single sample", {
   expect_true(sample_has_annotations_db(db_path, "D20230101T120000_IFCB134"))
   expect_false(sample_has_annotations_db(db_path, "D20230101T130000_IFCB134"))
 })
+
+test_that("parse_ifcb_png_names matches the one-by-one parser", {
+  files <- c("D20230101T120000_IFCB134_00001.png",
+             "D20221231T235959_IFCB010_00123.png",
+             "not_an_ifcb_name.png")
+  vectorised <- parse_ifcb_png_names(files)
+  single <- lapply(files, parse_ifcb_png_name)
+
+  expect_equal(nrow(vectorised), 3)
+  for (column in names(vectorised)) {
+    expect_equal(vectorised[[column]],
+                 vapply(single, `[[`, character(1), column),
+                 info = column)
+  }
+  expect_equal(nrow(parse_ifcb_png_names(character())), 0)
+})

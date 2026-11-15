@@ -319,9 +319,13 @@ download_dashboard_autoclass <- function(base_url, sample_name,
     )
 
     # Find the downloaded CSV file - may have a version suffix
+    # Only the two folders the download can write to are listed. A recursive
+    # listing would walk every cached PNG of every sample on each load.
     csv_pattern <- paste0("^", sample_name, "_class.*\\.csv$")
-    csv_files <- list.files(cache_dir, pattern = csv_pattern, recursive = TRUE,
-                            full.names = TRUE)
+    csv_files <- list.files(
+      c(cache_dir, file.path(cache_dir, substr(sample_name, 1, 9))),
+      pattern = csv_pattern, full.names = TRUE
+    )
 
     if (length(csv_files) == 0) {
       return(NULL)
@@ -350,9 +354,14 @@ download_dashboard_autoclass <- function(base_url, sample_name,
     score_matrix <- as.matrix(scores[, class_cols, drop = FALSE])
 
     # Extract winning class per ROI
-    max_idx <- apply(score_matrix, 1, which.max)
-    max_scores <- apply(score_matrix, 1, max)
+    # A ROI without any score (all NA) has no winning class
+    scored <- rowSums(!is.na(score_matrix)) > 0
+    score_matrix[is.na(score_matrix)] <- -Inf
+    max_idx <- max.col(score_matrix, ties.method = "first")
+    max_scores <- score_matrix[cbind(seq_len(nrow(score_matrix)), max_idx)]
     winning_classes <- class_cols[max_idx]
+    winning_classes[!scored] <- "unclassified"
+    max_scores[!scored] <- NA_real_
 
     # Extract file names from pid column (e.g., "D20190402T200352_IFCB010_00001")
     # or fall back to sequential ROI numbers if pid is not available

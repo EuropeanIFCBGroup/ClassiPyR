@@ -9,7 +9,8 @@ export_all_db_to_png(
   png_folder,
   roi_path_map,
   skip_class = NULL,
-  samples = NULL
+  samples = NULL,
+  progress = NULL
 )
 }
 \arguments{
@@ -26,6 +27,9 @@ paths. Samples without an entry are skipped.}
 \item{samples}{Optional character vector of sample names to export. When
 \code{NULL} (the default), all annotated samples in the database are
 exported.}
+
+\item{progress}{Optional callback \code{function(done, total)} called after
+each sample, e.g. to drive a Shiny progress bar.}
 }
 \value{
 Named list with counts: \code{success}, \code{failed}, \code{skipped}

@@ -284,36 +284,11 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
       report_progress(0.78, "Scanning local classification files...")
       if (verbose) message("Scanning classification files in: ", csv_folder)
 
-      csv_files <- list.files(csv_folder, pattern = "\\.csv$",
-                              recursive = TRUE, full.names = TRUE)
-      csv_sample_names <- tools::file_path_sans_ext(basename(csv_files))
-      for (i in seq_along(csv_files)) {
-        sn <- csv_sample_names[i]
-        if (sn %in% sample_names && is.null(csv_map[[sn]])) {
-          csv_map[[sn]] <- csv_files[i]
-        }
-      }
-
-      mat_files <- list.files(csv_folder, pattern = "_class.*\\.mat$",
-                              recursive = TRUE, full.names = TRUE)
-      for (mat_file in mat_files) {
-        sample_from_mat <- sub("_class.*\\.mat$", "", basename(mat_file))
-        if (sample_from_mat %in% sample_names) {
-          mat_file_map[[sample_from_mat]] <- mat_file
-        }
-      }
-
-      h5_files <- list.files(csv_folder, pattern = "_class.*\\.h5$",
-                             recursive = TRUE, full.names = TRUE)
-      for (h5_file in h5_files) {
-        sample_from_h5 <- sub("_class.*\\.h5$", "", basename(h5_file))
-        if (sample_from_h5 %in% sample_names) {
-          h5_file_map[[sample_from_h5]] <- h5_file
-        }
-      }
-
-      csv_matched <- csv_sample_names[csv_sample_names %in% sample_names]
-      classified <- unique(c(csv_matched, names(h5_file_map), names(mat_file_map)))
+      scan <- scan_classification_files(csv_folder, sample_names)
+      csv_map <- scan$csv_map
+      mat_file_map <- scan$mat_map
+      h5_file_map <- scan$h5_map
+      classified <- scan$classified
       if (verbose) message("  Found ", length(classified), " classified samples")
     }
     report_progress(0.85, "Building index...")
@@ -324,6 +299,7 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
       dashboard_base_url = parsed$base_url,
       dashboard_dataset = parsed$dataset_name,
       csv_folder = csv_folder,
+      db_folder = db_folder,
       dashboard_autoclass = dashboard_autoclass,
       sample_names = sample_names,
       classified_samples = classified,
@@ -363,13 +339,7 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
   sample_names_raw <- tools::file_path_sans_ext(basename(roi_files))
 
   # Build ROI path map (handle duplicates: keep first occurrence)
-  roi_map <- list()
-  for (i in seq_along(roi_files)) {
-    sn <- sample_names_raw[i]
-    if (is.null(roi_map[[sn]])) {
-      roi_map[[sn]] <- roi_files[i]
-    }
-  }
+  roi_map <- first_path_by_name(sample_names_raw, roi_files)
   sample_names <- unique(sample_names_raw)
   report_progress(0.22, paste0("Found ", length(sample_names), " ROI samples"))
 
@@ -377,36 +347,31 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
   # This avoids recursively listing every PNG file (can be millions).
   if (verbose) message("Scanning extracted PNG files in: ", roi_folder)
   png_dirs <- list.dirs(roi_folder, recursive = TRUE, full.names = TRUE)
-  png_map <- list()
-  png_samples <- character()
+  # Only folders named like a sample can hold that sample's PNGs
+  png_dirs <- png_dirs[grepl(VALID_SAMPLE_NAME_PATTERN, basename(png_dirs))]
   n_png_dirs <- length(png_dirs)
+  has_png <- logical(n_png_dirs)
 
-  for (i in seq_along(png_dirs)) {
-    sample_dir <- png_dirs[[i]]
-    sn <- basename(sample_dir)
-    if (!is_valid_sample_name(sn)) next
+  for (i in seq_len(n_png_dirs)) {
+    sn <- basename(png_dirs[[i]])
 
     # Keep directory only when it actually contains sample PNGs
-    has_png <- length(list.files(
-      sample_dir,
+    has_png[i] <- length(list.files(
+      png_dirs[[i]],
       pattern = paste0("^", sn, "_\\d+\\.png$"),
       recursive = FALSE,
       full.names = FALSE
     )) > 0
-    if (!has_png) next
-
-    png_samples <- c(png_samples, sn)
-    if (is.null(png_map[[sn]])) {
-      png_map[[sn]] <- sample_dir
-    }
 
     # Progress through deep directory trees without listing every PNG globally.
     if (i %% 500 == 0 || i == n_png_dirs) {
-      frac <- if (n_png_dirs > 0) i / n_png_dirs else 1
-      report_progress(0.22 + 0.28 * frac,
+      report_progress(0.22 + 0.28 * i / n_png_dirs,
                       paste0("Checking PNG sample folders (", i, "/", n_png_dirs, ")"))
     }
   }
+
+  png_samples <- basename(png_dirs)[has_png]
+  png_map <- first_path_by_name(png_samples, png_dirs[has_png])
 
   png_samples <- unique(png_samples)
   sample_names <- unique(c(sample_names, png_samples))
@@ -432,68 +397,24 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
     report_progress(0.56, "Scanning classification files...")
     if (verbose) message("Scanning classification files in: ", csv_folder)
 
-    csv_files <- list.files(csv_folder, pattern = "\\.csv$",
-                            recursive = TRUE, full.names = TRUE)
-    csv_sample_names <- tools::file_path_sans_ext(basename(csv_files))
-
-    for (i in seq_along(csv_files)) {
-      sn <- csv_sample_names[i]
-      if (sn %in% sample_names && is.null(csv_map[[sn]])) {
-        csv_map[[sn]] <- csv_files[i]
-      }
-    }
-
-    mat_files <- list.files(csv_folder, pattern = "_class.*\\.mat$",
-                            recursive = TRUE, full.names = TRUE)
-
-    for (mat_file in mat_files) {
-      mat_basename <- basename(mat_file)
-      sample_from_mat <- sub("_class.*\\.mat$", "", mat_basename)
-      if (sample_from_mat %in% sample_names) {
-        mat_file_map[[sample_from_mat]] <- mat_file
-      }
-    }
-
-    h5_files <- list.files(csv_folder, pattern = "_class.*\\.h5$",
-                           recursive = TRUE, full.names = TRUE)
-
-    for (h5_file in h5_files) {
-      h5_basename <- basename(h5_file)
-      sample_from_h5 <- sub("_class.*\\.h5$", "", h5_basename)
-      if (sample_from_h5 %in% sample_names) {
-        h5_file_map[[sample_from_h5]] <- h5_file
-      }
-    }
-
-    mat_samples <- names(mat_file_map)
-    h5_samples <- names(h5_file_map)
-    csv_matched <- csv_sample_names[csv_sample_names %in% sample_names]
-    classified <- unique(c(csv_matched, h5_samples, mat_samples))
+    scan <- scan_classification_files(csv_folder, sample_names)
+    csv_map <- scan$csv_map
+    mat_file_map <- scan$mat_map
+    h5_file_map <- scan$h5_map
+    classified <- scan$classified
     if (verbose) message("  Found ", length(classified), " classified samples")
   }
   report_progress(0.78, "Classification scan complete")
 
-  # Scan output folder for manual annotations (.mat files + SQLite database)
-  annotated <- character()
-  if (output_valid) {
-    report_progress(0.82, "Scanning annotation outputs...")
-    if (verbose) message("Scanning output folder: ", output_folder)
-
-    # Scan .mat files
-    output_mat_files <- list.files(output_folder, pattern = "\\.mat$",
-                                   full.names = FALSE)
-    manual_mat_files <- output_mat_files[!grepl("_class", output_mat_files)]
-    annotated_mat <- tools::file_path_sans_ext(manual_mat_files)
-    annotated_mat <- annotated_mat[annotated_mat %in% sample_names]
-
-    # Scan SQLite database
-    db_path <- get_db_path(db_folder)
-    annotated_db <- list_annotated_samples_db(db_path)
-    annotated_db <- annotated_db[annotated_db %in% sample_names]
-
-    annotated <- unique(c(annotated_mat, annotated_db))
-    if (verbose) message("  Found ", length(annotated), " annotated samples")
-  }
+  # Scan for manual annotations: .mat files in the output folder and the
+  # SQLite database. The database is read even when the output folder is
+  # missing, since SQLite storage does not need an output folder at all.
+  report_progress(0.82, "Scanning annotation outputs...")
+  if (verbose && output_valid) message("Scanning output folder: ", output_folder)
+  annotated <- scan_annotated_samples(
+    if (output_valid) output_folder else NULL, db_folder, sample_names
+  )
+  if (verbose) message("  Found ", length(annotated), " annotated samples")
   report_progress(0.92, "Saving file index cache...")
 
   # Save to cache
@@ -501,6 +422,7 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
     roi_folder = roi_folder,
     csv_folder = csv_folder,
     output_folder = output_folder,
+    db_folder = db_folder,
     sample_names = sample_names,
     classified_samples = classified,
     annotated_samples = annotated,
@@ -517,6 +439,88 @@ rescan_file_index <- function(roi_folder = NULL, csv_folder = NULL,
   if (verbose) message("File index saved to: ", get_file_index_path())
 
   invisible(index_data)
+}
+
+# Named list mapping each name to one of its paths
+#
+# Vectorised replacement for growing a list one `[[name]] <-` at a time, which
+# is quadratic in the number of samples and dominated the folder scan for
+# large archives.
+#
+# @param names Character vector of names (e.g. sample names).
+# @param paths Character vector of paths, parallel to `names`.
+# @param keep "first" or "last": which path wins when a name occurs twice.
+# @return Named list of single paths.
+# @noRd
+first_path_by_name <- function(names, paths, keep = c("first", "last")) {
+  keep <- match.arg(keep)
+  unique_rows <- !duplicated(names, fromLast = identical(keep, "last"))
+  as.list(stats::setNames(paths[unique_rows], names[unique_rows]))
+}
+
+# Find the classification files of a set of samples
+#
+# @param csv_folder Classification folder (searched recursively).
+# @param sample_names Samples to keep files for.
+# @return List with `csv_map`, `mat_map`, `h5_map` (named lists of paths) and
+#   `classified` (samples with at least one classification file).
+# @noRd
+scan_classification_files <- function(csv_folder, sample_names) {
+  csv_files <- list.files(csv_folder, pattern = "\\.csv$",
+                          recursive = TRUE, full.names = TRUE)
+  csv_samples <- tools::file_path_sans_ext(basename(csv_files))
+  csv_keep <- csv_samples %in% sample_names
+  csv_map <- first_path_by_name(csv_samples[csv_keep], csv_files[csv_keep])
+
+  # A sample with several classifier versions keeps the last one by name
+  mat_files <- list.files(csv_folder, pattern = "_class.*\\.mat$",
+                          recursive = TRUE, full.names = TRUE)
+  mat_samples <- sub("_class.*\\.mat$", "", basename(mat_files))
+  mat_keep <- mat_samples %in% sample_names
+  mat_map <- first_path_by_name(mat_samples[mat_keep], mat_files[mat_keep],
+                                keep = "last")
+
+  h5_files <- list.files(csv_folder, pattern = "_class.*\\.h5$",
+                         recursive = TRUE, full.names = TRUE)
+  h5_samples <- sub("_class.*\\.h5$", "", basename(h5_files))
+  h5_keep <- h5_samples %in% sample_names
+  h5_map <- first_path_by_name(h5_samples[h5_keep], h5_files[h5_keep],
+                               keep = "last")
+
+  list(
+    csv_map = csv_map,
+    mat_map = mat_map,
+    h5_map = h5_map,
+    classified = unique(c(names(csv_map), names(h5_map), names(mat_map)))
+  )
+}
+
+# Samples that have manual annotations
+#
+# @param output_folder Folder with manual `.mat` files, or NULL to skip it.
+# @param db_folder Folder holding the annotations database, or NULL to skip it.
+# @param sample_names Known samples; others are dropped from the result.
+# @return Character vector of annotated sample names.
+# @noRd
+scan_annotated_samples <- function(output_folder, db_folder, sample_names) {
+  annotated_mat <- character()
+  if (!is.null(output_folder) && dir.exists(output_folder)) {
+    mat_files <- list.files(output_folder, pattern = "\\.mat$",
+                            full.names = FALSE)
+    mat_files <- mat_files[!grepl("_class", mat_files)]
+    annotated_mat <- tools::file_path_sans_ext(mat_files)
+  }
+
+  annotated_db <- character()
+  if (!is.null(db_folder)) {
+    annotated_db <- tryCatch(
+      list_annotated_samples_db(get_db_path(db_folder)),
+      error = function(e) character()
+    )
+  }
+
+  annotated <- unique(c(annotated_mat, annotated_db))
+  annotated[annotated %in% sample_names]
 }
 
 # Constants
@@ -621,25 +625,39 @@ load_class_list <- function(file_path) {
   }
 
 
-  # Check for characters that need sanitization for filesystem/HTML safety
-  if (length(classes) > 0) {
-    has_path_sep <- grepl(PATH_SEPARATOR_CHARS, classes)
-    has_unsafe <- grepl(UNSAFE_CLASS_CHARS, classes) | grepl("\\.\\.", classes)
+  sanitize_class_names(classes)
+}
 
-    if (any(has_path_sep)) {
-      # Replace path separators with underscore (preserves meaning for taxonomy like "Snowella/Woronichinia")
-      message("Note: Forward slashes in class names replaced with underscores for filesystem compatibility")
-      classes <- gsub(PATH_SEPARATOR_CHARS, "_", classes)
-    }
-
-    if (any(has_unsafe)) {
-      warning("Some class names contain unsafe characters (< > \" ' & : * ? | ..) and were sanitized")
-      classes <- gsub(UNSAFE_CLASS_CHARS, "", classes)
-      classes <- gsub("\\.\\.", "", classes)
-    }
+# Make class names safe for use as folder names and in HTML
+#
+# Path separators become underscores (so "Snowella/Woronichinia" keeps its
+# meaning), other unsafe characters are removed. Used for class lists read
+# from a file and for names typed into the class list editor, so both end up
+# with the same folder names in the PNG output.
+#
+# @param classes Character vector of class names.
+# @return Sanitized character vector, same length.
+# @noRd
+sanitize_class_names <- function(classes) {
+  if (length(classes) == 0) {
+    return(classes)
   }
 
-  return(classes)
+  has_path_sep <- grepl(PATH_SEPARATOR_CHARS, classes)
+  has_unsafe <- grepl(UNSAFE_CLASS_CHARS, classes) | grepl("\\.\\.", classes)
+
+  if (any(has_path_sep)) {
+    message("Note: Forward slashes in class names replaced with underscores for filesystem compatibility")
+    classes <- gsub(PATH_SEPARATOR_CHARS, "_", classes)
+  }
+
+  if (any(has_unsafe)) {
+    warning("Some class names contain unsafe characters (< > \" ' & : * ? | ..) and were sanitized")
+    classes <- gsub(UNSAFE_CLASS_CHARS, "", classes)
+    classes <- gsub("\\.\\.", "", classes)
+  }
+
+  classes
 }
 
 #' Get sample paths from sample name
@@ -771,6 +789,74 @@ read_png_dimensions <- function(png_path) {
   height <- raw_to_uint32(readBin(con, what = "raw", n = 4))
 
   list(width = width, height = height)
+}
+
+# Look up ROI dimensions for a vector of ROI numbers
+#
+# @param roi_numbers ROI numbers to look up.
+# @param roi_dimensions Data frame from read_roi_dimensions(), or NULL.
+# @return Data frame with `width`, `height` and `roi_area`, one row per ROI
+#   number; NA where the ROI is not in `roi_dimensions`.
+# @noRd
+match_roi_dims <- function(roi_numbers, roi_dimensions) {
+  idx <- if (is.null(roi_dimensions)) {
+    rep(NA_integer_, length(roi_numbers))
+  } else {
+    match(roi_numbers, roi_dimensions$roi_number)
+  }
+  pick <- function(column) {
+    if (is.null(column)) rep(NA_real_, length(idx)) else as.numeric(column[idx])
+  }
+  data.frame(
+    width = pick(roi_dimensions$width),
+    height = pick(roi_dimensions$height),
+    roi_area = pick(roi_dimensions$area)
+  )
+}
+
+# ROI number encoded in an IFCB PNG file name
+#
+# @param file_name Character vector of PNG file names.
+# @return Integer vector of ROI numbers (NA when the name has none).
+# @noRd
+roi_number_from_file_name <- function(file_name) {
+  has_roi <- grepl("_\\d+\\.png$", file_name)
+  out <- rep(NA_integer_, length(file_name))
+  out[has_roi] <- as.integer(sub(".*_(\\d+)\\.png$", "\\1", file_name[has_roi]))
+  out
+}
+
+# ROI dimensions of a sample that only exists as extracted PNG files
+#
+# @param sample_name Sample name.
+# @param sample_png_dir Folder holding the sample's PNG files.
+# @return Data frame like read_roi_dimensions(), or NULL when the folder has
+#   no PNG files of the sample.
+# @noRd
+infer_roi_dims_from_png <- function(sample_name, sample_png_dir) {
+  if (is.null(sample_png_dir) || !dir.exists(sample_png_dir)) {
+    return(NULL)
+  }
+  png_files <- list.files(sample_png_dir,
+                          pattern = paste0("^", sample_name, "_\\d+\\.png$"),
+                          full.names = FALSE)
+  roi_number <- roi_number_from_file_name(png_files)
+  keep <- !is.na(roi_number) & !duplicated(roi_number)
+  if (!any(keep)) {
+    return(NULL)
+  }
+  png_files <- png_files[keep]
+  roi_number <- roi_number[keep]
+
+  dims <- lapply(file.path(sample_png_dir, png_files), read_png_dimensions)
+  width <- vapply(dims, `[[`, numeric(1), "width")
+  height <- vapply(dims, `[[`, numeric(1), "height")
+
+  out <- data.frame(roi_number = roi_number, width = width, height = height,
+                    area = width * height)
+  out <- out[order(out$roi_number), ]
+  rownames(out) <- NULL
+  out
 }
 
 #' Create empty changes log data frame

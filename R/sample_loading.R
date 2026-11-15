@@ -102,41 +102,49 @@ load_from_h5 <- function(h5_path, sample_name, roi_dimensions, use_threshold = T
   }
 
   h5 <- hdf5r::H5File$new(h5_path, "r")
-  on.exit(h5$close_all(), add = TRUE)
-
-  roi_numbers <- h5[["roi_numbers"]]$read()
-
-  if (use_threshold) {
-    class_names <- h5[["class_name"]]$read()
-  } else {
-    class_names <- h5[["class_name_auto"]]$read()
+  # Every dataset is closed as soon as it is read, so close() releases the
+  # file. close_all() starts with a full garbage collection, which is most of
+  # the time spent reading a file; it stays as the fallback for anything
+  # still open.
+  on.exit(
+    if (length(h5$get_obj_ids()) > 1) h5$close_all() else h5$close(),
+    add = TRUE
+  )
+  read_dataset <- function(name, ...) {
+    dataset <- h5[[name]]
+    on.exit(dataset$close(), add = TRUE)
+    dataset$read(...)
   }
 
+  roi_numbers <- as.vector(read_dataset("roi_numbers"))
+
+  class_names <- as.character(as.vector(read_dataset(
+    if (use_threshold) "class_name" else "class_name_auto"
+  )))
   class_names[is.na(class_names)] <- "unclassified"
 
-  # Extract per-ROI max score from output_scores matrix (num_classes x num_rois)
-  output_scores <- h5[["output_scores"]]$read()
-  scores <- apply(output_scores, 2, max)
+  # Per-ROI max score from the output_scores matrix (num_classes x num_rois).
+  # drop = FALSE: hdf5r otherwise returns the scores of a single-ROI (or
+  # single-class) file as a plain vector, which has no columns to reduce.
+  output_scores <- read_dataset("output_scores", drop = FALSE)
+  if (length(dim(output_scores)) != 2) {
+    output_scores <- matrix(output_scores, ncol = length(roi_numbers))
+  }
+  scores <- if (ncol(output_scores) > 0 && nrow(output_scores) > 0) {
+    apply(output_scores, 2, max)
+  } else {
+    rep(NA_real_, length(roi_numbers))
+  }
 
-  # Match ROI dimensions
-  roi_data <- lapply(roi_numbers, function(rn) {
-    idx <- which(roi_dimensions$roi_number == rn)
-    if (length(idx) > 0) {
-      list(width = roi_dimensions$width[idx],
-           height = roi_dimensions$height[idx],
-           area = roi_dimensions$area[idx])
-    } else {
-      list(width = NA_real_, height = NA_real_, area = NA_real_)
-    }
-  })
+  dims <- match_roi_dims(roi_numbers, roi_dimensions)
 
   classifications <- data.frame(
     file_name = sprintf("%s_%05d.png", sample_name, roi_numbers),
     class_name = class_names,
     score = scores,
-    width = vapply(roi_data, `[[`, numeric(1), "width"),
-    height = vapply(roi_data, `[[`, numeric(1), "height"),
-    roi_area = vapply(roi_data, `[[`, numeric(1), "area"),
+    width = dims$width,
+    height = dims$height,
+    roi_area = dims$roi_area,
     stringsAsFactors = FALSE
   )
 
@@ -208,32 +216,17 @@ load_from_mat <- function(mat_path, sample_name, class2use, roi_dimensions) {
   class_indices <- classlist[, 2]
 
   # Get class names from indices (handle NaN, 0, or NA as "unclassified")
-  class_names <- sapply(class_indices, function(idx) {
-    if (is.na(idx) || is.nan(idx) || idx < 1 || idx > length(class2use)) {
-      return("unclassified")
-    }
-    return(class2use[idx])
-  })
+  class_names <- class_names_from_indices(class_indices, class2use)
 
-  # Match ROI dimensions by roi_number (safe lookup with NA fallback)
-  roi_data <- lapply(roi_numbers, function(rn) {
-    idx <- which(roi_dimensions$roi_number == rn)
-    if (length(idx) > 0) {
-      list(width = roi_dimensions$width[idx],
-           height = roi_dimensions$height[idx],
-           area = roi_dimensions$area[idx])
-    } else {
-      list(width = NA_real_, height = NA_real_, area = NA_real_)
-    }
-  })
+  dims <- match_roi_dims(roi_numbers, roi_dimensions)
 
   classifications <- data.frame(
     file_name = sprintf("%s_%05d.png", sample_name, roi_numbers),
     class_name = class_names,
     score = NA_real_,
-    width = vapply(roi_data, `[[`, numeric(1), "width"),
-    height = vapply(roi_data, `[[`, numeric(1), "height"),
-    roi_area = vapply(roi_data, `[[`, numeric(1), "area"),
+    width = dims$width,
+    height = dims$height,
+    roi_area = dims$roi_area,
     stringsAsFactors = FALSE
   )
 
@@ -281,25 +274,15 @@ load_from_classifier_mat <- function(mat_path, sample_name, class2use, roi_dimen
   # Handle any NA values
   class_names[is.na(class_names)] <- "unclassified"
 
-  # Match ROI dimensions - extracting width, height, and area
-  roi_data <- lapply(roi_numbers, function(rn) {
-    idx <- which(roi_dimensions$roi_number == rn)
-    if (length(idx) > 0) {
-      list(width = roi_dimensions$width[idx],
-           height = roi_dimensions$height[idx],
-           area = roi_dimensions$area[idx])
-    } else {
-      list(width = NA_real_, height = NA_real_, area = NA_real_)
-    }
-  })
+  dims <- match_roi_dims(roi_numbers, roi_dimensions)
 
   classifications <- data.frame(
     file_name = sprintf("%s_%05d.png", sample_name, roi_numbers),
     class_name = class_names,
     score = NA_real_,
-    width = vapply(roi_data, `[[`, numeric(1), "width"),
-    height = vapply(roi_data, `[[`, numeric(1), "height"),
-    roi_area = vapply(roi_data, `[[`, numeric(1), "area"),
+    width = dims$width,
+    height = dims$height,
+    roi_area = dims$roi_area,
     stringsAsFactors = FALSE
   )
 
@@ -390,59 +373,49 @@ scan_png_class_folder <- function(png_folder) {
     ))
   }
 
-  all_rows <- list()
-  seen_rois <- list()
+  # One listing per class folder, then everything is parsed in one go: a
+  # data frame per file was the bulk of the time for large folders
+  files_by_dir <- lapply(subdirs, list.files, pattern = "\\.png$",
+                         full.names = FALSE)
+  file_name <- unlist(files_by_dir, use.names = FALSE)
+  class_name <- rep(sub("_\\d{3}$", "", basename(subdirs)),
+                    lengths(files_by_dir))
 
-  for (subdir in subdirs) {
-    class_name <- sub("_\\d{3}$", "", basename(subdir))
-    png_files <- list.files(subdir, pattern = "\\.png$", full.names = FALSE)
+  # Expected format: SampleName_NNNNN.png (5-digit ROI number)
+  well_formed <- grepl("^.+_\\d{5}\\.png$", file_name)
+  for (fn in file_name[!well_formed]) {
+    warning("Skipping file with unexpected name format: ", fn)
+  }
+  file_name <- file_name[well_formed]
+  class_name <- class_name[well_formed]
 
-    for (fn in png_files) {
-      # Parse sample_name and roi_number from filename
-      # Expected format: SampleName_NNNNN.png (5-digit ROI number)
-      m <- regmatches(fn, regexec("^(.+)_(\\d{5})\\.png$", fn))[[1]]
-      if (length(m) < 3) {
-        warning("Skipping file with unexpected name format: ", fn)
-        next
-      }
+  sample_name <- sub("^(.+)_\\d{5}\\.png$", "\\1", file_name)
+  roi_number <- as.integer(sub("^.+_(\\d{5})\\.png$", "\\1", file_name))
 
-      sample_name <- m[2]
-      roi_number <- as.integer(m[3])
-      roi_key <- paste0(sample_name, "_", roi_number)
-
-      if (!is.null(seen_rois[[roi_key]])) {
-        warning(sprintf("Duplicate ROI %s found in class '%s' (already in '%s'), using first occurrence",
-                        roi_key, class_name, seen_rois[[roi_key]]))
-        next
-      }
-      seen_rois[[roi_key]] <- class_name
-
-      all_rows[[length(all_rows) + 1L]] <- data.frame(
-        sample_name = sample_name,
-        roi_number = roi_number,
-        file_name = fn,
-        class_name = class_name,
-        stringsAsFactors = FALSE
-      )
-    }
+  # The same ROI in two class folders: the first occurrence wins
+  roi_key <- paste0(sample_name, "_", roi_number)
+  duplicate <- duplicated(roi_key)
+  for (i in which(duplicate)) {
+    warning(sprintf("Duplicate ROI %s found in class '%s' (already in '%s'), using first occurrence",
+                    roi_key[i], class_name[i],
+                    class_name[match(roi_key[i], roi_key)]))
   }
 
-  if (length(all_rows) == 0) {
+  annotations <- data.frame(
+    sample_name = sample_name[!duplicate],
+    roi_number = roi_number[!duplicate],
+    file_name = file_name[!duplicate],
+    class_name = class_name[!duplicate],
+    stringsAsFactors = FALSE
+  )
+
+  if (nrow(annotations) == 0) {
     return(list(
-      annotations = data.frame(
-        sample_name = character(),
-        roi_number = integer(),
-        file_name = character(),
-        class_name = character(),
-        stringsAsFactors = FALSE
-      ),
+      annotations = annotations,
       classes_found = character(),
       sample_names = character()
     ))
   }
-
-  annotations <- do.call(rbind, all_rows)
-  rownames(annotations) <- NULL
 
   list(
     annotations = annotations,
@@ -475,4 +448,20 @@ filter_to_extracted <- function(classifications, extracted_folder) {
 
   extracted_files <- list.files(extracted_folder, pattern = "\\.png$")
   classifications[classifications$file_name %in% extracted_files, ]
+}
+
+# Class names for a vector of class2use indices
+#
+# @param class_indices Numeric class indices as stored in a manual .mat file.
+# @param class2use Character vector of class names.
+# @return Character vector; "unclassified" for NaN, NA and out-of-range
+#   indices.
+# @noRd
+class_names_from_indices <- function(class_indices, class2use) {
+  class_indices <- as.numeric(class_indices)
+  valid <- !is.na(class_indices) & class_indices >= 1 &
+    class_indices <= length(class2use)
+  class_names <- rep("unclassified", length(class_indices))
+  class_names[valid] <- as.character(class2use[class_indices[valid]])
+  class_names
 }

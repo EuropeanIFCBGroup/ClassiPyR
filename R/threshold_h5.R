@@ -52,11 +52,19 @@ read_class_scores_summary <- function(h5_path) {
            "truncated or still being written (", h5_path, ").", call. = FALSE)
     }
   )
-  on.exit(h5$close_all(), add = TRUE)
+  # Every dataset and attribute is closed as soon as it has been read, so
+  # close() releases the file. close_all() would as well, but it starts with a
+  # full garbage collection, which is most of the time spent on a file when an
+  # index is built over thousands of them. It stays as the fallback for
+  # anything still open.
+  on.exit(
+    if (length(h5$get_obj_ids()) > 1) h5$close_all() else h5$close(),
+    add = TRUE
+  )
 
   thr_check_h5_datasets(h5, h5_path)
-  class_labels <- enc2utf8(as.character(h5[["class_labels"]]$read()))
-  roi_numbers <- as.integer(h5[["roi_numbers"]]$read())
+  class_labels <- enc2utf8(as.character(thr_read_h5_dataset(h5, "class_labels")))
+  roi_numbers <- as.integer(thr_read_h5_dataset(h5, "roi_numbers"))
   top <- thr_top1(thr_read_h5_scores(h5, length(class_labels),
                                      length(roi_numbers), h5_path))
 
@@ -69,6 +77,18 @@ read_class_scores_summary <- function(h5_path) {
     thresholds = thr_read_h5_thresholds(h5, length(class_labels), h5_path),
     attrs = thr_read_h5_attrs(h5)
   )
+}
+
+#' Read one dataset of an open HDF5 file and close it again
+#'
+#' @param h5 An open \code{hdf5r::H5File}.
+#' @param name Name of the dataset.
+#' @return The contents of the dataset.
+#' @noRd
+thr_read_h5_dataset <- function(h5, name) {
+  dataset <- h5[[name]]
+  on.exit(dataset$close(), add = TRUE)
+  dataset$read()
 }
 
 #' Stop when a class-scores file lacks a required dataset
@@ -98,6 +118,7 @@ thr_check_h5_datasets <- function(h5, h5_path) {
 #' @noRd
 thr_read_h5_scores <- function(h5, n_classes, n_rois, h5_path) {
   dataset <- h5[["output_scores"]]
+  on.exit(dataset$close(), add = TRUE)
   dims <- dataset$dims
   if (length(dims) != 2) {
     stop("output_scores in ", basename(h5_path), " has ", length(dims),
@@ -134,7 +155,7 @@ thr_read_h5_classifier_name <- function(h5) {
   if (!"classifier_name" %in% names(h5)) {
     return(NA_character_)
   }
-  thr_scalar_or_na(h5[["classifier_name"]]$read())
+  thr_scalar_or_na(thr_read_h5_dataset(h5, "classifier_name"))
 }
 
 #' Read the per-class thresholds of a class-scores file
@@ -149,7 +170,7 @@ thr_read_h5_thresholds <- function(h5, n_classes, h5_path) {
   if (!"thresholds" %in% names(h5)) {
     return(rep(NaN, n_classes))
   }
-  thresholds <- as.numeric(h5[["thresholds"]]$read())
+  thresholds <- as.numeric(thr_read_h5_dataset(h5, "thresholds"))
   if (length(thresholds) != n_classes) {
     stop("thresholds in ", basename(h5_path), " has ", length(thresholds),
          " values but class_labels lists ", n_classes,
@@ -168,7 +189,9 @@ thr_read_h5_thresholds <- function(h5, n_classes, h5_path) {
 thr_read_h5_attrs <- function(h5) {
   keys <- hdf5r::h5attr_names(h5)
   values <- lapply(keys, function(key) {
-    enc2utf8(as.character(hdf5r::h5attr(h5, key)))
+    attribute <- h5$attr_open(key)
+    on.exit(attribute$close(), add = TRUE)
+    enc2utf8(as.character(attribute$read()))
   })
   stats::setNames(values, keys)
 }

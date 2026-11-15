@@ -4,7 +4,12 @@
 \alias{import_all_mat_to_db}
 \title{Bulk import .mat annotation files into the SQLite database}
 \usage{
-import_all_mat_to_db(mat_folder, db_path, annotator = "imported")
+import_all_mat_to_db(
+  mat_folder,
+  db_path,
+  annotator = "imported",
+  progress = NULL
+)
 }
 \arguments{
 \item{mat_folder}{Folder containing .mat annotation files}
@@ -12,6 +17,9 @@ import_all_mat_to_db(mat_folder, db_path, annotator = "imported")
 \item{db_path}{Path to the SQLite database file}
 
 \item{annotator}{Annotator name (defaults to \code{"imported"})}
+
+\item{progress}{Optional callback \code{function(done, total)} called after
+each file, e.g. to drive a Shiny progress bar.}
 }
 \value{
 Named list with counts: \code{success}, \code{failed}, \code{skipped}
