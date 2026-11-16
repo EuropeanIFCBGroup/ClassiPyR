@@ -39,7 +39,16 @@ Optional columns may also be included:
 
 The CSV file must be named after the sample it describes
 (e.g., `D20230101T120000_IFCB134.csv`) and placed inside the Classification
-Folder configured in the app (subfolders are searched recursively).
+Folder configured in the app (subfolders are searched recursively). As in
+iRfcb, `D20230101T120000_IFCB134_class.csv` and a versioned
+`D20230101T120000_IFCB134_class_v1.csv` are accepted too; a file without the
+`_class` ending is preferred when a sample has both.
+
+A class score matrix, such as the `class_scores` export of an IFCB
+Dashboard (a ROI identifier column followed by one score column per class),
+is also read: each ROI gets the class with the highest score. Such a file
+has no thresholded class, so \code{use_threshold} has no effect on it. Any
+other CSV file is an error.
 }
 \examples{
 \dontrun{

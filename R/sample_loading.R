@@ -25,7 +25,16 @@ NULL
 #'
 #' The CSV file must be named after the sample it describes
 #' (e.g., `D20230101T120000_IFCB134.csv`) and placed inside the Classification
-#' Folder configured in the app (subfolders are searched recursively).
+#' Folder configured in the app (subfolders are searched recursively). As in
+#' iRfcb, `D20230101T120000_IFCB134_class.csv` and a versioned
+#' `D20230101T120000_IFCB134_class_v1.csv` are accepted too; a file without the
+#' `_class` ending is preferred when a sample has both.
+#'
+#' A class score matrix, such as the `class_scores` export of an IFCB
+#' Dashboard (a ROI identifier column followed by one score column per class),
+#' is also read: each ROI gets the class with the highest score. Such a file
+#' has no thresholded class, so \code{use_threshold} has no effect on it. Any
+#' other CSV file is an error.
 #'
 #' @param csv_path Path to classification CSV file
 #' @param use_threshold Logical, whether to use the threshold-filtered
@@ -41,7 +50,7 @@ NULL
 #' head(classifications)
 #' }
 load_from_csv <- function(csv_path, use_threshold = TRUE) {
-  classifications <- utils::read.csv(csv_path, stringsAsFactors = FALSE)
+  classifications <- read_classification_csv(csv_path)
 
   # When threshold is off and class_name_auto exists, use raw predictions
 
@@ -68,6 +77,54 @@ load_from_csv <- function(csv_path, use_threshold = TRUE) {
   }
 
   classifications
+}
+
+# Read a classification CSV: a label file or a class score matrix
+#
+# @param csv_path Path to the CSV file.
+# @return Data frame with at least `file_name` and `class_name`. Stops with a
+#   message naming the file when it is neither kind of classification file.
+# @noRd
+read_classification_csv <- function(csv_path) {
+  columns <- tryCatch(
+    names(utils::read.csv(csv_path, nrows = 1, check.names = FALSE)),
+    error = function(e) character()
+  )
+  label_columns <- c("file_name", "class_name")
+  if (all(label_columns %in% columns)) {
+    return(utils::read.csv(csv_path, stringsAsFactors = FALSE))
+  }
+
+  scores <- if (length(columns) >= 2 && !any(label_columns %in% columns)) {
+    utils::read.csv(csv_path, check.names = FALSE, stringsAsFactors = FALSE)
+  }
+  if (is_class_score_matrix(scores)) {
+    sample_name <- sub("(_class(_v\\d+)?)?\\.csv$", "", basename(csv_path))
+    return(winning_class_from_scores(scores, sample_name))
+  }
+
+  stop(
+    basename(csv_path), " is not a classification file. It needs the columns ",
+    "file_name and class_name (missing: ",
+    paste(setdiff(label_columns, columns), collapse = ", "),
+    "), or a ROI identifier column followed by one score column per class.",
+    call. = FALSE
+  )
+}
+
+# TRUE for a data frame that looks like a class score matrix: a ROI
+# identifier column, then only numeric columns
+#
+# @param scores Data frame, or NULL.
+# @noRd
+is_class_score_matrix <- function(scores) {
+  if (is.null(scores) || nrow(scores) == 0 || ncol(scores) < 2) {
+    return(FALSE)
+  }
+  is_score <- vapply(scores[-1], function(column) {
+    is.numeric(column) || all(is.na(column))
+  }, logical(1))
+  is_roi_id_column(scores[[1]]) && all(is_score)
 }
 
 #' Load classifications from HDF5 classifier output file

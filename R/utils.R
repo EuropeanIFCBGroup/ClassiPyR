@@ -458,6 +458,38 @@ first_path_by_name <- function(names, paths, keep = c("first", "last")) {
   as.list(stats::setNames(paths[unique_rows], names[unique_rows]))
 }
 
+# Map samples to their classification CSV file
+#
+# A file is named `{sample}.csv`, or, as iRfcb also accepts,
+# `{sample}_class.csv` or `{sample}_class_vN.csv`. `{sample}.csv` wins when a
+# sample has both; of several `_class` files the last one by name is kept, as
+# for `.mat` and `.h5` classifier output. The content is not read here:
+# `load_from_csv()` tells a label file from a class score matrix.
+#
+# @param csv_files Paths of the `.csv` files found.
+# @param sample_names Samples to keep files for.
+# @return Named list of single paths.
+# @noRd
+map_classification_csv <- function(csv_files, sample_names) {
+  file_names <- basename(csv_files)
+
+  plain_samples <- sub("\\.csv$", "", file_names)
+  is_plain <- plain_samples %in% sample_names
+  plain_map <- first_path_by_name(plain_samples[is_plain], csv_files[is_plain])
+
+  class_samples <- sub(CLASS_CSV_SUFFIX, "", file_names)
+  is_class <- grepl(CLASS_CSV_SUFFIX, file_names) &
+    class_samples %in% sample_names & !class_samples %in% names(plain_map)
+  class_map <- first_path_by_name(class_samples[is_class], csv_files[is_class],
+                                  keep = "last")
+
+  c(plain_map, class_map)
+}
+
+# The `_class` (and optional version) ending of a classification CSV file,
+# the same rule iRfcb uses to resolve `{sample}_class.csv` to its sample
+CLASS_CSV_SUFFIX <- "_class(_v\\d+)?\\.csv$"
+
 # Find the classification files of a set of samples
 #
 # @param csv_folder Classification folder (searched recursively).
@@ -468,9 +500,7 @@ first_path_by_name <- function(names, paths, keep = c("first", "last")) {
 scan_classification_files <- function(csv_folder, sample_names) {
   csv_files <- list.files(csv_folder, pattern = "\\.csv$",
                           recursive = TRUE, full.names = TRUE)
-  csv_samples <- tools::file_path_sans_ext(basename(csv_files))
-  csv_keep <- csv_samples %in% sample_names
-  csv_map <- first_path_by_name(csv_samples[csv_keep], csv_files[csv_keep])
+  csv_map <- map_classification_csv(csv_files, sample_names)
 
   # A sample with several classifier versions keeps the last one by name
   mat_files <- list.files(csv_folder, pattern = "_class.*\\.mat$",

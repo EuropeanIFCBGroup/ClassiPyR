@@ -600,3 +600,28 @@ test_that("the PNG import notification reports what was filled", {
   )
   expect_no_match(none_skipped, "skipped")
 })
+
+test_that("a {sample}_class.csv label file is used for validation", {
+  skip_if_not(app_test_data_available(), "App or test data not available")
+  app <- local_app_server()
+  sample_name <- app$sample_name
+  images <- list.files(testthat::test_path("test_data", "png", sample_name))
+  write.csv(
+    data.frame(file_name = images, class_name = "From_class_csv", score = 0.8),
+    file.path(app$base, "classified", paste0(sample_name, "_class.csv")),
+    row.names = FALSE
+  )
+
+  shiny::testServer(app$server, {
+    session$setInputs(annotator_name = "Tester", app_mode = "sample",
+                      class_filter = "all", images_per_page = "100",
+                      sample_status_filter = "all")
+    session$flushReact()
+    expect_true(sample_name %in% classified_samples())
+    session$setInputs(sample_select = sample_name, load_sample = 1)
+
+    expect_false(rv$is_annotation_mode)
+    expect_setequal(rv$classifications$file_name, images)
+    expect_equal(unique(rv$classifications$class_name), "From_class_csv")
+  })
+})

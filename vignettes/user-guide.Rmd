@@ -235,7 +235,7 @@ All formats (including live predictions) support a **classification threshold** 
 
 ### CSV Files
 
-Standard classification CSV output from [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb). The CSV file must be named after the sample it describes (e.g., `D20230101T120000_IFCB134.csv`).
+Standard classification CSV output from [iRfcb](https://github.com/EuropeanIFCBGroup/iRfcb). The CSV file must be named after the sample it describes (e.g., `D20230101T120000_IFCB134.csv`). The names `D20230101T120000_IFCB134_class.csv` and `D20230101T120000_IFCB134_class_v1.csv` are accepted as well, as in iRfcb; a file without the `_class` ending is used when a sample has both. A class score matrix with the same name, such as the `class_scores` export of an IFCB Dashboard (a ROI identifier column and one score column per class), is read too: each image gets its highest-scoring class, and the threshold option has no effect.
 
 Required columns (exact names):
 

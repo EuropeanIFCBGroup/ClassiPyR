@@ -1102,6 +1102,40 @@ test_that("scan_classification_files maps samples to their classifier output", {
   expect_setequal(scan$classified, samples)
 })
 
+test_that("scan_classification_files accepts {sample}_class.csv label files", {
+  csv_dir <- tempfile("classified_")
+  dir.create(csv_dir)
+  on.exit(unlink(csv_dir, recursive = TRUE), add = TRUE)
+
+  samples <- c("D20230101T120000_IFCB134", "D20230101T130000_IFCB134",
+               "D20230101T140000_IFCB134", "D20230101T150000_IFCB134")
+  file.create(file.path(csv_dir, c(
+    paste0(samples[1], "_class.csv"),
+    # Several versions: the last one by name is used, as for .mat and .h5
+    paste0(samples[2], "_class_v1.csv"),
+    paste0(samples[2], "_class_v2.csv"),
+    # {sample}.csv wins over {sample}_class.csv
+    paste0(samples[3], "_class.csv"),
+    paste0(samples[3], ".csv"),
+    # Not classification files of these samples
+    paste0(samples[4], "_class_scores.csv"),
+    paste0(samples[4], "_classes.csv"),
+    paste0(samples[4], "_validation_stats.csv"),
+    "D20990101T000000_IFCB999_class.csv"
+  )))
+
+  scan <- scan_classification_files(csv_dir, samples)
+
+  expect_setequal(names(scan$csv_map), samples[1:3])
+  expect_equal(basename(scan$csv_map[[samples[1]]]),
+               paste0(samples[1], "_class.csv"))
+  expect_equal(basename(scan$csv_map[[samples[2]]]),
+               paste0(samples[2], "_class_v2.csv"))
+  expect_equal(basename(scan$csv_map[[samples[3]]]),
+               paste0(samples[3], ".csv"))
+  expect_setequal(scan$classified, samples[1:3])
+})
+
 test_that("sanitize_class_names makes names safe for folders", {
   expect_message(
     expect_equal(sanitize_class_names(c("Snowella/Woronichinia", "Diatom")),

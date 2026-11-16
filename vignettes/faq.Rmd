@@ -112,7 +112,7 @@ A: For CSV files:
 
 - Must have columns named `file_name` and `class_name` (exact names required)
 - Optionally include `score` and `class_name_auto` columns
-- The CSV file must be named after the sample (e.g., `D20230101T120000_IFCB134.csv`)
+- The CSV file must be named after the sample (e.g., `D20230101T120000_IFCB134.csv`; `D20230101T120000_IFCB134_class.csv` also works)
 - File should be in the Classification Folder (indexed via file cache; click Sync to refresh)
 
 For H5 files:

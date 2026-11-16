@@ -506,3 +506,55 @@ test_that("scan_png_class_folder keeps the first of a ROI found in two classes",
   expect_true(any(grepl("Duplicate ROI .* found in class 'Beta' \\(already in 'Alpha'\\)",
                         warnings)))
 })
+
+test_that("load_from_csv reads a class score matrix as the winning class", {
+  # What an IFCB Dashboard class_scores export looks like: a pid column and
+  # one score column per class. It can be named {sample}_class.csv, like a
+  # label file.
+  sample_name <- "D20230101T120000_IFCB134"
+  csv_dir <- tempfile("scores_")
+  dir.create(csv_dir)
+  on.exit(unlink(csv_dir, recursive = TRUE), add = TRUE)
+  csv_path <- file.path(csv_dir, paste0(sample_name, "_class.csv"))
+  scores <- data.frame(
+    pid = paste0(sample_name, c("_00002", "_00003", "_00005")),
+    Diatom = c(0.9, 0.2, NA),
+    `Mesodinium rubrum` = c(0.1, 0.7, NA),
+    check.names = FALSE
+  )
+  write.csv(scores, csv_path, row.names = FALSE)
+
+  classifications <- load_from_csv(csv_path)
+
+  expect_equal(classifications$file_name,
+               paste0(sample_name, c("_00002.png", "_00003.png", "_00005.png")))
+  expect_equal(classifications$class_name,
+               c("Diatom", "Mesodinium rubrum", "unclassified"))
+  expect_equal(classifications$score, c(0.9, 0.7, NA))
+  expect_true(all(c("width", "height", "roi_area") %in% names(classifications)))
+  # There is no thresholded column in a score matrix
+  expect_equal(load_from_csv(csv_path, use_threshold = FALSE), classifications)
+
+  # Numeric ROI numbers get the sample name of the file
+  scores$pid <- c(2, 3, 5)
+  write.csv(scores, csv_path, row.names = FALSE)
+  expect_equal(load_from_csv(csv_path)$file_name, classifications$file_name)
+})
+
+test_that("load_from_csv rejects a CSV that is not a classification file", {
+  csv_path <- tempfile(fileext = ".csv")
+  on.exit(unlink(csv_path), add = TRUE)
+
+  write.csv(data.frame(sample = c("a", "b"), comment = c("x", "y")),
+            csv_path, row.names = FALSE)
+  expect_error(load_from_csv(csv_path), "not a classification file")
+
+  # A label file that lost its class_name column
+  write.csv(data.frame(file_name = "D20230101T120000_IFCB134_00001.png",
+                       score = 0.5),
+            csv_path, row.names = FALSE)
+  expect_error(load_from_csv(csv_path), "class_name")
+
+  file.create(csv_path)
+  expect_error(load_from_csv(csv_path), "not a classification file")
+})

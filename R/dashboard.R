@@ -337,56 +337,68 @@ download_dashboard_autoclass <- function(base_url, sample_name,
     # Rows = ROIs, columns = class names, values = scores
     scores <- utils::read.csv(csv_path, check.names = FALSE)
 
-    if (nrow(scores) == 0 || ncol(scores) < 2) {
-      return(NULL)
-    }
-
-    # The first column is typically the ROI identifier
-    # Check if the first column looks like a ROI ID (numeric or sample_NNNNN)
-    first_col <- scores[[1]]
-    class_cols <- if (is.numeric(first_col) || all(grepl("^\\d+$|_\\d+$", as.character(first_col)))) {
-      # First column is ROI identifier, class scores start at column 2
-      names(scores)[-1]
-    } else {
-      names(scores)
-    }
-
-    score_matrix <- as.matrix(scores[, class_cols, drop = FALSE])
-
-    # Extract winning class per ROI
-    # A ROI without any score (all NA) has no winning class
-    scored <- rowSums(!is.na(score_matrix)) > 0
-    score_matrix[is.na(score_matrix)] <- -Inf
-    max_idx <- max.col(score_matrix, ties.method = "first")
-    max_scores <- score_matrix[cbind(seq_len(nrow(score_matrix)), max_idx)]
-    winning_classes <- class_cols[max_idx]
-    winning_classes[!scored] <- "unclassified"
-    max_scores[!scored] <- NA_real_
-
-    # Extract file names from pid column (e.g., "D20190402T200352_IFCB010_00001")
-    # or fall back to sequential ROI numbers if pid is not available
-    if (is.character(first_col) && all(grepl("_\\d+$", first_col))) {
-      # pid column contains full identifiers — use them directly
-      file_names <- paste0(first_col, ".png")
-    } else if (is.numeric(first_col) || all(grepl("^\\d+$", as.character(first_col)))) {
-      # First column is numeric ROI numbers
-      roi_numbers <- as.integer(first_col)
-      file_names <- sprintf("%s_%05d.png", sample_name, roi_numbers)
-    } else {
-      # Fallback: sequential numbering
-      file_names <- sprintf("%s_%05d.png", sample_name, seq_len(nrow(scores)))
-    }
-
-    data.frame(
-      file_name = file_names,
-      class_name = winning_classes,
-      score = max_scores,
-      stringsAsFactors = FALSE
-    )
+    winning_class_from_scores(scores, sample_name)
   }, error = function(e) {
     warning("Failed to download autoclass for ", sample_name, ": ", e$message)
     NULL
   })
+}
+
+# TRUE when a column identifies ROIs: ROI numbers, or pids ending in one
+# (e.g. "D20190402T200352_IFCB010_00001")
+#
+# @param column First column of a class score matrix.
+# @noRd
+is_roi_id_column <- function(column) {
+  is.numeric(column) || all(grepl("^\\d+$|_\\d+$", as.character(column)))
+}
+
+# Winning class per ROI from a class score matrix
+#
+# @param scores Data frame as read from a class scores CSV: one row per ROI,
+#   one score column per class, usually after a ROI identifier column.
+# @param sample_name Sample name, used for the file names when the
+#   identifier column holds ROI numbers only.
+# @return Data frame with `file_name`, `class_name` and `score`, or NULL when
+#   there is nothing to read.
+# @noRd
+winning_class_from_scores <- function(scores, sample_name) {
+  if (nrow(scores) == 0 || ncol(scores) < 2) {
+    return(NULL)
+  }
+
+  # The first column is typically the ROI identifier; class scores then
+  # start at column 2
+  first_col <- scores[[1]]
+  class_cols <- if (is_roi_id_column(first_col)) names(scores)[-1] else names(scores)
+
+  score_matrix <- as.matrix(scores[, class_cols, drop = FALSE])
+
+  # A ROI without any score (all NA) has no winning class
+  scored <- rowSums(!is.na(score_matrix)) > 0
+  score_matrix[is.na(score_matrix)] <- -Inf
+  max_idx <- max.col(score_matrix, ties.method = "first")
+  max_scores <- score_matrix[cbind(seq_len(nrow(score_matrix)), max_idx)]
+  winning_classes <- class_cols[max_idx]
+  winning_classes[!scored] <- "unclassified"
+  max_scores[!scored] <- NA_real_
+
+  file_names <- if (is.character(first_col) && all(grepl("_\\d+$", first_col))) {
+    # pid column with full identifiers
+    paste0(first_col, ".png")
+  } else if (is.numeric(first_col) || all(grepl("^\\d+$", as.character(first_col)))) {
+    sprintf("%s_%05d.png", sample_name, as.integer(first_col))
+  } else {
+    # No identifier column: sequential numbering
+    sprintf("%s_%05d.png", sample_name, seq_len(nrow(scores)))
+  }
+
+  data.frame(
+    file_name = file_names,
+    class_name = winning_classes,
+    score = max_scores,
+    stringsAsFactors = FALSE
+  )
 }
 
 #' Bulk download zip archives for multiple samples from the Dashboard
