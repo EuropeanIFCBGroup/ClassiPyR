@@ -52,6 +52,19 @@ annotator_or_unknown <- function(annotator) {
   }
 }
 
+# TRUE for an annotator name worth remembering in the settings file
+is_storable_annotator <- function(annotator) {
+  is.character(annotator) && length(annotator) == 1 && !is.na(annotator) &&
+    nzchar(trimws(annotator))
+}
+
+# Annotator name the app starts with: the one saved by an earlier session,
+# otherwise the system user
+startup_annotator_name <- function(saved_settings) {
+  saved <- as.character(saved_settings$annotator_name)
+  if (is_storable_annotator(saved)) trimws(saved) else Sys.info()[["user"]]
+}
+
 # Update the display text for current sample in dropdown to show pencil symbol
 # Uses JavaScript to modify just the displayed text without rebuilding dropdown
 update_current_sample_status <- function(session, sample_name,

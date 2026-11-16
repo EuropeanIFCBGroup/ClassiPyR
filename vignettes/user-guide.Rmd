@@ -36,7 +36,7 @@ Complete documentation for all `ClassiPyR` features.
 
 ### Sidebar
 
-- **Annotator name**: Your name for statistics tracking
+- **Annotator name**: Your name for statistics tracking. It is remembered between sessions
 - **Settings**: Configure folders and options
 - **Sample selection**: Year, month, status filters
 - **Navigation**: Load, previous, next, random, sync

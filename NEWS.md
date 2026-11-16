@@ -9,6 +9,7 @@
   - A class without enough verdicts keeps the model's current threshold, and the export records where every value came from.
   - A review survives its data being away: images whose raw data cannot be found stay pending and come back once it is available again, and a frozen review can be opened, shown and exported without the class-score files or their index.
 - New exported functions, all experimental: `build_threshold_index()` (builds or updates the cache of class-score files the app reads, and can be run from a script for large folders), `estimate_precision_curve()` and `choose_class_threshold()` (the estimate and the rule behind the app's results), and `write_thresholds_json()`, `write_thresholds_csv()` and `write_thresholds_report_csv()` (write a thresholds file that ifcb-classify reads back exactly, also usable for thresholds set by hand).
+- **The annotator name is remembered**: the name typed in the *Annotator* field is stored in the settings file and restored the next time the app starts, instead of going back to the system user name.
 
 ## Bug fixes
 

@@ -130,7 +130,8 @@ setup_init_server <- function(input, output, session) {
       zip_readme_citation = "",
       zip_readme_institute = "",
       zip_split_zip = FALSE,
-      zip_max_size = 500
+      zip_max_size = 500,
+      annotator_name = Sys.info()[["user"]]
     )
 
     if (file.exists(settings_file)) {
@@ -393,6 +394,26 @@ setup_init_server <- function(input, output, session) {
     updateSelectizeInput(session, "new_class_quick",
                          choices = sorted_classes,
                          selected = character(0))
+  })
+
+  # Restore the annotator name of the previous session, and remember a new
+  # one. The write is debounced so typing does not rewrite the settings file
+  # for every keystroke; an emptied field keeps the saved name.
+  remembered_annotator <- reactiveVal(startup_annotator_name(saved_settings))
+
+  observeEvent(once = TRUE, ignoreNULL = FALSE, session$clientData$url_protocol, {
+    updateTextInput(session, "annotator_name", value = remembered_annotator())
+  })
+
+  annotator_name_debounced <- debounce(reactive(input$annotator_name), 1000)
+
+  observeEvent(annotator_name_debounced(), {
+    name <- annotator_name_debounced()
+    if (!is_storable_annotator(name)) return()
+    name <- trimws(name)
+    if (identical(name, remembered_annotator())) return()
+    persist_settings(list(annotator_name = name))
+    remembered_annotator(name)
   })
 
   # Store all sample names and their classification status

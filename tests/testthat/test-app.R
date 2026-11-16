@@ -460,3 +460,51 @@ test_that("a MAT save works with a class list that was never loaded from a file"
   )
   expect_equal(exported[rois, 2], classlist[rois, 2])
 })
+
+test_that("the annotator name is remembered between sessions", {
+  skip_if_not(app_test_data_available(), "App or test data not available")
+  app <- local_app_server()
+  saved_name <- function() jsonlite::fromJSON(get_settings_path())$annotator_name
+
+  shiny::testServer(app$server, {
+    # Without a saved name the system user is the default
+    expect_equal(saved_settings$annotator_name, Sys.info()[["user"]])
+
+    # The browser sends the field's initial value when the session starts
+    session$setInputs(annotator_name = Sys.info()[["user"]])
+    session$elapse(2000)
+    expect_null(saved_name())
+
+    session$setInputs(annotator_name = "Ada")
+    session$elapse(500)
+    # Typing does not write the file for every keystroke
+    expect_null(saved_name())
+    session$setInputs(annotator_name = "Ada Lovelace")
+    session$elapse(2000)
+    expect_equal(saved_name(), "Ada Lovelace")
+
+    # An emptied field does not replace the saved name
+    session$setInputs(annotator_name = "  ")
+    session$elapse(2000)
+    expect_equal(saved_name(), "Ada Lovelace")
+  })
+
+  # A second session starts from the saved name
+  shiny::testServer(app$server, {
+    expect_equal(saved_settings$annotator_name, "Ada Lovelace")
+  })
+})
+
+test_that("an unusable saved annotator name falls back to the system user", {
+  module_env <- new.env(parent = globalenv())
+  source(system.file("app", "modules", "helpers_shared.R", package = "ClassiPyR"),
+         local = module_env)
+  user <- Sys.info()[["user"]]
+  expect_equal(module_env$startup_annotator_name(list()), user)
+  expect_equal(module_env$startup_annotator_name(list(annotator_name = " ")), user)
+  expect_equal(module_env$startup_annotator_name(list(annotator_name = 42)), "42")
+  expect_true(module_env$is_storable_annotator("Ada"))
+  expect_false(module_env$is_storable_annotator(""))
+  expect_false(module_env$is_storable_annotator(NULL))
+  expect_false(module_env$is_storable_annotator(NA_character_))
+})
