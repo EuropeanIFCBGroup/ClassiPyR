@@ -11,6 +11,7 @@
 #
 # JavaScript functions defined here:
 # - gallery_js(): Click selection and drag-select for images
+# - www/gallery-shortcuts.js: Keyboard shortcuts for the gallery
 # - MutationObserver: Dynamic styling for unmatched class warnings
 #
 # Custom CSS:
@@ -256,6 +257,19 @@ gallery_js <- function() {
   });
 
   "
+}
+
+#' Tooltip listing the gallery keyboard shortcuts
+gallery_shortcut_hint <- function() {
+  paste(
+    "Keyboard shortcuts",
+    "\u2190 / \u2192   previous / next page",
+    "Ctrl+A (Cmd+A)   select page, again for all pages",
+    "Esc   deselect",
+    "Enter   relabel to the chosen class",
+    "/   go to the Relabel to box",
+    sep = "\n"
+  )
 }
 
 # UI object
@@ -624,6 +638,7 @@ ui <- page_sidebar(
         tags$style("
           .toolbar-row .form-group { margin-bottom: 0; }
           .toolbar-btn { height: 38px; }
+          .shortcut-hint { color: #6c757d; cursor: help; padding: 0 4px; }
           .wide-dropdown .selectize-input,
           .wide-dropdown .selectize-dropdown,
           .wide-dropdown .selectize-dropdown-content .option {
@@ -670,6 +685,8 @@ ui <- page_sidebar(
             actionButton("measure_toggle", label = icon("ruler"),
                          class = "btn-outline-secondary toolbar-btn",
                          title = "Measure: click and drag on images"),
+            span(class = "shortcut-hint", icon("keyboard"),
+                 title = gallery_shortcut_hint()),
             span(style = "margin-left: 5px; white-space: nowrap;", textOutput("selected_count_inline", inline = TRUE))
           ),
 
@@ -700,7 +717,9 @@ ui <- page_sidebar(
                    pointer-events: none; display: none; z-index: 1000;"),
 
       # JavaScript for selection handling
-      tags$script(HTML(gallery_js()))
+      tags$script(HTML(gallery_js())),
+      # Keyboard shortcuts (inst/app/www/gallery-shortcuts.js)
+      tags$script(src = "gallery-shortcuts.js")
     ),
 
     # Summary Table tab

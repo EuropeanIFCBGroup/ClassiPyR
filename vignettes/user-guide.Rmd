@@ -184,6 +184,22 @@ Each image card displays:
 | Select Page / Select All | First click selects the current page; second click selects all images across all pages |
 | Deselect | Clear all selections |
 
+### Keyboard Shortcuts
+
+The gallery can be worked with from the keyboard. Each shortcut presses the corresponding toolbar button. Hover over the keyboard symbol in the toolbar for a reminder.
+
+| Key | Action |
+|-----|--------|
+| <kbd>←</kbd> / <kbd>→</kbd> | Previous / next page |
+| <kbd>Ctrl</kbd>+<kbd>A</kbd> (<kbd>Cmd</kbd>+<kbd>A</kbd> on macOS) | Select the current page; press again to select all images across all pages |
+| <kbd>Esc</kbd> | Clear all selections. Inside a text field or dropdown: leave it |
+| <kbd>/</kbd> | Put the cursor in the "Relabel to" box |
+| <kbd>Enter</kbd> | Relabel the selected images to the class in "Relabel to" |
+
+A typical sequence is to select images, press <kbd>/</kbd>, type the first letters of a class, press <kbd>Enter</kbd> to pick it and <kbd>Enter</kbd> again to relabel.
+
+The shortcuts are inactive while a dialog is open and while the cursor is in a text field or dropdown (the annotator name, a filter, the page size), so typing there is never read as a shortcut. A toolbar button reached with <kbd>Tab</kbd> is still pressed by <kbd>Enter</kbd> as usual.
+
 <a href="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/drag-select.png">
 <img src="https://europeanifcbgroup.github.io/ClassiPyR/reference/figures/drag-select.png" alt="Drag-select: draw a rectangle to select multiple images at once." style="max-width:100%;">
 </a>
