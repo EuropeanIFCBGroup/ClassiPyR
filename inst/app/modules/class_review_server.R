@@ -355,7 +355,13 @@ setup_class_review_server <- function(input, output, session, rv, config,
           base_url = parsed$base_url,
           file_names = all_file_names,
           dest_dir = rv$temp_png_folder,
-          max_retries = config$dashboard_max_retries
+          max_retries = config$dashboard_max_retries,
+          parallel_downloads = config$dashboard_parallel_downloads,
+          multi_timeout = config$dashboard_multi_timeout,
+          progress = function(done, total) {
+            setProgress(done / max(total, 1),
+                        detail = sprintf("%d of %d images", done, total))
+          }
         )
 
         extracted_files <- downloaded

@@ -9,7 +9,10 @@ download_dashboard_images_individual(
   file_names,
   dest_dir,
   max_retries = 3,
-  sample_fail_threshold = 2
+  sample_fail_threshold = 2,
+  parallel_downloads = 1,
+  multi_timeout = 120,
+  progress = NULL
 )
 }
 \arguments{
@@ -20,20 +23,48 @@ download_dashboard_images_individual(
 
 \item{dest_dir}{Character. Destination directory.}
 
-\item{max_retries}{Integer. Maximum number of retry attempts per image.}
+\item{max_retries}{Integer. Maximum number of attempts per image.}
 
-\item{sample_fail_threshold}{Integer. After this many consecutive failures
-from the same sample, skip all remaining images from that sample.}
+\item{sample_fail_threshold}{Integer. Number of failures from the same
+sample after which its remaining images are skipped (see Details).}
+
+\item{parallel_downloads}{Integer. Number of images requested at the same
+time. Default \code{1}: one at a time.}
+
+\item{multi_timeout}{Numeric. With \code{parallel_downloads} above 1, the
+time in seconds to wait for one chunk of 100 images; requests still
+running after that count as failed.}
+
+\item{progress}{Optional function called as \code{progress(done, total)}
+while the images are downloaded, with the number of file names handled
+so far and their total number.}
 }
 \value{
 Character vector of successfully downloaded file names.
 }
 \description{
-Downloads specific PNG files from the Dashboard's \code{/data/} endpoint,
-one at a time. This is much faster than downloading entire zip archives
-when only a subset of ROIs are needed (e.g., class review mode).
+Downloads specific PNG files from the Dashboard's \code{/data/} endpoint.
+This is much faster than downloading entire zip archives when only a
+subset of ROIs are needed (e.g., class review mode).
 }
 \details{
-Samples that fail repeatedly are automatically skipped to avoid long
-waits when annotations reference samples not available on the dashboard.
+With \code{parallel_downloads = 1} (the default) the images are requested
+one at a time. With a higher value that many requests are sent at the same
+time, which is several times faster for a class with thousands of images.
+In both cases a file that is already in \code{dest_dir} is not requested
+again, a response other than an image is discarded, and a failed request
+is tried again up to \code{max_retries} times unless the dashboard
+answered that the image does not exist.
+
+Samples that fail repeatedly are automatically skipped, with a warning, to
+avoid long waits when annotations reference samples not available on the
+dashboard. One at a time, a sample is skipped after
+\code{sample_fail_threshold} consecutive failures. In parallel, images are
+requested in chunks of 100, and after each chunk a sample is skipped when
+it has at least \code{sample_fail_threshold} failures and not a single
+image so far.
+
+In parallel, file names whose sample name is not in the
+\code{DYYYYMMDDTHHMMSS_IFCBnnn} form are left out, as the \code{/data/}
+endpoint is only asked for such names.
 }

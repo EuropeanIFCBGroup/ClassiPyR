@@ -23,7 +23,7 @@ Imports:
     shinyjs,
     shinyFiles,
     bslib,
-    curl,
+    curl (>= 3.3),
     iRfcb (>= 0.10.0),
     lifecycle,
     dplyr,

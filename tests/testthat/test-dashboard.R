@@ -523,6 +523,214 @@ test_that("rescan_file_index returns NULL when dashboard URL is NULL", {
 })
 
 # ---------------------------------------------------------------------------
+# download_dashboard_images_individual, parallel — offline-safe
+# ---------------------------------------------------------------------------
+
+# A stand-in for fetch_dashboard_image_batch(): `status_for(url)` decides the
+# HTTP status of each request (NA: no response). Like a real request, it
+# leaves a file behind for every response, also for an error page.
+local_fake_image_fetcher <- function(status_for, env = parent.frame()) {
+  log <- new.env()
+  log$batches <- list()
+  local_mocked_bindings(
+    fetch_dashboard_image_batch = function(urls, dest_paths,
+                                           parallel_downloads, multi_timeout) {
+      log$batches <- c(log$batches, list(urls))
+      log$parallel_downloads <- parallel_downloads
+      log$multi_timeout <- multi_timeout
+      status <- vapply(urls, status_for, integer(1), USE.NAMES = FALSE)
+      for (path in dest_paths[!is.na(status)]) writeBin(charToRaw("body"), path)
+      status
+    },
+    download_dashboard_image_single = function(...) {
+      stop("the one-by-one download must not be used")
+    },
+    .package = "ClassiPyR",
+    .env = env
+  )
+  log
+}
+
+test_that("parallel download fetches the missing images in one batch", {
+  tmp <- tempfile("dashboard_parallel_")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  sample_name <- "D20160810T104734_IFCB110"
+  file_names <- sprintf("%s_%05d.png", sample_name, 1:4)
+  dir.create(file.path(tmp, sample_name), recursive = TRUE)
+  writeBin(charToRaw("cached"), file.path(tmp, sample_name, file_names[1]))
+
+  log <- local_fake_image_fetcher(function(url) {
+    if (grepl("_00003\\.png$", url)) 404L else 200L
+  })
+
+  result <- download_dashboard_images_individual(
+    base_url = "https://dashboard.example.com/",
+    file_names = file_names, dest_dir = tmp,
+    parallel_downloads = 4, multi_timeout = 60
+  )
+
+  expect_equal(result, file_names[c(1, 2, 4)])
+  # The file already on disk is not requested again, a 404 is not retried
+  expect_length(log$batches, 1)
+  expect_equal(log$batches[[1]],
+               paste0("https://dashboard.example.com/data/", file_names[2:4]))
+  expect_equal(log$parallel_downloads, 4)
+  expect_equal(log$multi_timeout, 60)
+  # The error page of the 404 is not left behind as an image
+  expect_setequal(list.files(file.path(tmp, sample_name)), file_names[c(1, 2, 4)])
+  expect_equal(readBin(file.path(tmp, sample_name, file_names[1]), "raw", 6),
+               charToRaw("cached"))
+})
+
+test_that("parallel download retries failures that are not a 404", {
+  tmp <- tempfile("dashboard_parallel_")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  sample_name <- "D20160810T104734_IFCB110"
+  file_names <- sprintf("%s_%05d.png", sample_name, 1:3)
+
+  attempts <- new.env()
+  log <- local_fake_image_fetcher(function(url) {
+    n <- (if (is.null(attempts[[url]])) 0L else attempts[[url]]) + 1L
+    assign(url, n, attempts)
+    if (grepl("_00001", url)) return(200L)
+    # 2: a server error that passes on the second attempt; 3: never answers
+    if (grepl("_00002", url)) return(if (n < 2L) 500L else 200L)
+    NA_integer_
+  })
+
+  result <- suppressWarnings(download_dashboard_images_individual(
+    "https://dashboard.example.com", file_names, tmp,
+    max_retries = 3, parallel_downloads = 4
+  ))
+
+  expect_equal(result, file_names[1:2])
+  expect_equal(lengths(log$batches), c(3, 2, 1))
+  expect_equal(list.files(file.path(tmp, sample_name)), file_names[1:2])
+})
+
+test_that("parallel download gives up on a sample that only fails", {
+  tmp <- tempfile("dashboard_parallel_")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  missing <- sprintf("D20160810T104734_IFCB999_%05d.png", 1:250)
+  present <- sprintf("D20160811T090000_IFCB110_%05d.png", 1:3)
+
+  log <- local_fake_image_fetcher(function(url) {
+    if (grepl("IFCB999", url)) 404L else 200L
+  })
+
+  expect_warning(
+    result <- download_dashboard_images_individual(
+      "https://dashboard.example.com", c(missing, present), tmp,
+      parallel_downloads = 4
+    ),
+    "Skipping remaining images from D20160810T104734_IFCB999"
+  )
+
+  expect_equal(result, present)
+  # Only the first chunk of the missing sample was requested
+  requested <- unlist(log$batches)
+  expect_lt(sum(grepl("IFCB999", requested)), 250)
+  expect_equal(sum(grepl("IFCB110", requested)), 3)
+})
+
+test_that("parallel download keeps going for a sample with some missing images", {
+  tmp <- tempfile("dashboard_parallel_")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  file_names <- sprintf("D20160810T104734_IFCB110_%05d.png", 1:250)
+
+  log <- local_fake_image_fetcher(function(url) {
+    roi <- as.integer(sub(".*_(\\d+)\\.png$", "\\1", url))
+    if (roi %% 2 == 0) 404L else 200L
+  })
+
+  expect_no_warning(
+    result <- download_dashboard_images_individual(
+      "https://dashboard.example.com", file_names, tmp, parallel_downloads = 4
+    )
+  )
+  expect_equal(result, file_names[seq(1, 250, by = 2)])
+  expect_equal(length(unlist(log$batches)), 250)
+})
+
+test_that("parallel download reports progress and skips unusable names", {
+  tmp <- tempfile("dashboard_parallel_")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  good <- sprintf("D20160810T104734_IFCB110_%05d.png", 1:150)
+  file_names <- c("not_a_valid_filename.txt", good,
+                  "IFCB134_2023_072_004021_00002.png")
+
+  log <- local_fake_image_fetcher(function(url) 200L)
+  calls <- list()
+
+  result <- download_dashboard_images_individual(
+    "https://dashboard.example.com", file_names, tmp, parallel_downloads = 4,
+    progress = function(done, total) calls[[length(calls) + 1]] <<- c(done, total)
+  )
+
+  # Only names in the D<timestamp>_IFCB<n> form can be requested from /data/
+  expect_equal(result, good)
+  expect_equal(length(unlist(log$batches)), 150)
+  expect_gte(length(calls), 2)
+  done <- vapply(calls, `[`, numeric(1), 1)
+  expect_false(is.unsorted(done))
+  expect_equal(calls[[length(calls)]], c(152, 152))
+})
+
+test_that("a failing progress callback does not stop the download", {
+  tmp <- tempfile("dashboard_parallel_")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  file_names <- sprintf("D20160810T104734_IFCB110_%05d.png", 1:2)
+  log <- local_fake_image_fetcher(function(url) 200L)
+
+  result <- download_dashboard_images_individual(
+    "https://dashboard.example.com", file_names, tmp, parallel_downloads = 2,
+    progress = function(done, total) stop("broken callback")
+  )
+  expect_equal(result, file_names)
+})
+
+test_that("one download at a time keeps the one-by-one path", {
+  tmp <- tempfile("dashboard_parallel_")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  file_names <- sprintf("D20160810T104734_IFCB110_%05d.png", 1:2)
+  requested <- integer()
+
+  local_mocked_bindings(
+    fetch_dashboard_image_batch = function(...) stop("must not be used"),
+    download_dashboard_image_single = function(base_url, sample_name, roi_number,
+                                               dest_dir, max_retries = 3) {
+      requested <<- c(requested, roi_number)
+      file.path(dest_dir, sample_name)
+    },
+    .package = "ClassiPyR"
+  )
+  calls <- list()
+  result <- download_dashboard_images_individual(
+    "https://dashboard.example.com", file_names, tmp,
+    progress = function(done, total) calls[[length(calls) + 1]] <<- c(done, total)
+  )
+
+  expect_equal(result, file_names)
+  expect_equal(requested, 1:2)
+  expect_equal(calls, list(c(1, 2), c(2, 2)))
+})
+
+test_that("fetch_dashboard_image_batch reports unreachable hosts without leaving files", {
+  tmp <- tempfile("dashboard_fetch_")
+  dir.create(tmp)
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  dest <- file.path(tmp, c("a.png", "b.png"))
+
+  status <- ClassiPyR:::fetch_dashboard_image_batch(
+    urls = paste0("https://this-host-does-not-exist.invalid/data/", basename(dest)),
+    dest_paths = dest, parallel_downloads = 2, multi_timeout = 30
+  )
+
+  expect_equal(status, c(NA_integer_, NA_integer_))
+  expect_false(any(file.exists(dest) & file.size(dest) > 0, na.rm = TRUE))
+})
+
+# ---------------------------------------------------------------------------
 # Integration tests — require network access to habon-ifcb.whoi.edu
 # ---------------------------------------------------------------------------
 
@@ -779,4 +987,46 @@ test_that("download_dashboard_images_individual downloads real PNGs", {
     sample_name <- sub("_\\d+\\.png$", "", f)
     expect_true(file.exists(file.path(tmp, sample_name, f)))
   }
+})
+
+test_that("download_dashboard_images_individual downloads in parallel from a real dashboard", {
+  skip_if_dashboard_unavailable()
+
+  tmp <- tempfile("dashboard_parallel_live_")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  present <- sprintf("%s_%05d.png", DASHBOARD_SAMPLE, 1:12)
+  absent <- sprintf("D20160810T104734_IFCB999_%05d.png", 1:3)
+  calls <- list()
+
+  expect_warning(
+    result <- download_dashboard_images_individual(
+      DASHBOARD_BASE, c(present, absent), tmp,
+      parallel_downloads = 4, multi_timeout = 60,
+      progress = function(done, total) calls[[length(calls) + 1]] <<- c(done, total)
+    ),
+    "Skipping remaining images from D20160810T104734_IFCB999"
+  )
+
+  # ROI numbers without an image (triggers with no ROI) are 404s on the
+  # dashboard, so not every one of the first twelve has to exist
+  expect_true(length(result) > 0)
+  expect_true(all(result %in% present))
+  saved <- file.path(tmp, DASHBOARD_SAMPLE, result)
+  expect_true(all(file.exists(saved)))
+  png_magic <- as.raw(c(0x89, 0x50, 0x4e, 0x47))
+  expect_true(all(vapply(saved, function(f) {
+    identical(readBin(f, "raw", 4), png_magic)
+  }, logical(1))))
+  expect_setequal(list.files(file.path(tmp, DASHBOARD_SAMPLE)), result)
+  expect_false(dir.exists(file.path(tmp, "D20160810T104734_IFCB999")) &&
+                 length(list.files(file.path(tmp, "D20160810T104734_IFCB999"))) > 0)
+  expect_equal(calls[[length(calls)]], c(15, 15))
+
+  # The one-by-one path gets the same images
+  tmp2 <- tempfile("dashboard_single_live_")
+  on.exit(unlink(tmp2, recursive = TRUE), add = TRUE)
+  one_by_one <- suppressWarnings(download_dashboard_images_individual(
+    DASHBOARD_BASE, present, tmp2, max_retries = 2
+  ))
+  expect_setequal(result, one_by_one)
 })

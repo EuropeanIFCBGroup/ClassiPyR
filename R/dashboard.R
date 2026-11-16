@@ -557,33 +557,77 @@ download_dashboard_image_single <- function(base_url, sample_name, roi_number,
 
 #' Download individual PNG images from the Dashboard
 #'
-#' Downloads specific PNG files from the Dashboard's \code{/data/} endpoint,
-#' one at a time. This is much faster than downloading entire zip archives
-#' when only a subset of ROIs are needed (e.g., class review mode).
+#' Downloads specific PNG files from the Dashboard's \code{/data/} endpoint.
+#' This is much faster than downloading entire zip archives when only a
+#' subset of ROIs are needed (e.g., class review mode).
 #'
-#' Samples that fail repeatedly are automatically skipped to avoid long
-#' waits when annotations reference samples not available on the dashboard.
+#' With \code{parallel_downloads = 1} (the default) the images are requested
+#' one at a time. With a higher value that many requests are sent at the same
+#' time, which is several times faster for a class with thousands of images.
+#' In both cases a file that is already in \code{dest_dir} is not requested
+#' again, a response other than an image is discarded, and a failed request
+#' is tried again up to \code{max_retries} times unless the dashboard
+#' answered that the image does not exist.
+#'
+#' Samples that fail repeatedly are automatically skipped, with a warning, to
+#' avoid long waits when annotations reference samples not available on the
+#' dashboard. One at a time, a sample is skipped after
+#' \code{sample_fail_threshold} consecutive failures. In parallel, images are
+#' requested in chunks of 100, and after each chunk a sample is skipped when
+#' it has at least \code{sample_fail_threshold} failures and not a single
+#' image so far.
+#'
+#' In parallel, file names whose sample name is not in the
+#' \code{DYYYYMMDDTHHMMSS_IFCBnnn} form are left out, as the \code{/data/}
+#' endpoint is only asked for such names.
 #'
 #' @param base_url Character. Dashboard base URL.
 #' @param file_names Character vector. PNG file names
 #'   (e.g., \code{"D20240716T000431_IFCB134_00108.png"}).
 #' @param dest_dir Character. Destination directory.
-#' @param max_retries Integer. Maximum number of retry attempts per image.
-#' @param sample_fail_threshold Integer. After this many consecutive failures
-#'   from the same sample, skip all remaining images from that sample.
+#' @param max_retries Integer. Maximum number of attempts per image.
+#' @param sample_fail_threshold Integer. Number of failures from the same
+#'   sample after which its remaining images are skipped (see Details).
+#' @param parallel_downloads Integer. Number of images requested at the same
+#'   time. Default \code{1}: one at a time.
+#' @param multi_timeout Numeric. With \code{parallel_downloads} above 1, the
+#'   time in seconds to wait for one chunk of 100 images; requests still
+#'   running after that count as failed.
+#' @param progress Optional function called as \code{progress(done, total)}
+#'   while the images are downloaded, with the number of file names handled
+#'   so far and their total number.
 #' @return Character vector of successfully downloaded file names.
 #' @export
 download_dashboard_images_individual <- function(base_url, file_names, dest_dir,
                                                  max_retries = 3,
-                                                 sample_fail_threshold = 2) {
+                                                 sample_fail_threshold = 2,
+                                                 parallel_downloads = 1,
+                                                 multi_timeout = 120,
+                                                 progress = NULL) {
   dir.create(dest_dir, recursive = TRUE, showWarnings = FALSE)
 
+  if (isTRUE(parallel_downloads > 1)) {
+    return(download_dashboard_images_parallel(
+      base_url, file_names, dest_dir,
+      max_retries = max_retries,
+      sample_fail_threshold = sample_fail_threshold,
+      parallel_downloads = parallel_downloads,
+      multi_timeout = multi_timeout,
+      progress = progress
+    ))
+  }
+
+  n_files <- length(file_names)
   succeeded <- character()
   # Track consecutive failures per sample to skip unavailable samples early
   sample_failures <- list()
   skipped_samples <- character()
 
-  for (fname in file_names) {
+  for (i in seq_along(file_names)) {
+    fname <- file_names[i]
+    # The file before this one is done, whichever way it ended
+    if (i > 1) report_bulk_progress(progress, i - 1L, n_files)
+
     # Parse sample_name and roi_number via iRfcb parser (handles legacy names).
     parsed <- tryCatch(
       iRfcb::ifcb_convert_filenames(fname),
@@ -625,6 +669,7 @@ download_dashboard_images_individual <- function(base_url, file_names, dest_dir,
       }
     }
   }
+  if (n_files > 0) report_bulk_progress(progress, n_files, n_files)
 
   succeeded
 }
