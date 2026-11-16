@@ -85,6 +85,7 @@ reference:
   - fill_unclassified_db
   - import_png_folder_with_unclassified
   - list_classes_db
+  - rename_class_db
   - save_class_taxonomy_db
   - load_class_taxonomy_db
   - save_global_class_list_db

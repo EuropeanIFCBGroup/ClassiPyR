@@ -2304,3 +2304,152 @@ test_that("parse_ifcb_png_names matches the one-by-one parser", {
   }
   expect_equal(nrow(parse_ifcb_png_names(character())), 0)
 })
+
+# A database with two samples: Diatom and Ciliate annotations, a class list
+# per sample, the in-app class list and one taxonomy row per class
+local_rename_db <- function(env = parent.frame()) {
+  db_dir <- tempfile("rename_db_")
+  dir.create(db_dir)
+  do.call(on.exit, list(substitute(unlink(d, recursive = TRUE), list(d = db_dir)),
+                        add = TRUE), envir = env)
+  db_path <- get_db_path(db_dir)
+  class2use <- c("unclassified", "Diatom", "Ciliate", "Dino")
+  samples <- c("D20230101T120000_IFCB134", "D20230102T120000_IFCB134")
+  classes <- list(c("Diatom", "Ciliate", "Diatom"), c("Ciliate", "Dino", "Diatom"))
+  for (i in seq_along(samples)) {
+    save_annotations_db(
+      db_path, samples[i],
+      data.frame(file_name = sprintf("%s_%05d.png", samples[i], 1:3),
+                 class_name = classes[[i]], stringsAsFactors = FALSE),
+      class2use, "Original annotator", is_manual = c(1L, 0L, 1L)
+    )
+  }
+  save_global_class_list_db(db_path, class2use)
+  save_class_taxonomy_db(db_path, c(Diatom = "111", Ciliate = "222"),
+                         accepted_name_map = c(Diatom = "Bacillariophyceae",
+                                               Ciliate = "Ciliophora"))
+  db_path
+}
+
+read_table <- function(db_path, sql) {
+  con <- DBI::dbConnect(RSQLite::SQLite(), db_path)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  DBI::dbGetQuery(con, sql)
+}
+
+test_that("rename_class_db renames a class in every table", {
+  db_path <- local_rename_db()
+  before <- read_table(db_path, "SELECT * FROM annotations ORDER BY sample_name, roi_number")
+
+  result <- rename_class_db(db_path, "Diatom", "Bacillariophyceae")
+
+  expect_equal(result$old_name, "Diatom")
+  expect_equal(result$new_name, "Bacillariophyceae")
+  expect_equal(result$annotations, 3)
+  expect_equal(result$class_lists, 2)
+  expect_equal(result$global_class_list, 1)
+  expect_equal(result$class_taxonomy, 1)
+  expect_false(result$merged)
+
+  after <- read_table(db_path, "SELECT * FROM annotations ORDER BY sample_name, roi_number")
+  expect_equal(after$class_name,
+               sub("^Diatom$", "Bacillariophyceae", before$class_name))
+  # A rename is not a re-annotation
+  expect_equal(after[c("annotator", "timestamp", "is_manual")],
+               before[c("annotator", "timestamp", "is_manual")])
+
+  expect_equal(load_global_class_list_db(db_path),
+               c("unclassified", "Bacillariophyceae", "Ciliate", "Dino"))
+  lists <- read_table(db_path, "SELECT class_index, class_name FROM class_lists
+                                WHERE sample_name = 'D20230101T120000_IFCB134'
+                                ORDER BY class_index")
+  expect_equal(lists$class_name,
+               c("unclassified", "Bacillariophyceae", "Ciliate", "Dino"))
+  taxonomy <- read_table(db_path, "SELECT * FROM class_taxonomy")
+  expect_setequal(taxonomy$class_name, c("Bacillariophyceae", "Ciliate"))
+  expect_equal(taxonomy$aphia_id[taxonomy$class_name == "Bacillariophyceae"], "111")
+})
+
+test_that("rename_class_db refuses to merge into a class with annotations unless asked", {
+  db_path <- local_rename_db()
+  before <- read_table(db_path, "SELECT * FROM annotations ORDER BY sample_name, roi_number")
+
+  expect_error(rename_class_db(db_path, "Diatom", "Ciliate"), "already has")
+  expect_equal(
+    read_table(db_path, "SELECT * FROM annotations ORDER BY sample_name, roi_number"),
+    before
+  )
+})
+
+test_that("rename_class_db merges two classes when asked", {
+  db_path <- local_rename_db()
+
+  result <- rename_class_db(db_path, "Diatom", "Ciliate", merge = TRUE)
+
+  expect_true(result$merged)
+  expect_equal(result$annotations, 3)
+  counts <- list_classes_db(db_path)
+  expect_equal(counts$count[counts$class_name == "Ciliate"], 5)
+  expect_false("Diatom" %in% counts$class_name)
+
+  # The surviving class keeps its own taxonomy row; the old row is gone
+  taxonomy <- read_table(db_path, "SELECT * FROM class_taxonomy")
+  expect_equal(taxonomy$class_name, "Ciliate")
+  expect_equal(taxonomy$aphia_id, "222")
+
+  # The in-app list holds the name once; per-sample lists keep their indices,
+  # so a .mat export still puts every class at the index it had
+  expect_equal(load_global_class_list_db(db_path),
+               c("unclassified", "Ciliate", "Dino"))
+  lists <- read_table(db_path, "SELECT class_index, class_name FROM class_lists
+                                WHERE sample_name = 'D20230101T120000_IFCB134'
+                                ORDER BY class_index")
+  expect_equal(lists$class_index, 1:4)
+  expect_equal(lists$class_name, c("unclassified", "Ciliate", "Ciliate", "Dino"))
+})
+
+test_that("rename_class_db moves the taxonomy row when the new name has none", {
+  db_path <- local_rename_db()
+
+  result <- rename_class_db(db_path, "Diatom", "Dino", merge = TRUE)
+
+  taxonomy <- read_table(db_path, "SELECT * FROM class_taxonomy")
+  expect_equal(taxonomy$aphia_id[taxonomy$class_name == "Dino"], "111")
+  expect_false("Diatom" %in% taxonomy$class_name)
+})
+
+test_that("rename_class_db applies several renames in one transaction", {
+  db_path <- local_rename_db()
+  before <- read_table(db_path, "SELECT * FROM annotations ORDER BY sample_name, roi_number")
+
+  result <- rename_class_db(db_path, c("Diatom", "Dino"), c("Diatoms", "Dinos"))
+  expect_equal(result$annotations, c(3, 1))
+  expect_setequal(list_classes_db(db_path)$class_name,
+                  c("Ciliate", "Diatoms", "Dinos"))
+
+  # The second rename is refused, so the first is rolled back too
+  expect_error(
+    rename_class_db(db_path, c("Diatoms", "Dinos"), c("Diatom", "Ciliate")),
+    "already has"
+  )
+  expect_setequal(list_classes_db(db_path)$class_name,
+                  c("Ciliate", "Diatoms", "Dinos"))
+})
+
+test_that("rename_class_db reports zero rows for a class that is not in the database", {
+  db_path <- local_rename_db()
+  result <- rename_class_db(db_path, "Nobody", "Somebody")
+  expect_equal(result$annotations, 0)
+  expect_equal(result$class_lists, 0)
+  expect_false(result$merged)
+})
+
+test_that("rename_class_db validates its input", {
+  db_path <- local_rename_db()
+  expect_error(rename_class_db(db_path, "Diatom", ""), "empty")
+  expect_error(rename_class_db(db_path, "Diatom", NA_character_), "empty")
+  expect_error(rename_class_db(db_path, "Diatom", "Diatom"), "same")
+  expect_error(rename_class_db(db_path, c("Diatom", "Dino"), "X"), "same length")
+  expect_error(rename_class_db(file.path(tempdir(), "missing.sqlite"), "A", "B"),
+               "not found")
+})

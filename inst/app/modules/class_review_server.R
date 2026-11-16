@@ -226,6 +226,13 @@ setup_class_review_server <- function(input, output, session, rv, config,
     }
   }, ignoreInit = TRUE)
 
+  # A class renamed in the class list editor changes the names and counts
+  observeEvent(rv$class_rename_count, {
+    req(input$app_mode == "class_review")
+    req(identical(input$class_review_source, "database"))
+    update_cr_class_list()
+  }, ignoreInit = TRUE)
+
   # Cascading filter updates for class review
   observeEvent(input$cr_year_select, {
     req(input$app_mode == "class_review")

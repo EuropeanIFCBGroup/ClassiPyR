@@ -511,6 +511,8 @@ Class list entries can be linked to WoRMS AphiaIDs in the Class List Editor:
 
 When applied, AphiaID values are saved in SQLite (`class_taxonomy` table) and shown inline in the class list display as `[AphiaID: ...]`.
 
+With **Rename classes to WoRMS accepted_name** ticked, the matched classes are renamed in the class list and in the database, after a confirmation that lists the number of annotations each rename rewrites (see [Renaming a Class](class-management.html#renaming-a-class)). A class is left as it is when its accepted name is already in the class list or already has annotations.
+
 > **Note**: AphiaID mappings are database metadata. They are not written into exported `class2use.mat` / `.txt` files.
 
 ### Auto-Sync

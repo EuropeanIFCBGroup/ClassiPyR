@@ -625,3 +625,257 @@ test_that("a {sample}_class.csv label file is used for validation", {
     expect_equal(unique(rv$classifications$class_name), "From_class_csv")
   })
 })
+
+# --- Renaming a class across the database ---------------------------------
+
+rename_module_env <- function() {
+  env <- new.env(parent = globalenv())
+  source(system.file("app", "modules", "class_rename_server.R", package = "ClassiPyR"),
+         local = env)
+  env
+}
+
+test_that("a rename is a different name at the same position of the class list", {
+  env <- rename_module_env()
+  old <- c("unclassified", "Diatom", "Ciliate", "Dino")
+
+  renames <- env$detect_class_renames(old, c("unclassified", "Diatoms", "Ciliate", "Dinos"))
+  expect_equal(renames$old_name, c("Diatom", "Dino"))
+  expect_equal(renames$new_name, c("Diatoms", "Dinos"))
+
+  # Not renames: nothing changed, a class added or removed, two classes
+  # swapped, or a name replaced by one that is elsewhere in the list
+  expect_equal(nrow(env$detect_class_renames(old, old)), 0)
+  expect_equal(nrow(env$detect_class_renames(old, c(old, "New"))), 0)
+  expect_equal(nrow(env$detect_class_renames(old, old[-2])), 0)
+  expect_equal(nrow(env$detect_class_renames(old, old[c(1, 3, 2, 4)])), 0)
+  expect_equal(nrow(env$detect_class_renames(NULL, old)), 0)
+})
+
+test_that("class names in memory follow a rename", {
+  env <- rename_module_env()
+  renames <- data.frame(old_name = "Diatom", new_name = "Diatoms",
+                        stringsAsFactors = FALSE)
+
+  expect_equal(env$rename_classes(c("Diatom", "Ciliate", "Diatom"), renames),
+               c("Diatoms", "Ciliate", "Diatoms"))
+  expect_null(env$rename_classes(NULL, renames))
+
+  classifications <- data.frame(file_name = c("a.png", "b.png"),
+                                class_name = c("Diatom", "Ciliate"),
+                                stringsAsFactors = FALSE)
+  renamed <- env$rename_in_classifications(classifications, renames)
+  expect_equal(renamed$class_name, c("Diatoms", "Ciliate"))
+  expect_equal(classifications$class_name, c("Diatom", "Ciliate"))
+  expect_null(env$rename_in_classifications(NULL, renames))
+
+  log <- data.frame(image = "a.png", original_class = "Diatom",
+                    new_class = "Ciliate", stringsAsFactors = FALSE)
+  expect_equal(env$rename_in_changes_log(log, renames)$original_class, "Diatoms")
+
+  entry <- list(classifications = classifications,
+                original_classifications = classifications,
+                changes_log = log, saved = TRUE)
+  renamed_entry <- env$rename_in_cache_entry(entry, renames)
+  expect_equal(renamed_entry$classifications$class_name, c("Diatoms", "Ciliate"))
+  expect_equal(renamed_entry$original_classifications$class_name,
+               c("Diatoms", "Ciliate"))
+  expect_equal(renamed_entry$changes_log$original_class, "Diatoms")
+  expect_true(renamed_entry$saved)
+})
+
+test_that("the rename plan counts annotations and flags merges", {
+  env <- rename_module_env()
+  renames <- data.frame(old_name = c("Diatom", "Dino", "Rare"),
+                        new_name = c("Diatoms", "Ciliate", "Rarer"),
+                        stringsAsFactors = FALSE)
+  counts <- data.frame(class_name = c("Ciliate", "Diatom", "Dino"),
+                       count = c(7L, 3L, 2L), stringsAsFactors = FALSE)
+
+  plan <- env$class_rename_plan(renames, counts)
+  expect_equal(plan$annotations, c(3, 2, 0))
+  expect_equal(plan$target_annotations, c(0, 7, 0))
+  expect_equal(plan$merge, c(FALSE, TRUE, FALSE))
+  expect_true(env$rename_needs_confirmation(plan))
+  expect_false(env$rename_needs_confirmation(plan[3, ]))
+})
+
+test_that("WoRMS renames skip names that are already in the class list", {
+  env <- rename_module_env()
+  matched <- data.frame(
+    class_name = c("Skeleto", "Chaeto", "Chaeto_chain", "Dino", "Gone", "Same"),
+    accepted_name = c("Skeletonema", "Chaetoceros", "Chaetoceros", "Ciliate",
+                      "Elsewhere", "Same"),
+    stringsAsFactors = FALSE
+  )
+  classes <- c("unclassified", "Skeleto", "Chaeto", "Chaeto_chain", "Dino",
+               "Ciliate", "Same")
+
+  # A name wanted by a class that is not in the list does not block others
+  matched <- rbind(
+    data.frame(class_name = "Absent", accepted_name = "Skeletonema",
+               stringsAsFactors = FALSE),
+    matched
+  )
+
+  found <- env$worms_rename_candidates(matched, classes)
+  expect_equal(found$renames$old_name, c("Skeleto", "Chaeto"))
+  expect_equal(found$renames$new_name, c("Skeletonema", "Chaetoceros"))
+  # Chaeto_chain (name taken by the rename before it) and Dino (name in list)
+  expect_equal(found$conflicts, 2)
+})
+
+test_that("renaming a class in the editor renames it in the database after confirmation", {
+  skip_if_not(app_test_data_available(), "App or test data not available")
+  app <- local_app_server()
+  sample_name <- app$sample_name
+  class_counts <- function() {
+    counts <- list_classes_db(app$db_path)
+    setNames(counts$count, counts$class_name)
+  }
+
+  shiny::testServer(app$server, {
+    session$setInputs(annotator_name = "Tester", app_mode = "sample",
+                      class_filter = "all", images_per_page = "100",
+                      sample_status_filter = "all")
+    session$flushReact()
+    session$setInputs(class_list_edit = "unclassified\nAlpha\nBeta",
+                      apply_class_changes = 1)
+    expect_equal(rv$class2use, c("unclassified", "Alpha", "Beta"))
+
+    session$setInputs(sample_select = sample_name, load_sample = 1)
+    images <- rv$classifications$file_name
+    session$setInputs(toggle_image = list(img = images[1], time = 1))
+    session$setInputs(new_class_quick = "Alpha", relabel_quick = 1)
+    session$setInputs(save_btn = 1)
+    expect_equal(class_counts()[["Alpha"]], 1)
+
+    # An unsaved correction, to check that work in progress follows the rename
+    session$setInputs(toggle_image = list(img = images[2], time = 2))
+    session$setInputs(new_class_quick = "Alpha", relabel_quick = 2)
+
+    # Nothing is renamed until the confirmation
+    session$setInputs(class_list_edit = "unclassified\nAlpha_new\nBeta",
+                      apply_class_changes = 2)
+    expect_equal(rv$class2use, c("unclassified", "Alpha", "Beta"))
+    expect_equal(class_counts()[["Alpha"]], 1)
+
+    session$setInputs(confirm_class_rename = 1)
+    expect_equal(rv$class2use, c("unclassified", "Alpha_new", "Beta"))
+    counts <- class_counts()
+    expect_equal(counts[["Alpha_new"]], 1)
+    expect_false("Alpha" %in% names(counts))
+    expect_equal(load_global_class_list_db(app$db_path),
+                 c("unclassified", "Alpha_new", "Beta"))
+
+    # The loaded sample, its baseline and its unsaved changes use the new name
+    expect_equal(rv$classifications$class_name[1:2], c("Alpha_new", "Alpha_new"))
+    expect_false("Alpha" %in% rv$original_classifications$class_name)
+    expect_false("Alpha" %in% c(rv$changes_log$new_class,
+                                rv$changes_log$original_class))
+    expect_true("Alpha_new" %in% rv$changes_log$new_class)
+  })
+})
+
+test_that("a rename onto a class with annotations is a merge that must be ticked", {
+  skip_if_not(app_test_data_available(), "App or test data not available")
+  app <- local_app_server()
+  sample_name <- app$sample_name
+  class_counts <- function() {
+    counts <- list_classes_db(app$db_path)
+    setNames(counts$count, counts$class_name)
+  }
+
+  shiny::testServer(app$server, {
+    session$setInputs(annotator_name = "Tester", app_mode = "sample",
+                      class_filter = "all", images_per_page = "100",
+                      sample_status_filter = "all")
+    session$flushReact()
+    session$setInputs(class_list_edit = "unclassified\nAlpha\nBeta",
+                      apply_class_changes = 1)
+    session$setInputs(sample_select = sample_name, load_sample = 1)
+    images <- rv$classifications$file_name
+    session$setInputs(toggle_image = list(img = images[1], time = 1))
+    session$setInputs(new_class_quick = "Alpha", relabel_quick = 1)
+    session$setInputs(toggle_image = list(img = images[2], time = 2))
+    session$setInputs(new_class_quick = "Beta", relabel_quick = 2)
+    session$setInputs(save_btn = 1)
+    before <- class_counts()
+
+    # Dropping "Beta" from the list is not a rename: its annotation stays
+    session$setInputs(class_list_edit = "unclassified\nAlpha",
+                      apply_class_changes = 2)
+    expect_equal(rv$class2use, c("unclassified", "Alpha"))
+    expect_equal(class_counts(), before)
+
+    # "Alpha" -> "Beta" would merge it into the annotations "Beta" still has
+    session$setInputs(class_list_edit = "unclassified\nBeta",
+                      apply_class_changes = 3)
+    session$setInputs(confirm_class_merge = FALSE, confirm_class_rename = 1)
+    expect_equal(rv$class2use, c("unclassified", "Alpha"))
+    expect_equal(class_counts(), before)
+
+    session$setInputs(confirm_class_merge = TRUE, confirm_class_rename = 2)
+    expect_equal(rv$class2use, c("unclassified", "Beta"))
+    counts <- class_counts()
+    expect_equal(counts[["Beta"]], 2)
+    expect_false("Alpha" %in% names(counts))
+    expect_equal(sum(counts), sum(before))
+  })
+})
+
+test_that("WoRMS renames go through the database and skip names in use", {
+  skip_if_not(app_test_data_available(), "App or test data not available")
+  app <- local_app_server()
+  sample_name <- app$sample_name
+  class_counts <- function() {
+    counts <- list_classes_db(app$db_path)
+    setNames(counts$count, counts$class_name)
+  }
+  taxonomy <- function() {
+    con <- DBI::dbConnect(RSQLite::SQLite(), app$db_path)
+    on.exit(DBI::dbDisconnect(con), add = TRUE)
+    DBI::dbGetQuery(con, "SELECT class_name, aphia_id FROM class_taxonomy")
+  }
+
+  shiny::testServer(app$server, {
+    session$setInputs(annotator_name = "Tester", app_mode = "sample",
+                      class_filter = "all", images_per_page = "100",
+                      sample_status_filter = "all")
+    session$flushReact()
+    session$setInputs(class_list_edit = "unclassified\nAlpha\nBeta\nGamma",
+                      apply_class_changes = 1)
+    session$setInputs(sample_select = sample_name, load_sample = 1)
+    images <- rv$classifications$file_name
+    session$setInputs(toggle_image = list(img = images[1], time = 1))
+    session$setInputs(new_class_quick = "Alpha", relabel_quick = 1)
+    session$setInputs(toggle_image = list(img = images[2], time = 2))
+    session$setInputs(new_class_quick = "Beta", relabel_quick = 2)
+    session$setInputs(save_btn = 1)
+    in_use <- setdiff(names(class_counts()), c("Alpha", "Beta"))[1]
+
+    # Alpha gets a new name, Beta's accepted name already has annotations
+    # (from the classifier), Gamma's is already in the class list
+    rv$worms_matches <- data.frame(
+      class_name = c("Alpha", "Beta", "Gamma"),
+      aphia_id = c("101", "102", "103"),
+      accepted_name = c("Alphaceae", in_use, "Alpha"),
+      stringsAsFactors = FALSE
+    )
+    session$setInputs(worms_apply_renames = TRUE, apply_worms_matches = 1)
+    expect_equal(rv$class2use, c("unclassified", "Alpha", "Beta", "Gamma"))
+
+    session$setInputs(confirm_class_rename = 1)
+    expect_equal(rv$class2use, c("unclassified", "Alphaceae", "Beta", "Gamma"))
+    counts <- class_counts()
+    expect_equal(counts[["Alphaceae"]], 1)
+    expect_equal(counts[["Beta"]], 1)
+    expect_false("Alpha" %in% names(counts))
+    expect_equal(rv$classifications$class_name[1:2], c("Alphaceae", "Beta"))
+
+    stored <- taxonomy()
+    expect_equal(stored$aphia_id[stored$class_name == "Alphaceae"], "101")
+    expect_equal(stored$aphia_id[stored$class_name == "Beta"], "102")
+    expect_false("Alpha" %in% stored$class_name)
+  })
+})

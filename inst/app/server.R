@@ -9,6 +9,7 @@
 #   init_server.R             - reactive values, config, settings I/O, WoRMS persistence
 #   settings_server.R         - settings modal, file browsers, apply_settings
 #   class_list_server.R       - class editor modal, WoRMS matching, download handlers
+#   class_rename_server.R     - renaming classes in the database and in memory
 #   prediction_server.R       - Gradio live prediction
 #   import_export_server.R    - MAT<->SQLite, ZIP/PNG import/export
 #   ui_outputs_server.R       - title bar, mode indicators, mode switching
@@ -136,7 +137,9 @@ server <- function(input, output, session) {
   )
 
   # 9. Class list editor
-  setup_class_list_server(input, output, session, rv, config, save_worms_map)
+  class_rename <- setup_class_rename_server(input, output, session, rv, config)
+  setup_class_list_server(input, output, session, rv, config, save_worms_map,
+                          class_rename$rename_then)
 
   # 10. Prediction
   setup_prediction_server(

@@ -44,6 +44,7 @@ setup_init_server <- function(input, output, session) {
     class_review_samples = character(), # Unique sample names in class review
     class_review_original = NULL,   # Original classifications snapshot for diff
     class_review_external_files = NULL, # file_name -> source_path map for export
+    class_rename_count = 0L,        # Incremented when classes are renamed
 
     # WoRMS matching state
     class_aphia_map = setNames(character(0), character(0)),

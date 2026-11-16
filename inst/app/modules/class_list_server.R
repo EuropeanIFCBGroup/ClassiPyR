@@ -1,7 +1,7 @@
 # Class list editor modal, WoRMS matching, download handlers
 
 setup_class_list_server <- function(input, output, session, rv, config,
-                                    save_worms_map) {
+                                    save_worms_map, rename_then) {
   # Class List Editor Modal
   observeEvent(input$open_class_editor, {
     showModal(modalDialog(
@@ -241,6 +241,13 @@ setup_class_list_server <- function(input, output, session, rv, config,
       )
     }
 
+    # Renamed classes are renamed in the database first (after confirmation
+    # when annotations are rewritten); the list is applied once that is done
+    rename_then(detect_class_renames(rv$class2use, new_classes),
+                on_done = function(renames) apply_class_list(new_classes))
+  })
+
+  apply_class_list <- function(new_classes) {
     rv$class2use <- new_classes
     # Show what was actually applied (sanitized, without duplicates)
     updateTextAreaInput(session, "class_list_edit",
@@ -264,7 +271,7 @@ setup_class_list_server <- function(input, output, session, rv, config,
                          selected = character(0))
 
     showNotification(paste("Applied", length(new_classes), "classes"), type = "message")
-  })
+  }
 
   output$worms_match_table <- DT::renderDT({
     req(rv$worms_matches)
@@ -411,48 +418,45 @@ setup_class_list_server <- function(input, output, session, rv, config,
       return()
     }
 
-    current_classes <- rv$class2use
     rename_requested <- isTRUE(input$worms_apply_renames)
-    renamed <- 0L
-    rename_conflicts <- 0L
+    if (!rename_requested) {
+      return(store_worms_matches(matched, FALSE, empty_class_renames(), 0L))
+    }
 
-    if (rename_requested) {
-      for (i in seq_len(nrow(matched))) {
-        old_name <- matched$class_name[i]
-        new_name <- matched$accepted_name[i]
-        if (is.na(new_name) || !nzchar(new_name) || identical(old_name, new_name)) next
-        old_idx <- match(old_name, current_classes)
-        if (is.na(old_idx)) next
-        if (new_name %in% current_classes && !identical(new_name, old_name)) {
-          rename_conflicts <- rename_conflicts + 1L
-          next
-        }
-        current_classes[old_idx] <- new_name
-        renamed <- renamed + 1L
+    # Renames go through the database as well. A class whose accepted name is
+    # already in the class list, or already has annotations, is not renamed.
+    candidates <- worms_rename_candidates(matched, rv$class2use)
+    rename_then(
+      candidates$renames, allow_merge = FALSE,
+      on_done = function(renames) {
+        skipped <- candidates$conflicts +
+          nrow(candidates$renames) - nrow(renames)
+        store_worms_matches(matched, TRUE, renames, skipped)
       }
-      rv$class2use <- current_classes
+    )
+  })
+
+  # Store the AphiaID matches, after `renames` have been made in the database
+  store_worms_matches <- function(matched, rename_requested, renames,
+                                  rename_conflicts) {
+    if (rename_requested) {
+      rv$class2use <- rename_classes(rv$class2use, renames)
 
       if (!is.null(rv$class2use_path) && grepl("class2use_temp", rv$class2use_path)) {
         writeLines(rv$class2use, rv$class2use_path)
       }
     }
 
-    updated_map <- rv$class_aphia_map
-    effective_names <- matched$class_name
-    for (i in seq_len(nrow(matched))) {
-      key <- matched$class_name[i]
-      if (rename_requested && !is.na(matched$accepted_name[i]) && nzchar(matched$accepted_name[i])) {
-        if (matched$accepted_name[i] %in% rv$class2use) {
-          key <- matched$accepted_name[i]
-        }
-      }
-      effective_names[i] <- key
-      updated_map[[key]] <- matched$aphia_id[i]
-    }
-    rv$class_aphia_map <- updated_map
     # Key the taxonomy lookups by the same (possibly renamed) class names as
     # the AphiaID map; keyed by the old names, renamed classes would lose
     # their scientific/accepted name fields in the class_taxonomy table
+    accepted <- matched$accepted_name
+    use_accepted <- rename_requested & !is.na(accepted) & nzchar(accepted) &
+      accepted %in% rv$class2use
+    effective_names <- ifelse(use_accepted, accepted, matched$class_name)
+    updated_map <- rv$class_aphia_map
+    updated_map[effective_names] <- matched$aphia_id
+    rv$class_aphia_map <- updated_map
     matched_for_save <- matched
     matched_for_save$class_name <- effective_names
     save_worms_map(updated_map, db_folder = config$db_folder, matches_df = matched_for_save)
@@ -469,13 +473,13 @@ setup_class_list_server <- function(input, output, session, rv, config,
       sprintf(
         "Stored %d AphiaID matches%s%s.",
         nrow(matched),
-        if (rename_requested) paste0("; renamed ", renamed, " classes") else "",
+        if (rename_requested) paste0("; renamed ", nrow(renames), " classes") else "",
         if (rename_conflicts > 0) paste0("; skipped ", rename_conflicts, " rename conflicts") else ""
       ),
       type = "message", duration = 8
     )
     removeModal()
-  })
+  }
 
   # Download handlers
   output$save_class2use_mat <- downloadHandler(

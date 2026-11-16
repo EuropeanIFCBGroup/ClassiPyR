@@ -116,7 +116,15 @@ You can safely rename classes without breaking annotations:
 2. Change the name
 3. Click **Apply Changes**
 
-The index stays the same, so existing annotations remain valid.
+The index stays the same, so annotations in `.mat` files remain valid. The SQLite database stores annotations by class name, so the app renames the class there as well: in the annotations, in the class list stored with each sample and in the WoRMS taxonomy table. When annotations are rewritten, a dialog lists each rename with the number of annotations it affects and asks for confirmation first. The annotator, time and review status of the annotations are kept.
+
+A change counts as a rename when the list keeps its length and a name is replaced, at the same position, by a name that was not in the list. Reordering, adding or removing classes does not rename anything in the database.
+
+**Merging two classes**: if the new name is not in the class list but already has annotations in the database, the rename would merge the two classes. The dialog shows both annotation counts in a red box, and the merge only goes ahead when you tick **Merge these classes**. A merge cannot be undone.
+
+**Files written earlier are not changed**: PNG folders named after the class and existing `.mat` files keep the old name until you export again (Settings → Import / Export).
+
+From R, the same rename is `rename_class_db(db_path, "Old_name", "New_name")`, with `merge = TRUE` to allow a merge.
 
 ### Adding New Classes
 
