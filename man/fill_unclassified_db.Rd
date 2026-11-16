@@ -9,7 +9,8 @@ fill_unclassified_db(
   roi_folder,
   samples = NULL,
   class_name = "unclassified",
-  annotator = "imported"
+  annotator = "imported",
+  roi_path_map = NULL
 )
 }
 \arguments{
@@ -17,7 +18,8 @@ fill_unclassified_db(
 
 \item{roi_folder}{Base ROI folder path, following the standard IFCB folder
 structure (\code{roi_folder/YYYY/DYYYYMMDD/sample_name.adc}). Used to
-locate each sample's \code{.adc} file via \code{\link{get_sample_paths}}.}
+locate each sample's \code{.adc} file via \code{\link{get_sample_paths}}.
+Samples found in \code{roi_path_map} do not need to follow it.}
 
 \item{samples}{Optional character vector of sample names to backfill. When
 \code{NULL} (the default), all annotated samples in the database are used.}
@@ -27,6 +29,12 @@ locate each sample's \code{.adc} file via \code{\link{get_sample_paths}}.}
 
 \item{annotator}{Annotator name recorded for the inserted rows. Default
 \code{"imported"}.}
+
+\item{roi_path_map}{Optional named list mapping sample names to \code{.roi}
+file paths (as in \code{\link{export_all_db_to_png}}). The \code{.adc}
+file next to a sample's \code{.roi} file is used when it exists, so raw
+data outside the standard folder structure can be read. Samples not in
+the map are looked up in \code{roi_folder}.}
 }
 \value{
 Named list with counts: \code{added} (ROIs inserted), \code{samples}

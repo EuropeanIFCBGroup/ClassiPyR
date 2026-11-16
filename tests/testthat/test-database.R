@@ -2139,6 +2139,45 @@ test_that("fill_unclassified_db skips samples with no ADC file", {
   expect_equal(result$skipped, 1L)
 })
 
+test_that("fill_unclassified_db finds the ADC file through a roi_path_map", {
+  db_dir <- tempfile("db_")
+  roi_dir <- tempfile("roi_")
+  flat_dir <- tempfile("flat_")
+  dir.create(db_dir)
+  dir.create(flat_dir)
+  on.exit(unlink(c(db_dir, roi_dir, flat_dir), recursive = TRUE), add = TRUE)
+  db_path <- get_db_path(db_dir)
+
+  mapped <- "D20230101T120000_IFCB134"
+  standard <- "D20230102T120000_IFCB134"
+  for (sn in c(mapped, standard)) {
+    save_annotations_db(db_path, sn,
+      data.frame(file_name = paste0(sn, "_00001.png"), class_name = "Diatom",
+                 stringsAsFactors = FALSE),
+      c("unclassified", "Diatom"), "Jane")
+  }
+
+  # One sample lies in a flat folder that only the map knows about, the
+  # other in the standard layout and is not in the map
+  adc <- write_mock_adc(roi_dir, mapped, n_roi = 4)
+  file.rename(adc, file.path(flat_dir, basename(adc)))
+  write_mock_adc(roi_dir, standard, n_roi = 3)
+  roi_path_map <- setNames(
+    list(file.path(flat_dir, paste0(mapped, ".roi"))), mapped
+  )
+
+  expect_warning(
+    without_map <- fill_unclassified_db(db_path, roi_dir, samples = mapped),
+    "ADC file not found"
+  )
+  expect_equal(without_map$skipped, 1L)
+
+  result <- fill_unclassified_db(db_path, roi_dir, roi_path_map = roi_path_map)
+  expect_equal(result$added, 5L)
+  expect_equal(result$samples, 2L)
+  expect_equal(result$skipped, 0L)
+})
+
 test_that("fill_unclassified_db returns zero counts for non-existent database", {
   db_path <- file.path(tempfile("db_"), "annotations.sqlite")
   result <- suppressWarnings(fill_unclassified_db(db_path, tempfile("roi_")))

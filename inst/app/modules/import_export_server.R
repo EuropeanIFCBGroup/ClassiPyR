@@ -788,8 +788,29 @@ setup_import_export_server <- function(input, output, session, rv, config,
   png_import_state <- reactiveValues(
     scan_result = NULL,
     class_mapping = NULL,
-    png_folder = NULL
+    png_folder = NULL,
+    fill_unclassified = FALSE
   )
+
+  # Checkbox offering to add the ROIs that are not in the PNG folder. It needs
+  # the raw data of the samples, so it is switched off in dashboard mode.
+  png_import_fill_checkbox <- function() {
+    available <- can_fill_unclassified(config$data_source)
+    box <- checkboxInput("png_import_fill_unclassified",
+                         "Add remaining ROIs as unclassified", value = FALSE)
+    help <- if (available) {
+      paste("For each imported sample, the ROIs that have no image in the",
+            "PNG folder are added as \"unclassified\" (not yet reviewed).",
+            "This reads the sample's .adc file from the ROI data folder;",
+            "samples whose raw data is not found are left as imported.")
+    } else {
+      paste("Not available in dashboard mode: the remaining ROIs are read",
+            "from local raw data (.adc files).")
+    }
+    div(style = "margin-top: 15px;",
+        if (available) box else shinyjs::disabled(box),
+        tags$small(class = "text-muted", help))
+  }
 
   observeEvent(input$import_png_to_db_btn, {
     showModal(modalDialog(
@@ -807,6 +828,7 @@ setup_import_export_server <- function(input, output, session, rv, config,
       tags$small(class = "text-muted",
                  "Select a folder containing PNG images organized in class-name subfolders.",
                  "Folder names follow iRfcb convention (trailing _NNN suffix is stripped)."),
+      png_import_fill_checkbox(),
       footer = tagList(
         modalButton("Cancel"),
         actionButton("scan_png_folder_btn", "Scan Folder", class = "btn-primary")
@@ -851,6 +873,9 @@ setup_import_export_server <- function(input, output, session, rv, config,
     png_import_state$scan_result <- scan_result
     png_import_state$png_folder <- png_folder
     png_import_state$class_mapping <- NULL
+    png_import_state$fill_unclassified <-
+      isTRUE(input$png_import_fill_unclassified) &&
+      can_fill_unclassified(config$data_source)
 
     unmatched <- setdiff(scan_result$classes_found, rv$class2use)
 
@@ -980,13 +1005,19 @@ setup_import_export_server <- function(input, output, session, rv, config,
         class_mapping = png_import_state$class_mapping,
         annotator = annotator
       )
-      incProgress(0.9, detail = "Import complete")
+      filled <- NULL
+      if (isTRUE(png_import_state$fill_unclassified) && result$success > 0) {
+        incProgress(0.6, detail = "Adding remaining ROIs as unclassified...")
+        filled <- fill_png_import_unclassified(db_path, scan_result$sample_names,
+                                               annotator)
+      }
+      incProgress(1, detail = "Import complete")
     })
 
+    incomplete <- result$failed > 0 || (!is.null(filled) && filled$skipped > 0)
     showNotification(
-      sprintf("PNG import complete: %d samples imported, %d failed.",
-              result$success, result$failed),
-      type = if (result$failed > 0) "warning" else "message",
+      png_import_summary(result, filled),
+      type = if (incomplete) "warning" else "message",
       duration = 8
     )
 
@@ -997,5 +1028,24 @@ setup_import_export_server <- function(input, output, session, rv, config,
     png_import_state$scan_result <- NULL
     png_import_state$class_mapping <- NULL
     png_import_state$png_folder <- NULL
+    png_import_state$fill_unclassified <- FALSE
+  }
+
+  # Add the ROIs the PNG folder did not hold. A sample without reachable raw
+  # data is counted as skipped; its warning is not shown as an app error.
+  fill_png_import_unclassified <- function(db_path, samples, annotator) {
+    tryCatch(
+      suppressWarnings(fill_unclassified_db(
+        db_path, config$roi_folder,
+        samples = samples,
+        annotator = annotator,
+        roi_path_map = roi_path_map()
+      )),
+      error = function(e) {
+        showNotification(paste("Could not add remaining ROIs:", e$message),
+                         type = "error")
+        NULL
+      }
+    )
   }
 }

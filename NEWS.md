@@ -10,6 +10,8 @@
   - A review survives its data being away: images whose raw data cannot be found stay pending and come back once it is available again, and a frozen review can be opened, shown and exported without the class-score files or their index.
 - New exported functions, all experimental: `build_threshold_index()` (builds or updates the cache of class-score files the app reads, and can be run from a script for large folders), `estimate_precision_curve()` and `choose_class_threshold()` (the estimate and the rule behind the app's results), and `write_thresholds_json()`, `write_thresholds_csv()` and `write_thresholds_report_csv()` (write a thresholds file that ifcb-classify reads back exactly, also usable for thresholds set by hand).
 - **The annotator name is remembered**: the name typed in the *Annotator* field is stored in the settings file and restored the next time the app starts, instead of going back to the system user name.
+- **"PNG → SQLite" can add the remaining ROIs as unclassified**: the import dialog has a new option, off by default, that fills each imported sample with the ROIs that had no image in the PNG folder, as `unclassified` and not yet reviewed (what `fill_unclassified_db()` does from the console). It reads the samples' `.adc` files, so it is not available in dashboard mode; samples whose raw data is not found are reported and left as imported.
+- `fill_unclassified_db()` and `import_png_folder_with_unclassified()` gain a `roi_path_map` argument, so the `.adc` files of raw data outside the standard `YYYY/DYYYYMMDD` folder structure can be found.
 
 ## Bug fixes
 

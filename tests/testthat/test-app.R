@@ -508,3 +508,95 @@ test_that("an unusable saved annotator name falls back to the system user", {
   expect_false(module_env$is_storable_annotator(NULL))
   expect_false(module_env$is_storable_annotator(NA_character_))
 })
+
+# A class folder holding two images of the bundled sample, as a partial PNG
+# import would have
+local_partial_png_folder <- function(sample_name, env = parent.frame()) {
+  png_folder <- tempfile("classipyr_png_import_")
+  dir.create(file.path(png_folder, "Diatom"), recursive = TRUE)
+  do.call(on.exit, list(substitute(unlink(png_folder, recursive = TRUE),
+                                   list(png_folder = png_folder)), add = TRUE),
+          envir = env)
+  images <- list.files(testthat::test_path("test_data", "png", sample_name),
+                       full.names = TRUE)
+  file.copy(images[1:2], file.path(png_folder, "Diatom"))
+  png_folder
+}
+
+# Runs the "PNG -> SQLite" dialogs of the app and returns the classes stored
+run_app_png_import <- function(app, png_folder, fill) {
+  shiny::testServer(app$server, {
+    session$setInputs(annotator_name = "Tester", app_mode = "sample",
+                      sample_status_filter = "all")
+    session$flushReact()
+    session$setInputs(import_png_to_db_btn = 1)
+    session$setInputs(cfg_png_import_folder = png_folder,
+                      png_import_fill_unclassified = fill)
+    session$setInputs(scan_png_folder_btn = 1)
+    # "Diatom" is not in the class list: add it as a new class
+    session$setInputs(confirm_png_class_mapping_btn = 1)
+  })
+  con <- DBI::dbConnect(RSQLite::SQLite(), app$db_path)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  DBI::dbGetQuery(con, "SELECT roi_number, class_name, annotator, is_manual
+                        FROM annotations ORDER BY roi_number")
+}
+
+test_that("the PNG import leaves the other ROIs out unless asked to add them", {
+  skip_if_not(app_test_data_available(), "App or test data not available")
+  app <- local_app_server()
+  png_folder <- local_partial_png_folder(app$sample_name)
+
+  rows <- run_app_png_import(app, png_folder, fill = FALSE)
+  expect_equal(rows$class_name, c("Diatom", "Diatom"))
+})
+
+test_that("the PNG import can add the remaining ROIs as unclassified", {
+  skip_if_not(app_test_data_available(), "App or test data not available")
+  app <- local_app_server()
+  png_folder <- local_partial_png_folder(app$sample_name)
+
+  rows <- run_app_png_import(app, png_folder, fill = TRUE)
+
+  dims <- read_roi_dimensions(testthat::test_path(
+    "test_data", "raw", "2022", "D20220522", paste0(app$sample_name, ".adc")
+  ))
+  with_image <- dims$roi_number[dims$width > 0 & dims$height > 0]
+  expect_setequal(rows$roi_number, with_image)
+  expect_equal(sum(rows$class_name == "Diatom"), 2)
+  filled <- rows[rows$class_name == "unclassified", ]
+  expect_equal(nrow(filled), length(with_image) - 2)
+  expect_true(all(filled$is_manual == 0))
+  expect_true(all(filled$annotator == "Tester"))
+})
+
+test_that("the PNG import does not fill from raw data in dashboard mode", {
+  module_env <- new.env(parent = globalenv())
+  source(system.file("app", "modules", "helpers_shared.R", package = "ClassiPyR"),
+         local = module_env)
+  expect_true(module_env$can_fill_unclassified("local"))
+  expect_false(module_env$can_fill_unclassified("dashboard"))
+})
+
+test_that("the PNG import notification reports what was filled", {
+  module_env <- new.env(parent = globalenv())
+  source(system.file("app", "modules", "helpers_shared.R", package = "ClassiPyR"),
+         local = module_env)
+  import <- list(success = 3L, failed = 0L)
+
+  plain <- module_env$png_import_summary(import, filled = NULL)
+  expect_match(plain, "3 samples imported, 0 failed", fixed = TRUE)
+  expect_no_match(plain, "unclassified")
+
+  filled <- module_env$png_import_summary(
+    import, filled = list(added = 40L, samples = 2L, skipped = 1L)
+  )
+  expect_match(filled, "40 remaining ROIs added as unclassified in 2 samples",
+               fixed = TRUE)
+  expect_match(filled, "1 sample skipped (raw data not found)", fixed = TRUE)
+
+  none_skipped <- module_env$png_import_summary(
+    import, filled = list(added = 40L, samples = 3L, skipped = 0L)
+  )
+  expect_no_match(none_skipped, "skipped")
+})

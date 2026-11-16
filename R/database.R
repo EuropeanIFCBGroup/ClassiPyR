@@ -1049,12 +1049,18 @@ import_png_folder_to_db <- function(png_folder, db_path, class2use,
 #' @param roi_folder Base ROI folder path, following the standard IFCB folder
 #'   structure (\code{roi_folder/YYYY/DYYYYMMDD/sample_name.adc}). Used to
 #'   locate each sample's \code{.adc} file via \code{\link{get_sample_paths}}.
+#'   Samples found in \code{roi_path_map} do not need to follow it.
 #' @param samples Optional character vector of sample names to backfill. When
 #'   \code{NULL} (the default), all annotated samples in the database are used.
 #' @param class_name Class name to assign to the missing ROIs. Default
 #'   \code{"unclassified"}.
 #' @param annotator Annotator name recorded for the inserted rows. Default
 #'   \code{"imported"}.
+#' @param roi_path_map Optional named list mapping sample names to \code{.roi}
+#'   file paths (as in \code{\link{export_all_db_to_png}}). The \code{.adc}
+#'   file next to a sample's \code{.roi} file is used when it exists, so raw
+#'   data outside the standard folder structure can be read. Samples not in
+#'   the map are looked up in \code{roi_folder}.
 #' @return Named list with counts: \code{added} (ROIs inserted), \code{samples}
 #'   (samples that received at least one new ROI), \code{skipped} (samples with
 #'   no reachable \code{.adc} file).
@@ -1066,7 +1072,8 @@ import_png_folder_to_db <- function(png_folder, db_path, class2use,
 #' }
 fill_unclassified_db <- function(db_path, roi_folder, samples = NULL,
                                  class_name = "unclassified",
-                                 annotator = "imported") {
+                                 annotator = "imported",
+                                 roi_path_map = NULL) {
   counts <- list(added = 0L, samples = 0L, skipped = 0L)
 
   if (!file.exists(db_path)) {
@@ -1086,15 +1093,15 @@ fill_unclassified_db <- function(db_path, roi_folder, samples = NULL,
   on.exit(dbDisconnect(con), add = TRUE)
 
   for (sn in samples) {
-    paths <- get_sample_paths(sn, roi_folder)
-    if (!file.exists(paths$adc_path)) {
-      warning("ADC file not found for ", sn, ": ", paths$adc_path)
+    adc_path <- sample_adc_path(sn, roi_folder, roi_path_map)
+    if (!file.exists(adc_path)) {
+      warning("ADC file not found for ", sn, ": ", adc_path)
       counts$skipped <- counts$skipped + 1L
       next
     }
 
     # Complete ROI list from the raw data; keep only ROIs with a real image
-    dims <- read_roi_dimensions(paths$adc_path)
+    dims <- read_roi_dimensions(adc_path)
     all_roi <- dims$roi_number[dims$width > 0 & dims$height > 0]
 
     have <- dbGetQuery(con,
@@ -1133,6 +1140,23 @@ fill_unclassified_db <- function(db_path, roi_folder, samples = NULL,
   counts
 }
 
+# Path of a sample's .adc file: the one next to its .roi file when
+# roi_path_map knows the sample and that file exists, otherwise the one in
+# the standard folder structure under roi_folder
+#
+# @param sample_name Sample name.
+# @param roi_folder Base ROI folder path.
+# @param roi_path_map NULL or a named list of .roi file paths by sample name.
+# @return Path to the .adc file (which may not exist).
+sample_adc_path <- function(sample_name, roi_folder, roi_path_map = NULL) {
+  roi_path <- roi_path_map[[sample_name]]
+  if (is.character(roi_path) && length(roi_path) == 1 && !is.na(roi_path)) {
+    mapped <- sub("\\.roi$", ".adc", roi_path)
+    if (file.exists(mapped)) return(mapped)
+  }
+  get_sample_paths(sample_name, roi_folder)$adc_path
+}
+
 #' Import a PNG class folder and backfill the rest as "unclassified"
 #'
 #' Convenience wrapper that runs \code{\link{import_png_folder_to_db}} followed
@@ -1155,6 +1179,9 @@ fill_unclassified_db <- function(db_path, roi_folder, samples = NULL,
 #'   both the import and the backfill.
 #' @param fill Logical. When \code{TRUE} (the default), backfill the imported
 #'   samples with \code{"unclassified"} ROIs. Set to \code{FALSE} to import only.
+#' @param roi_path_map Optional named list mapping sample names to \code{.roi}
+#'   file paths, passed to \code{\link{fill_unclassified_db}} for raw data
+#'   outside the standard folder structure.
 #' @return Named list with two elements: \code{import} (the result of
 #'   \code{\link{import_png_folder_to_db}}) and \code{filled} (the result of
 #'   \code{\link{fill_unclassified_db}}, or zero counts when \code{fill} is
@@ -1176,7 +1203,8 @@ import_png_folder_with_unclassified <- function(png_folder, db_path, class2use,
                                                 roi_folder,
                                                 class_mapping = NULL,
                                                 annotator = "imported",
-                                                fill = TRUE) {
+                                                fill = TRUE,
+                                                roi_path_map = NULL) {
   import <- import_png_folder_to_db(png_folder, db_path, class2use,
                                     class_mapping = class_mapping,
                                     annotator = annotator)
@@ -1188,7 +1216,8 @@ import_png_folder_with_unclassified <- function(png_folder, db_path, class2use,
     if (length(samples) > 0) {
       filled <- fill_unclassified_db(db_path, roi_folder,
                                      samples = samples,
-                                     annotator = annotator)
+                                     annotator = annotator,
+                                     roi_path_map = roi_path_map)
     }
   }
 

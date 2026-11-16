@@ -65,6 +65,30 @@ startup_annotator_name <- function(saved_settings) {
   if (is_storable_annotator(saved)) trimws(saved) else Sys.info()[["user"]]
 }
 
+# Filling a sample with "unclassified" ROIs reads its .adc file, which only
+# exists locally: dashboard mode has no raw data folder
+can_fill_unclassified <- function(data_source) {
+  !identical(data_source, "dashboard")
+}
+
+# Text of the notification that ends a "PNG -> SQLite" import. `filled` is the
+# result of fill_unclassified_db(), or NULL when the fill was not asked for.
+png_import_summary <- function(import, filled = NULL) {
+  plural <- function(n, word) sprintf("%d %s%s", n, word, if (n == 1) "" else "s")
+  text <- sprintf("PNG import complete: %s imported, %d failed.",
+                  plural(import$success, "sample"), import$failed)
+  if (is.null(filled)) return(text)
+
+  text <- sprintf("%s %s added as unclassified in %s.", text,
+                  plural(filled$added, "remaining ROI"),
+                  plural(filled$samples, "sample"))
+  if (filled$skipped > 0) {
+    text <- sprintf("%s %s skipped (raw data not found).", text,
+                    plural(filled$skipped, "sample"))
+  }
+  text
+}
+
 # Update the display text for current sample in dropdown to show pencil symbol
 # Uses JavaScript to modify just the displayed text without rebuilding dropdown
 update_current_sample_status <- function(session, sample_name,

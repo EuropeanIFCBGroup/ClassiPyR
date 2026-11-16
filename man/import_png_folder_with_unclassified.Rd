@@ -11,7 +11,8 @@ import_png_folder_with_unclassified(
   roi_folder,
   class_mapping = NULL,
   annotator = "imported",
-  fill = TRUE
+  fill = TRUE,
+  roi_path_map = NULL
 )
 }
 \arguments{
@@ -34,6 +35,10 @@ both the import and the backfill.}
 
 \item{fill}{Logical. When \code{TRUE} (the default), backfill the imported
 samples with \code{"unclassified"} ROIs. Set to \code{FALSE} to import only.}
+
+\item{roi_path_map}{Optional named list mapping sample names to \code{.roi}
+file paths, passed to \code{\link{fill_unclassified_db}} for raw data
+outside the standard folder structure.}
 }
 \value{
 Named list with two elements: \code{import} (the result of
